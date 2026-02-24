@@ -8,7 +8,7 @@
 - `backend/requirements.txt`: 后端依赖
 - `frontend/`: Vue 前端
 
-## 快速启动
+## 开发阶段快速启动热修改
 
 1. 安装后端依赖
 
@@ -19,10 +19,10 @@ python3 -m pip install --user -r backend/requirements.txt
 2. 启动后端
 
 ```bash
-python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-3. 启动前端开发模式
+3. 启动前端开发模式（效率低，但支持热修改；生产部署环境下应改用nginx）
 
 ```bash
 cd frontend
@@ -31,6 +31,52 @@ npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
 打开 `http://<设备IP>:5173`。
+
+## 生产部署（Nginx，HTTP）
+
+目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/api` 与 `/ws`。
+
+1. 构建前端
+
+```bash
+export PROJECT_ROOT=/your/path/aivudaOS # 修改为项目实际地址
+
+cd "$PROJECT_ROOT/frontend"
+npm ci
+npm run build
+```
+
+构建产物目录：`$PROJECT_ROOT/frontend/dist`
+
+2. 启动后端（仅监听本机）
+
+```bash
+cd "$PROJECT_ROOT"
+python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+3. 安装并启用 Nginx 配置
+
+```bash
+sudo apt update
+sudo apt install -y nginx
+
+sudo sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" \
+  "$PROJECT_ROOT/nginx/aivudaos.conf" \
+  > /etc/nginx/sites-available/aivudaos.conf
+
+sudo ln -sf /etc/nginx/sites-available/aivudaos.conf /etc/nginx/sites-enabled/aivudaos.conf
+sudo rm -f /etc/nginx/sites-enabled/default
+
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+4. 访问
+
+打开 `http://<设备IP>/`。 （默认http转到80端口，因此不用写端口）
+
+更多细节见：`docs/deploy-nginx.md`。
 
 ## 默认账号
 
