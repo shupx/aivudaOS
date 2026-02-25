@@ -7,10 +7,7 @@ build/
 .env
 .DS_Store
 
-backend/data/*.db
 .vscode/
-backend/data/*
-!backend/data/.gitignore
-app_repo/data/*
-!app_repo/data/.gitignore
-app_repo/__pycache__/
+
+
+
