@@ -23,6 +23,7 @@ function doLogout() {
       <nav class="nav-list">
         <RouterLink to="/status" class="nav-item">实时状态</RouterLink>
         <RouterLink to="/config" class="nav-item">配置管理</RouterLink>
+        <RouterLink to="/apps" class="nav-item">应用商店</RouterLink>
       </nav>
       <div class="sidebar-footer">
         <p class="tip">{{ droneState.me?.username || 'admin' }}</p>

@@ -15,6 +15,11 @@ const state = reactive({
   wsStatus: 'disconnected',
   telemetry: null,
   reconnectAttempt: 0,
+  appCatalog: [],
+  installedApps: [],
+  appTaskById: {},
+  appConfigById: {},
+  appsError: '',
 })
 
 let ws = null
@@ -44,6 +49,23 @@ async function apiGet(path) {
 async function apiPut(path, body) {
   const resp = await fetch(`${path}?${authQuery()}`, {
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (resp.status === 401) {
+    logout()
+    throw new Error('会话已失效，请重新登录')
+  }
+  if (!resp.ok) {
+    const text = await resp.text()
+    throw new Error(text || `请求失败: ${resp.status}`)
+  }
+  return resp.json()
+}
+
+async function apiPost(path, body = {}) {
+  const resp = await fetch(`${path}?${authQuery()}`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -95,6 +117,11 @@ export function logout() {
   state.telemetry = null
   state.wsStatus = 'disconnected'
   state.reconnectAttempt = 0
+  state.appCatalog = []
+  state.installedApps = []
+  state.appTaskById = {}
+  state.appConfigById = {}
+  state.appsError = ''
 }
 
 export async function loadAll() {
@@ -103,11 +130,92 @@ export async function loadAll() {
   state.config = await apiGet('/api/config')
   state.configText = JSON.stringify(state.config.data, null, 2)
   state.snapshot = await apiGet('/api/status/snapshot')
+  await refreshApps()
 }
 
 export async function refreshStatus() {
   if (!state.token) return
   state.snapshot = await apiGet('/api/status/snapshot')
+}
+
+export async function refreshApps() {
+  if (!state.token) return
+  state.appsError = ''
+  try {
+    await apiPost('/api/apps/repo/sync')
+    const [catalogResp, installedResp] = await Promise.all([
+      apiGet('/api/apps/catalog'),
+      apiGet('/api/apps/installed'),
+    ])
+    state.appCatalog = catalogResp.items || []
+    state.installedApps = installedResp.items || []
+  } catch (err) {
+    state.appsError = err.message
+  }
+}
+
+export async function installApp(appId, installRuntime) {
+  const result = await apiPost(`/api/apps/${encodeURIComponent(appId)}/install`, {
+    install_runtime: Boolean(installRuntime),
+  })
+  const taskId = result.task_id
+  if (taskId) {
+    await pollTaskUntilDone(taskId)
+  }
+  await refreshApps()
+}
+
+export async function startApp(appId) {
+  await apiPost(`/api/apps/${encodeURIComponent(appId)}/start`)
+  await refreshApps()
+}
+
+export async function stopApp(appId) {
+  await apiPost(`/api/apps/${encodeURIComponent(appId)}/stop`)
+  await refreshApps()
+}
+
+export async function setAppAutostart(appId, enabled) {
+  await apiPost(`/api/apps/${encodeURIComponent(appId)}/autostart`, { enabled: Boolean(enabled) })
+  await refreshApps()
+}
+
+export async function uninstallApp(appId, purge = false) {
+  await apiPost(`/api/apps/${encodeURIComponent(appId)}/uninstall`, { purge: Boolean(purge) })
+  await refreshApps()
+}
+
+export async function getAppConfig(appId, forceReload = false) {
+  if (!forceReload && state.appConfigById[appId]) {
+    return state.appConfigById[appId]
+  }
+  const cfg = await apiGet(`/api/apps/${encodeURIComponent(appId)}/config`)
+  state.appConfigById = {
+    ...state.appConfigById,
+    [appId]: cfg,
+  }
+  return cfg
+}
+
+export async function saveAppConfig(appId, version, data) {
+  const resp = await apiPut(`/api/apps/${encodeURIComponent(appId)}/config`, { version, data })
+  const cfg = await getAppConfig(appId, true)
+  await refreshApps()
+  return { version: resp.version, config: cfg }
+}
+
+export async function pollTaskUntilDone(taskId) {
+  const maxTicks = 120
+  for (let i = 0; i < maxTicks; i += 1) {
+    const task = await apiGet(`/api/apps/tasks/${encodeURIComponent(taskId)}`)
+    state.appTaskById = { ...state.appTaskById, [taskId]: task }
+    if (task.status === 'succeeded') return task
+    if (task.status === 'failed') {
+      throw new Error(task.error || task.message || '安装失败')
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800))
+  }
+  throw new Error('安装超时，请稍后刷新查看')
 }
 
 export async function saveConfig() {
