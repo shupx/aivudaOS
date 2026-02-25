@@ -1,4 +1,6 @@
-# Robot Orin NX Console MVP
+# AivudaOS
+
+aivudaOS：分布式部署于机器人机载电脑上的操作系统，用于管理IOODA协同感知控制软件
 
 最小可运行版本：`Vue + FastAPI`，包含登录、配置读写、实时状态 WebSocket。
 
