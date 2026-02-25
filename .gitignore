@@ -9,6 +9,8 @@ build/
 
 backend/data/*.db
 .vscode/
-backend/data/
-app_repo/data/
+backend/data/*
+!backend/data/.gitignore
+app_repo/data/*
+!app_repo/data/.gitignore
 app_repo/__pycache__/
