@@ -199,15 +199,33 @@ pre {
   gap: 10px;
 }
 
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
 .app-item {
   border: 1px solid #d3dbe7;
   border-radius: 10px;
   padding: 12px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-rows: 1fr auto;
   gap: 12px;
   background: #f8fbff;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-main {
+  min-height: 96px;
+  min-width: 0;
+}
+
+.app-main h3,
+.app-main p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .app-item h3 {
@@ -221,26 +239,68 @@ pre {
 }
 
 .app-actions {
-  min-width: 110px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .toggle-group {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  min-width: 160px;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .switch-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   font-size: 14px;
+  border: 1px solid #d3dbe7;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fff;
 }
 
 .switch-line input[type='checkbox'] {
-  width: 44px;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: #c2cad8;
+  border: 1px solid #aab5c8;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-line input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
   height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: transform 0.2s ease;
+}
+
+.switch-line input[type='checkbox']:checked {
+  background: #17a34a;
+  border-color: #12863d;
+}
+
+.switch-line input[type='checkbox']:checked::before {
+  transform: translateX(20px);
+}
+
+.switch-line input[type='checkbox']:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .config-form input[type='checkbox'] {
@@ -249,13 +309,7 @@ pre {
 }
 
 @media (max-width: 860px) {
-  .app-item {
-    flex-direction: column;
-  }
-
-  .app-actions,
-  .toggle-group {
-    width: 100%;
-    min-width: 0;
+  .app-grid {
+    grid-template-columns: 1fr;
   }
 }

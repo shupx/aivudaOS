@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive } from 'vue'
 import {
-  droneState,
+  robotState,
   getAppConfig,
   installApp,
   refreshApps,
@@ -10,7 +10,7 @@ import {
   startApp,
   stopApp,
   uninstallApp,
-} from '../services/droneClient'
+} from '../services/robotClient'
 
 const localState = reactive({
   busyAppId: '',
@@ -26,7 +26,7 @@ const localState = reactive({
 
 const installedMap = computed(() => {
   const map = new Map()
-  for (const item of droneState.installedApps) {
+  for (const item of robotState.installedApps) {
     map.set(item.app_id, item)
   }
   return map
@@ -34,14 +34,14 @@ const installedMap = computed(() => {
 
 const catalogMap = computed(() => {
   const map = new Map()
-  for (const item of droneState.appCatalog) {
+  for (const item of robotState.appCatalog) {
     map.set(item.app_id, item)
   }
   return map
 })
 
 const catalogWithInstallInfo = computed(() => {
-  return droneState.appCatalog.map((item) => {
+  return robotState.appCatalog.map((item) => {
     const install = installedMap.value.get(item.app_id)
     return {
       ...item,
@@ -63,7 +63,7 @@ const schemaEntries = computed(() => {
 })
 
 function findLatestTask(appId) {
-  const values = Object.values(droneState.appTaskById)
+  const values = Object.values(robotState.appTaskById)
   const matched = values.filter((task) => task.app_id === appId)
   if (!matched.length) return null
   matched.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
@@ -203,7 +203,7 @@ async function saveSelectedConfig() {
 }
 
 onMounted(() => {
-  if (!droneState.appCatalog.length) {
+  if (!robotState.appCatalog.length) {
     doRefresh()
   }
 })
@@ -218,9 +218,9 @@ onMounted(() => {
       </div>
       <p class="tip">点击安装后可直接通过滑块启动，并设置开机自启动。</p>
 
-      <div class="app-list">
+      <div class="app-grid">
         <div v-for="item in catalogWithInstallInfo" :key="item.app_id" class="app-item">
-          <div>
+          <div class="app-main">
             <h3>{{ item.manifest.name }} <small>({{ item.app_id }})</small></h3>
             <p class="tip">{{ item.manifest.description }}</p>
             <p class="tip">版本 {{ item.manifest.version }} | 运行模式 {{ item.manifest.runtime }}</p>
@@ -243,9 +243,9 @@ onMounted(() => {
 
     <article class="card">
       <h2>已安装应用</h2>
-      <div class="app-list" v-if="droneState.installedApps.length">
-        <div v-for="item in droneState.installedApps" :key="item.app_id" class="app-item">
-          <div>
+      <div class="app-grid" v-if="robotState.installedApps.length">
+        <div v-for="item in robotState.installedApps" :key="item.app_id" class="app-item">
+          <div class="app-main">
             <h3>{{ item.app_id }}</h3>
             <p class="tip">安装路径：{{ item.install_path }}</p>
             <p class="tip">状态：{{ item.status }} | 运行中：{{ item.running ? '是' : '否' }}</p>
@@ -316,6 +316,6 @@ onMounted(() => {
     </article>
 
     <p class="error" v-if="localState.error">{{ localState.error }}</p>
-    <p class="error" v-if="droneState.appsError">{{ droneState.appsError }}</p>
+    <p class="error" v-if="robotState.appsError">{{ robotState.appsError }}</p>
   </section>
 </template>

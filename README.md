@@ -1,4 +1,4 @@
-# Drone Orin NX Console MVP
+# Robot Orin NX Console MVP
 
 最小可运行版本：`Vue + FastAPI`，包含登录、配置读写、实时状态 WebSocket。
 

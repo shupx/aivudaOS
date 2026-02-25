@@ -3,7 +3,7 @@ import LoginView from './views/LoginView.vue'
 import StatusView from './views/StatusView.vue'
 import ConfigView from './views/ConfigView.vue'
 import AppsView from './views/AppsView.vue'
-import { isAuthed } from './services/droneClient'
+import { isAuthed } from './services/robotClient'
 
 const routes = [
   { path: '/', redirect: '/status' },
