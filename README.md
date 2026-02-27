@@ -21,7 +21,7 @@ python3 -m pip install --user -r backend/requirements.txt
 2. 启动后端
 
 ```bash
-python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --workers 4
 ```
 
 3. 启动前端开发模式（效率低，但支持热更新；生产部署环境下应改用nginx）
