@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import signal
 import subprocess
 import threading
-import textwrap
 import time
 from pathlib import Path
 from typing import Any
@@ -20,19 +18,6 @@ from core.errors import (
     AppRuntimeError,
 )
 from core.paths import APP_LOG_DIR
-
-
-def _run_cmd(
-    args: list[str], cwd: Path | None = None
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        text=True,
-        capture_output=True,
-        timeout=60,
-        check=False,
-    )
 
 
 class RuntimeService:
@@ -93,13 +78,24 @@ class RuntimeService:
                 last_started_at=None,
                 last_stopped_at=None,
             )
+
+        running = bool(row["running"])
+        pid = row["pid"]
+        stopped_at = row["last_stopped_at"]
+
+        if running and (not pid or not self._is_pid_alive(int(pid))):
+            stopped_at = int(time.time())
+            self._mark_stopped_if_pid_matches(app_id, pid, stopped_at)
+            running = False
+            pid = None
+
         return AppRuntimeState(
             app_id=app_id,
-            running=bool(row["running"]),
+            running=running,
             autostart=bool(row["autostart"]),
-            pid=row["pid"],
+            pid=pid,
             last_started_at=row["last_started_at"],
-            last_stopped_at=row["last_stopped_at"],
+            last_stopped_at=stopped_at,
         )
 
     def get_detail(self, app_id: str) -> dict[str, Any]:
@@ -110,10 +106,6 @@ class RuntimeService:
                 "FROM app_installation WHERE app_id = ? ORDER BY installed_at DESC",
                 (app_id,),
             ).fetchall()
-            runtime_row = conn.execute(
-                "SELECT * FROM app_runtime WHERE app_id = ?", (app_id,)
-            ).fetchone()
-
         if not install_rows:
             raise AppNotInstalledError(f"{app_id} is not installed")
 
@@ -128,12 +120,21 @@ class RuntimeService:
         except Exception:
             pass
 
+        runtime_state = self.get_runtime_state(app_id)
+
         return {
             "app_id": app_id,
             "installed": True,
             "active_version": active_ver,
             "versions": [dict(r) for r in install_rows],
-            "runtime": dict(runtime_row) if runtime_row else None,
+            "runtime": {
+                "app_id": runtime_state.app_id,
+                "running": int(runtime_state.running),
+                "autostart": int(runtime_state.autostart),
+                "pid": runtime_state.pid,
+                "last_started_at": runtime_state.last_started_at,
+                "last_stopped_at": runtime_state.last_stopped_at,
+            },
             "config": {"version": cfg.version, "updated_at": cfg.updated_at},
             "manifest": manifest_info,
         }
@@ -165,6 +166,7 @@ class RuntimeService:
                     name = m.name
                 except Exception:
                     pass
+                runtime_state = self.get_runtime_state(aid)
                 seen[aid] = {
                     "app_id": aid,
                     "name": name,
@@ -173,11 +175,11 @@ class RuntimeService:
                     "install_path": str(self._versioning.active_link(aid)),
                     "status": row["status"],
                     "installed_at": row["installed_at"],
-                    "running": bool(row["running"] or 0),
-                    "autostart": bool(row["autostart"] or 0),
-                    "pid": row["pid"],
-                    "last_started_at": row["last_started_at"],
-                    "last_stopped_at": row["last_stopped_at"],
+                    "running": runtime_state.running,
+                    "autostart": runtime_state.autostart,
+                    "pid": runtime_state.pid,
+                    "last_started_at": runtime_state.last_started_at,
+                    "last_stopped_at": runtime_state.last_stopped_at,
                 }
             seen[aid]["versions"].append(row["version"])
 
@@ -270,16 +272,6 @@ class RuntimeService:
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} is not installed")
 
-        try:
-            self._ensure_systemd_unit(app_id)
-            self._systemd_call("daemon-reload")
-            service = self._unit_name(app_id)
-            self._systemd_call("enable" if enabled else "disable", service)
-        except RuntimeError as exc:
-            raise AppRuntimeError(
-                f"systemd 自启动设置失败: {exc}"
-            ) from exc
-
         with db_conn() as conn:
             conn.execute(
                 "UPDATE app_runtime SET autostart=? WHERE app_id=?",
@@ -304,14 +296,6 @@ class RuntimeService:
             self.stop(app_id)
 
         self._versioning.activate_version(app_id, version)
-
-        # Regenerate systemd unit if autostart is on
-        if runtime_state.autostart:
-            try:
-                self._ensure_systemd_unit(app_id)
-                self._systemd_call("daemon-reload")
-            except RuntimeError:
-                pass
 
         if runtime_state.running and restart:
             self.start(app_id)
@@ -340,7 +324,6 @@ class RuntimeService:
             # Uninstall ALL versions
             if runtime_state.running:
                 self.stop(app_id)
-            self._remove_systemd_unit(app_id)
             self._versioning.remove_app_entirely(app_id)
             with db_conn() as conn:
                 conn.execute(
@@ -360,7 +343,6 @@ class RuntimeService:
             if active == version and remaining:
                 self._versioning.activate_version(app_id, remaining[0])
             elif not remaining:
-                self._remove_systemd_unit(app_id)
                 with db_conn() as conn:
                     conn.execute(
                         "DELETE FROM app_runtime WHERE app_id = ?", (app_id,)
@@ -371,75 +353,33 @@ class RuntimeService:
 
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
-    # ------------------------------------------------------------------ #
-    #  Systemd helpers
-    # ------------------------------------------------------------------ #
+    def start_autostart_apps(self) -> dict[str, Any]:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT app_id FROM app_runtime WHERE autostart = 1 ORDER BY app_id"
+            ).fetchall()
 
-    def _unit_name(self, app_id: str) -> str:
-        return f"aivuda-app-{app_id}.service"
+        started: list[str] = []
+        skipped: list[str] = []
+        failed: list[dict[str, str]] = []
 
-    def _systemd_user_dir(self) -> Path:
-        p = Path.home() / ".config" / "systemd" / "user"
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+        for row in rows:
+            app_id = row["app_id"]
+            state = self.get_runtime_state(app_id)
+            if state.running:
+                skipped.append(app_id)
+                continue
+            try:
+                self.start(app_id)
+                started.append(app_id)
+            except Exception as exc:
+                failed.append({"app_id": app_id, "error": str(exc)})
 
-    def _systemd_call(self, *args: str) -> None:
-        result = _run_cmd(["systemctl", "--user", *args])
-        if result.returncode != 0:
-            raise RuntimeError(
-                (result.stderr or result.stdout or "systemctl 执行失败").strip()
-            )
-
-    def _ensure_systemd_unit(self, app_id: str) -> Path:
-        manifest = self._get_manifest(app_id)
-        install_path = self._versioning.active_install_path(app_id)
-        if install_path is None:
-            raise AppNotInstalledError(f"{app_id} has no active version")
-
-        unit_path = self._systemd_user_dir() / self._unit_name(app_id)
-
-        cmd = self._build_exec_command(manifest, install_path)
-        cmd_line = shlex.join(cmd)
-        exec_start = f"/bin/bash -lc {shlex.quote(f'cd {shlex.quote(str(install_path))} && {cmd_line}')}"
-
-        content = textwrap.dedent(
-            f"""
-            [Unit]
-            Description=AivudaOS App {app_id}
-            After=network.target
-
-            [Service]
-            Type=simple
-            WorkingDirectory={install_path}
-            ExecStart={exec_start}
-            Restart=on-failure
-            RestartSec=3
-
-            [Install]
-            WantedBy=default.target
-            """
-        ).strip() + "\n"
-
-        unit_path.write_text(content, encoding="utf-8")
-        return unit_path
-
-    def _remove_systemd_unit(self, app_id: str) -> None:
-        service = self._unit_name(app_id)
-        try:
-            self._systemd_call("disable", service)
-        except Exception:
-            pass
-        try:
-            self._systemd_call("stop", service)
-        except Exception:
-            pass
-        unit_path = self._systemd_user_dir() / service
-        if unit_path.exists():
-            unit_path.unlink()
-        try:
-            self._systemd_call("daemon-reload")
-        except Exception:
-            pass
+        return {
+            "started": started,
+            "skipped": skipped,
+            "failed": failed,
+        }
 
     # ------------------------------------------------------------------ #
     #  Process helpers
@@ -460,6 +400,19 @@ class RuntimeService:
 
     def _app_log_path(self, app_id: str) -> Path:
         return APP_LOG_DIR / app_id / "current.log"
+
+    @staticmethod
+    def _is_pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        else:
+            return True
 
     def _watch_process_exit(self, app_id: str, proc: subprocess.Popen[Any]) -> None:
         try:

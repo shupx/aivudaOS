@@ -2,7 +2,7 @@
 
 ## 概述
 
-AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和 systemd 自启动。
+AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和后端托管自启动。
 
 ## 核心模块
 
@@ -122,9 +122,10 @@ aivudaOS/
 
 ### 自启动（Autostart）
 
-通过 systemd user service 实现：
-- 自动生成 `~/.config/systemd/user/aivuda-app-{app_id}.service`
-- `systemctl --user enable/disable` 控制
+通过 `app_runtime.autostart` 标记实现：
+- `POST /api/apps/{app_id}/autostart` 仅更新数据库标记
+- aivudaOS 后端启动时会扫描 `autostart=1` 的应用，并调用与手动启动相同的 `start()` 流程
+- 状态由同一套运行时逻辑写回数据库（`running/pid/last_started_at`）
 
 ## API 端点
 
