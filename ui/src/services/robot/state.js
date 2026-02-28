@@ -11,10 +11,6 @@ const initialState = () => ({
   configText: '',
   saveError: '',
   saveOk: '',
-  snapshot: null,
-  wsStatus: 'disconnected',
-  telemetry: null,
-  reconnectAttempt: 0,
   appCatalog: [],
   installedApps: [],
   appTaskById: {},
@@ -31,10 +27,6 @@ export function resetStateForLogout() {
   robotState.me = null
   robotState.config = null
   robotState.configText = ''
-  robotState.snapshot = null
-  robotState.telemetry = null
-  robotState.wsStatus = 'disconnected'
-  robotState.reconnectAttempt = 0
   robotState.appCatalog = []
   robotState.installedApps = []
   robotState.appTaskById = {}

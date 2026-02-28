@@ -1,6 +1,6 @@
 import { setUnauthorizedHandler } from './api'
 import { isAuthed, login, logout } from './auth'
-import { refreshStatus, saveConfig } from './config'
+import { saveConfig } from './config'
 import {
   getAppConfig,
   getAppVersions,
@@ -28,7 +28,6 @@ export {
   login,
   logout,
   refreshApps,
-  refreshStatus,
   saveAppConfig,
   saveConfig,
   setAppAutostart,

@@ -1,11 +1,6 @@
 import { apiGet, apiPut } from './api'
 import { robotState } from './state'
 
-export async function refreshStatus() {
-  if (!robotState.token) return
-  robotState.snapshot = await apiGet('/api/status/snapshot')
-}
-
 export async function saveConfig() {
   robotState.saveError = ''
   robotState.saveOk = ''

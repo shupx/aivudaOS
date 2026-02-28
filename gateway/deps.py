@@ -9,7 +9,6 @@ from core.apps.runtime import RuntimeService
 from core.apps.versioning import VersioningService
 from core.auth.service import AuthService
 from core.config.service import ConfigService
-from core.telemetry.service import TelemetryService
 
 
 @lru_cache
@@ -54,7 +53,3 @@ def get_runtime_service() -> RuntimeService:
         get_config_service(),
     )
 
-
-@lru_cache
-def get_telemetry_service() -> TelemetryService:
-    return TelemetryService()

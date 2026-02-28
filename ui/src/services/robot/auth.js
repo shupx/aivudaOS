@@ -1,5 +1,4 @@
 import { robotState, resetStateForLogout } from './state'
-import { closeWs, openWs } from './telemetry'
 import { loadAll } from './session'
 
 export function isAuthed() {
@@ -22,7 +21,6 @@ export async function login() {
     robotState.token = data.access_token
     localStorage.setItem('token', robotState.token)
     await loadAll()
-    openWs(true)
     return true
   } catch (err) {
     robotState.loginError = err.message
@@ -33,6 +31,5 @@ export async function login() {
 }
 
 export function logout() {
-  closeWs()
   resetStateForLogout()
 }

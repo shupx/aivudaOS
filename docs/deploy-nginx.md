@@ -1,9 +1,9 @@
 # Nginx 部署说明（主机直装，HTTP）
 
-目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/api` 与 `/ws`，实现单端口对外服务。
+目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/api`，实现单端口对外服务。
 
 - Nginx 提供前端静态文件与 SPA 路由
-- Nginx 反代 FastAPI 的 `/api/*` 与 `/ws/*`
+- Nginx 反代 FastAPI 的 `/api/*`
 - 后端仅监听 `127.0.0.1:8000`
 
 ## 1. 前置条件
@@ -69,10 +69,7 @@ sudo systemctl reload nginx
 2. 登录后功能正常：
    - `/api/auth/me`
    - `/api/config`
-   - `/api/status/snapshot`
-3. WebSocket 正常：
-   - `ws://<设备IP>/ws/telemetry?token=...`
-4. 页面刷新 `/status`、`/config` 不应出现 404
+3. 页面刷新 `/status`、`/config` 不应出现 404
 
 ## 6. 常见检查命令
 

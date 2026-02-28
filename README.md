@@ -5,7 +5,7 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 ## 目录结构
 
 - `core/`: 核心业务逻辑（纯 Python，不依赖 HTTP）
-- `gateway/`: FastAPI 服务层，提供 REST 接口与 WebSocket
+- `gateway/`: FastAPI 服务层，提供core service的统一的REST 接口，作为后端http server
 - `ui/`: 操作界面（Vue 3 + Vite）
 - `apps/`: 应用安装目录（多版本，symlink 切换）
 - `config/`: YAML 配置文件（OS 全局配置 + 各应用配置）
@@ -22,7 +22,7 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 pip install -r requirements.txt
 ```
 
-2. 启动 gateway
+2. 启动 gateway（后端api gateway）
 
 ```bash
 PYTHONPATH=. uvicorn gateway.main:app --host 0.0.0.0 --port 8000 --reload
@@ -36,7 +36,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://<设备IP>:5173`，`/api` 与 `/ws` 自动代理到 `:8000`。
+打开http://localhost:5173/，`/api` 自动代理到 `:8000`（vite.config.js配置了）。
 
 ### 生产模式（gunicorn + uvicorn worker）
 
@@ -56,7 +56,7 @@ PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --b
 
 ## Nginx 生产部署（可选）
 
-Nginx 托管前端静态文件并反代 `/api` 与 `/ws`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
+Nginx 托管前端静态文件并反代 `/api`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
 
 ## 远端应用仓库（aivudaAppStore）
 
@@ -78,7 +78,7 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 | 路径 | 功能 |
 |------|------|
 | `/login` | 登录 |
-| `/status` | 实时状态（WebSocket 遥测） |
+| `/status` | 会话状态 |
 | `/config` | OS 配置管理 |
 | `/apps` | 应用安装 / 版本管理 |
 
@@ -91,10 +91,6 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 ### 配置
 - `GET  /api/config`
 - `PUT  /api/config`
-
-### 状态
-- `GET  /api/status/snapshot`
-- `WS   /ws/telemetry`
 
 ### 应用管理
 - `POST /api/apps/repo/sync` — 从仓库同步应用目录

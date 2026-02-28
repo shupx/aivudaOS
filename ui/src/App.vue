@@ -21,7 +21,7 @@ function doLogout() {
     <aside v-if="isLoggedIn" class="sidebar">
       <h1>Robot Console</h1>
       <nav class="nav-list">
-        <RouterLink to="/status" class="nav-item">实时状态</RouterLink>
+        <RouterLink to="/status" class="nav-item">会话状态</RouterLink>
         <RouterLink to="/config" class="nav-item">配置管理</RouterLink>
         <RouterLink to="/apps" class="nav-item">应用商店</RouterLink>
       </nav>
