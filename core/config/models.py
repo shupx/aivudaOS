@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class VersionedConfig:
+    """Wraps config data with version tracking metadata."""
+
+    data: dict[str, Any]
+    version: int = 0
+    updated_at: int | None = None
+    updated_by: str | None = None
+
+
+@dataclass
+class UserRecord:
+    username: str
+    password_hash: str
+    role: str = "admin"
+
+
+@dataclass
+class UsersConfig:
+    users: list[UserRecord] = field(default_factory=list)

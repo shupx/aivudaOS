@@ -1,0 +1,2 @@
+# Ignore per-app config files generated at runtime
+*.yaml

@@ -1,0 +1,5 @@
+fastapi==0.124.4
+uvicorn[standard]==0.30.6
+gunicorn>=22.0
+pyyaml>=6.0
+bcrypt>=4.0

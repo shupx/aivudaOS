@@ -1,13 +1,26 @@
+# Python
 .venv/
+venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# Node
 node_modules/
 dist/
 build/
+
+# SQLite WAL side-files (the .db itself lives under data/ which has its own .gitignore)
+*.db-wal
+*.db-shm
+
+# Env / secrets
 .env
+.env.*
+
+# Editor / OS
 .DS_Store
-
+*.swp
+*.swo
+.idea/
 .vscode/
-
-
-

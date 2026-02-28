@@ -1,117 +1,72 @@
 # AivudaOS
 
-aivudaOS：分布式部署于机器人机载电脑上的操作系统，用于管理IOODA协同感知控制软件
+aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 aivudaAppStore 安装和运行应用。
 
-最小可运行版本：`Vue + FastAPI`，包含登录、配置读写、实时状态 WebSocket。
+## 目录结构
 
-## 目录
+- `core/`: 核心业务逻辑（纯 Python，不依赖 HTTP）
+- `gateway/`: FastAPI 服务层，提供 REST 接口与 WebSocket
+- `ui/`: 操作界面（Vue 3 + Vite）
+- `apps/`: 应用安装目录（多版本，symlink 切换）
+- `config/`: YAML 配置文件（OS 全局配置 + 各应用配置）
+- `data/`: 运行时数据（数据库、日志、会话、制品缓存）
+- `nginx/`: Nginx 配置模板
 
-- `backend/main.py`: FastAPI 后端
-- `backend/requirements.txt`: 后端依赖
-- `frontend/`: Vue 前端
+## 快速启动
 
-## 开发阶段快速启动热更新
+### 开发模式（热重载，两个终端）
 
 1. 安装后端依赖
 
 ```bash
-python3 -m pip install --user -r backend/requirements.txt
+pip install -r requirements.txt
 ```
 
-2. 启动后端
+2. 启动 gateway
 
 ```bash
-python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --workers 4
+PYTHONPATH=. uvicorn gateway.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-3. 启动前端开发模式（效率低，但支持热更新；生产部署环境下应改用nginx）
+3. 启动前端
 
 ```bash
-cd frontend
+cd ui
 npm install
-npm run dev -- --host 0.0.0.0 --port 5173
+npm run dev
 ```
 
-打开 `http://<设备IP>:5173`。
+打开 `http://<设备IP>:5173`，`/api` 与 `/ws` 自动代理到 `:8000`。
 
-## 远端应用仓库（App Repo）
+### 生产模式（gunicorn + uvicorn worker）
 
-应用商店目录支持从远端仓库同步，远端可上传/更新/下架应用。
-
-1. 启动仓库服务（默认 `9001`）
+gateway 启动后自动检测 `ui/dist/`，将前端静态文件与 API 挂载在同一端口。
 
 ```bash
-python3 -m pip install --user -r app_repo/requirements.txt
-python3 -m uvicorn app_repo.main:app --host 127.0.0.1 --port 9001
+# 构建前端静态文件
+cd ui && npm install && npm run build && cd ..
+
+# 启动（gunicorn 守护进程 + uvicorn worker）
+PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind 0.0.0.0:8000
 ```
 
-2. 启动主后端并指定仓库地址（可选，默认即该地址）
+打开 `http://<设备IP>:8000`。本地可以用http://localhost:8000
+
+> **注意**：保持 `-w 1`。安装任务状态存于进程内存，多 worker 会导致任务查询 404。
+
+## Nginx 生产部署（可选）
+
+Nginx 托管前端静态文件并反代 `/api` 与 `/ws`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
+
+## 远端应用仓库（aivudaAppStore）
+
+应用目录从远端仓库同步，仓库服务由 aivudaAppStore 提供（默认端口 `9001`）。
+
+启动后在 OS 管理界面点击「同步应用目录」，或调用：
 
 ```bash
-APP_REPO_URL=http://127.0.0.1:9001/repo \
-python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+curl -X POST http://localhost:8000/api/apps/repo/sync
 ```
-
-3. 上传一个应用到仓库（示例）
-
-```bash
-curl -X POST http://127.0.0.1:9001/repo/apps/upload \
-  -F app_id=demo-hello \
-  -F version=0.1.0 \
-  -F name='Demo Hello' \
-  -F runtime=host \
-  -F run_entrypoint='./bin/hello.sh' \
-  -F run_args_json='[]' \
-  -F config_schema_json='{"type":"object","properties":{"greeting":{"type":"string"}}}' \
-  -F default_config_json='{"greeting":"hello"}' \
-  -F file=@/tmp/demo-app.tar.gz
-```
-
-## 生产部署（Nginx，HTTP）
-
-目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/api` 与 `/ws`。
-
-1. 构建前端
-
-```bash
-export PROJECT_ROOT=/your/path/aivudaOS # 修改为项目实际地址
-
-cd "$PROJECT_ROOT/frontend"
-npm ci
-npm run build
-```
-
-构建产物目录：`$PROJECT_ROOT/frontend/dist`
-
-2. 启动后端（仅监听本机）
-
-```bash
-cd "$PROJECT_ROOT"
-python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
-```
-
-3. 安装并启用 Nginx 配置
-
-```bash
-sudo apt update
-sudo apt install -y nginx
-
-sudo sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" \
-  "$PROJECT_ROOT/nginx/aivudaos.conf" \
-  > /etc/nginx/sites-available/aivudaos.conf
-
-sudo ln -sf /etc/nginx/sites-available/aivudaos.conf /etc/nginx/sites-enabled/aivudaos.conf
-sudo rm -f /etc/nginx/sites-enabled/default
-
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-4. 访问
-
-打开 `http://<设备IP>/`。 （默认http转到80端口，因此不用写端口）
-
-更多细节见：`docs/deploy-nginx.md`。
 
 ## 默认账号
 
@@ -120,31 +75,39 @@ sudo systemctl reload nginx
 
 ## 前端路由
 
-- `/login`: 登录页
-- `/status`: 实时状态
-- `/config`: 配置管理
-- `/apps`: 应用商店
+| 路径 | 功能 |
+|------|------|
+| `/login` | 登录 |
+| `/status` | 实时状态（WebSocket 遥测） |
+| `/config` | OS 配置管理 |
+| `/apps` | 应用安装 / 版本管理 |
 
-## 接口
+## API 接口
 
+### 认证
 - `POST /api/auth/login`
-- `GET /api/auth/me`
-- `GET /api/config`
-- `PUT /api/config`
-- `GET /api/status/snapshot`
-- `POST /api/apps/repo/sync`
-- `GET /api/apps/catalog`
-- `GET /api/apps/installed`
-- `POST /api/apps/{app_id}/install`
-- `POST /api/apps/{app_id}/uninstall`
-- `POST /api/apps/{app_id}/start`
-- `POST /api/apps/{app_id}/stop`
-- `POST /api/apps/{app_id}/autostart`
-- `GET /api/apps/{app_id}/config`
-- `PUT /api/apps/{app_id}/config`
-- `WS /ws/telemetry`
+- `GET  /api/auth/me`
 
-## 说明
+### 配置
+- `GET  /api/config`
+- `PUT  /api/config`
 
-- 当前为 MVP，认证令牌和用户数据使用内存/本地 SQLite 简化实现。
-- 生产环境建议加 HTTPS、密码哈希、权限细化、审计日志与 systemd 自启。
+### 状态
+- `GET  /api/status/snapshot`
+- `WS   /ws/telemetry`
+
+### 应用管理
+- `POST /api/apps/repo/sync` — 从仓库同步应用目录
+- `GET  /api/apps/catalog` — 可安装应用列表
+- `GET  /api/apps/installed` — 已安装应用列表
+- `POST /api/apps/{app_id}/install` — 安装应用
+- `GET  /api/apps/tasks/{task_id}` — 查询安装任务进度
+- `GET  /api/apps/{app_id}/status` — 应用运行状态
+- `POST /api/apps/{app_id}/start` — 启动
+- `POST /api/apps/{app_id}/stop` — 停止
+- `POST /api/apps/{app_id}/autostart` — 设置开机自启
+- `GET  /api/apps/{app_id}/versions` — 已安装版本列表
+- `POST /api/apps/{app_id}/switch-version` — 切换激活版本
+- `POST /api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
+- `GET  /api/apps/{app_id}/config` — 读取应用配置
+- `PUT  /api/apps/{app_id}/config` — 更新应用配置

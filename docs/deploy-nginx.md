@@ -1,10 +1,10 @@
 # Nginx 部署说明（主机直装，HTTP）
 
-本文档用于将本项目部署为单入口：
+目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/api` 与 `/ws`，实现单端口对外服务。
 
 - Nginx 提供前端静态文件与 SPA 路由
 - Nginx 反代 FastAPI 的 `/api/*` 与 `/ws/*`
-- Uvicorn 仅监听 `127.0.0.1:8000`
+- 后端仅监听 `127.0.0.1:8000`
 
 ## 1. 前置条件
 
@@ -15,24 +15,27 @@
 ## 2. 构建前端
 
 ```bash
-export PROJECT_ROOT=/your/path/aivudaOS
-cd "$PROJECT_ROOT/frontend"
+export PROJECT_ROOT=/your/path/aivudaOS  # 修改为项目实际路径
+cd "$PROJECT_ROOT/ui"
 npm ci
 npm run build
 ```
 
-产物目录：
-
-`$PROJECT_ROOT/frontend/dist`
+产物目录：`$PROJECT_ROOT/ui/dist`
 
 ## 3. 启动后端
 
 ```bash
 cd "$PROJECT_ROOT"
-python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=. gunicorn gateway.main:app \
+  -k uvicorn.workers.UvicornWorker \
+  -w 1 \
+  --bind 127.0.0.1:8000
 ```
 
 说明：监听 `127.0.0.1`，由 Nginx 对外暴露服务。
+
+> **注意**：保持 `-w 1`。安装任务状态存于进程内存，多 worker 会导致任务查询 404。
 
 ## 4. 安装并配置 Nginx
 
@@ -104,7 +107,8 @@ After=network.target
 Type=simple
 User=your_user
 WorkingDirectory=/your/path/aivudaOS
-ExecStart=/usr/bin/python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Environment=PYTHONPATH=.
+ExecStart=/usr/bin/python3 -m gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8000
 Restart=always
 RestartSec=3
 
