@@ -1,10 +1,8 @@
 import { reactive } from 'vue'
 
 const TOKEN_KEY = 'aivuda_ui_token'
-const BACKEND_URL_KEY = 'aivuda_ui_backend_url'
 
 export const appState = reactive({
-  backendUrl: localStorage.getItem(BACKEND_URL_KEY) || 'http://127.0.0.1:8000',
   token: localStorage.getItem(TOKEN_KEY) || '',
   user: null,
   role: null,
@@ -18,11 +16,6 @@ export const appState = reactive({
   appsError: '',
   busyById: {},
 })
-
-export function setBackendUrl(url) {
-  appState.backendUrl = (url || '').trim()
-  localStorage.setItem(BACKEND_URL_KEY, appState.backendUrl)
-}
 
 export function setToken(token) {
   appState.token = token || ''

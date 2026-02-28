@@ -1,9 +1,7 @@
 import { appState } from '../../state/appState'
 
 function buildUrl(path, auth) {
-  const base = (appState.backendUrl || '').replace(/\/$/, '')
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  const raw = `${base}${normalizedPath}`
+  const raw = path.startsWith('/') ? path : `/${path}`
 
   if (!auth) return raw
   const token = encodeURIComponent(appState.token || '')

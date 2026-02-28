@@ -1,6 +1,6 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { appState, markGatewayOnline, setBackendUrl } from '../state/appState'
+import { markGatewayOnline } from '../state/appState'
 import { fetchMe, login } from '../services/core/auth'
 
 export function useLogin() {
@@ -9,7 +9,6 @@ export function useLogin() {
   const error = ref('')
 
   const form = reactive({
-    backendUrl: appState.backendUrl,
     username: 'admin',
     password: 'admin123',
   })
@@ -19,7 +18,6 @@ export function useLogin() {
     busy.value = true
     error.value = ''
     try {
-      setBackendUrl(form.backendUrl)
       await login(form.username, form.password)
       await fetchMe()
       markGatewayOnline(true)

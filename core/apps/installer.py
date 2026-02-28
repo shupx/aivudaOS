@@ -97,6 +97,8 @@ class InstallerService:
                 else:
                     shutil.copy2(str(item), str(dest))
 
+            self._ensure_entrypoint_ready(install_path, manifest)
+
             # Record in database
             self._record_installation(app_id, version, install_path, manifest)
 
@@ -161,5 +163,29 @@ class InstallerService:
                     if p.exists():
                         return p
         return None
+
+    @staticmethod
+    def _ensure_entrypoint_ready(install_path: Path, manifest: AppManifest) -> None:
+        entrypoint = manifest.run.get("entrypoint")
+        if not entrypoint:
+            raise PackageFormatError("manifest.run.entrypoint 缺失")
+
+        entry = Path(str(entrypoint))
+        resolved = (
+            (install_path / entry).resolve() if not entry.is_absolute() else entry
+        )
+
+        if not resolved.exists() or not resolved.is_file():
+            raise PackageFormatError(
+                f"entrypoint 不存在或不是文件: {entrypoint}"
+            )
+
+        try:
+            mode = resolved.stat().st_mode
+            resolved.chmod(mode | 0o111)
+        except OSError as exc:
+            raise PackageFormatError(
+                f"设置 entrypoint 可执行权限失败: {exc}"
+            ) from exc
 
 

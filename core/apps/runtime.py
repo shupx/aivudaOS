@@ -5,6 +5,7 @@ import os
 import shlex
 import signal
 import subprocess
+import threading
 import textwrap
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ from core.errors import (
     AppNotInstalledError,
     AppRuntimeError,
 )
+from core.paths import APP_LOG_DIR
 
 
 def _run_cmd(
@@ -196,13 +198,19 @@ class RuntimeService:
         runtime_state = self.get_runtime_state(app_id)
 
         command = self._build_exec_command(manifest, install_path)
-        proc = subprocess.Popen(
-            command,
-            cwd=str(install_path),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        log_path = self._app_log_path(app_id)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with log_path.open("wb") as log_file:
+                proc = subprocess.Popen(
+                    command,
+                    cwd=str(install_path),
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+        except OSError as exc:
+            raise AppRuntimeError(f"启动 {app_id} 失败，无法写入日志: {exc}") from exc
 
         with db_conn() as conn:
             conn.execute(
@@ -213,6 +221,13 @@ class RuntimeService:
                 (app_id, int(runtime_state.autostart), proc.pid, now),
             )
             conn.commit()
+
+        watcher = threading.Thread(
+            target=self._watch_process_exit,
+            args=(app_id, proc),
+            daemon=True,
+        )
+        watcher.start()
 
         return {"ok": True, "app_id": app_id, "running": True}
 
@@ -442,3 +457,79 @@ class RuntimeService:
         )
         args = manifest.run.get("args", [])
         return [str(resolved), *[str(x) for x in args]]
+
+    def _app_log_path(self, app_id: str) -> Path:
+        return APP_LOG_DIR / app_id / "current.log"
+
+    def _watch_process_exit(self, app_id: str, proc: subprocess.Popen[Any]) -> None:
+        try:
+            proc.wait()
+        except Exception:
+            return
+
+        stopped_at = int(time.time())
+        self._mark_stopped_if_pid_matches(app_id, proc.pid, stopped_at)
+
+    def _mark_stopped_if_pid_matches(
+        self, app_id: str, pid: int | None, stopped_at: int
+    ) -> None:
+        if pid is None:
+            return
+
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE app_runtime "
+                "SET running=0, pid=NULL, last_stopped_at=? "
+                "WHERE app_id=? AND pid=?",
+                (stopped_at, app_id, pid),
+            )
+            conn.commit()
+
+    def read_logs(
+        self, app_id: str, offset: int = 0, limit: int = 65536
+    ) -> dict[str, Any]:
+        if not self._versioning.list_versions(app_id):
+            raise AppNotInstalledError(f"{app_id} is not installed")
+
+        safe_offset = max(0, int(offset))
+        safe_limit = max(1024, min(int(limit), 262144))
+
+        log_path = self._app_log_path(app_id)
+        if not log_path.exists():
+            return {
+                "app_id": app_id,
+                "offset": 0,
+                "next_offset": 0,
+                "eof": True,
+                "reset": safe_offset > 0,
+                "chunk": "",
+                "size": 0,
+            }
+
+        try:
+            file_size = log_path.stat().st_size
+        except OSError as exc:
+            raise AppRuntimeError(f"读取日志大小失败: {exc}") from exc
+
+        reset = safe_offset > file_size
+        read_offset = 0 if reset else safe_offset
+
+        try:
+            with log_path.open("rb") as f:
+                f.seek(read_offset)
+                raw = f.read(safe_limit)
+        except OSError as exc:
+            raise AppRuntimeError(f"读取日志失败: {exc}") from exc
+
+        next_offset = read_offset + len(raw)
+        eof = next_offset >= file_size
+
+        return {
+            "app_id": app_id,
+            "offset": read_offset,
+            "next_offset": next_offset,
+            "eof": eof,
+            "reset": reset,
+            "chunk": raw.decode("utf-8", errors="replace"),
+            "size": file_size,
+        }

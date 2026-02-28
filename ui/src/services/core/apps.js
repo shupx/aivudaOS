@@ -30,3 +30,43 @@ export async function setAutostart(appId, enabled) {
     auth: true,
   })
 }
+
+export async function fetchAppLogs(appId, offset = 0, limit = 65536) {
+  return request(
+    `/api/apps/${encodeURIComponent(appId)}/logs?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
+    { auth: true },
+  )
+}
+
+export async function fetchAppVersions(appId) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/versions`, { auth: true })
+}
+
+export async function switchAppVersion(appId, version, restart = false) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/switch-version`, {
+    method: 'POST',
+    body: { version, restart: Boolean(restart) },
+    auth: true,
+  })
+}
+
+export async function upgradeAppPackage(appId, file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request(`/api/apps/${encodeURIComponent(appId)}/upgrade`, {
+    method: 'POST',
+    body: form,
+    auth: true,
+  })
+}
+
+export async function uninstallApp(appId, { version = null, purge = false } = {}) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/uninstall`, {
+    method: 'POST',
+    body: {
+      version,
+      purge: Boolean(purge),
+    },
+    auth: true,
+  })
+}

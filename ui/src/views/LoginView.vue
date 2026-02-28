@@ -11,11 +11,6 @@ const { form, busy, error, submit } = useLogin()
       <p class="muted">登录系统控制台</p>
 
       <div class="field">
-        <label>后端地址</label>
-        <input v-model.trim="form.backendUrl" placeholder="http://127.0.0.1:8000" />
-      </div>
-
-      <div class="field">
         <label>用户名</label>
         <input v-model.trim="form.username" placeholder="admin" @keyup.enter="submit" />
       </div>

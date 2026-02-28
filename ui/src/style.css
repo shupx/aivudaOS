@@ -96,9 +96,10 @@ input {
 }
 
 .dashboard-layout {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 260px 1fr;
+  overflow: hidden;
 }
 
 .dashboard-layout.collapsed {
@@ -112,6 +113,8 @@ input {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar-top {
@@ -165,6 +168,10 @@ input {
   padding: 18px;
   display: grid;
   gap: 12px;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .main-header {
@@ -231,6 +238,111 @@ input {
   padding: 24px;
   color: #64748b;
   text-align: center;
+}
+
+.log-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.actions-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.action-block {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  min-width: 0;
+}
+
+.action-block h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.action-block-wide {
+  grid-column: 1 / -1;
+}
+
+.actions-panel .panel-actions {
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.panel-actions.wrap {
+  flex-wrap: wrap;
+}
+
+.file-input,
+.select-input {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: #ffffff;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.file-input {
+  flex: 1 1 220px;
+  width: 100%;
+}
+
+.select-input {
+  flex: 1 1 140px;
+}
+
+.check-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.ok-text {
+  color: #15803d;
+  font-size: 13px;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.log-output {
+  margin: 0;
+  height: 360px;
+  overflow-y: scroll;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #0b1020;
+  color: #d1e3ff;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .apps-grid {

@@ -90,6 +90,23 @@ async def get_status(app_id: str, token: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get("/{app_id}/logs")
+async def get_logs(
+    app_id: str,
+    token: str,
+    offset: int = 0,
+    limit: int = 65536,
+) -> dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    try:
+        return runtime.read_logs(app_id, offset=offset, limit=limit)
+    except AppNotInstalledError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except AppRuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ================================================================== #
 #  Lifecycle: start / stop / restart
 # ================================================================== #

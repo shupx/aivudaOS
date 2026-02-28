@@ -25,6 +25,7 @@ my-app-1.0.0.tar.gz
 ```
 
 > 支持包内有一层包裹目录（如 `my-app/manifest.yaml`），系统会自动向下查找。
+> 安装时会校验 `run.entrypoint` 是否存在，并自动补齐可执行权限（`chmod +x`）。
 
 ### manifest.yaml 字段
 
@@ -117,6 +118,7 @@ aivudaOS/
 - **启动**：根据 `manifest.run.entrypoint` 构建命令，`subprocess.Popen` 启动（`start_new_session=True`）
 - **停止**：`os.kill(pid, SIGTERM)`
 - PID 记录在 `app_runtime` 表
+- 进程自然退出时会自动回写 `app_runtime`：`running=0`、`pid=NULL`、更新 `last_stopped_at`
 
 ### 自启动（Autostart）
 
