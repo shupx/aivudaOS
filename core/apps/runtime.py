@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
 import signal
 import subprocess
 import textwrap
@@ -18,7 +17,6 @@ from core.db.connection import db_conn
 from core.errors import (
     AppNotInstalledError,
     AppRuntimeError,
-    RuntimeNotAvailableError,
 )
 
 
@@ -33,13 +31,6 @@ def _run_cmd(
         timeout=60,
         check=False,
     )
-
-
-def _runtime_bin(runtime: str) -> str:
-    bin_path = shutil.which(runtime)
-    if not bin_path:
-        raise RuntimeNotAvailableError(f"未检测到 {runtime}，请先安装运行环境")
-    return bin_path
 
 
 class RuntimeService:
@@ -87,7 +78,7 @@ class RuntimeService:
     def get_runtime_state(self, app_id: str) -> AppRuntimeState:
         with db_conn() as conn:
             row = conn.execute(
-                "SELECT running, autostart, pid, container_id, last_started_at, last_stopped_at "
+                "SELECT running, autostart, pid, last_started_at, last_stopped_at "
                 "FROM app_runtime WHERE app_id = ?",
                 (app_id,),
             ).fetchone()
@@ -97,7 +88,6 @@ class RuntimeService:
                 running=False,
                 autostart=False,
                 pid=None,
-                container_id=None,
                 last_started_at=None,
                 last_stopped_at=None,
             )
@@ -106,7 +96,6 @@ class RuntimeService:
             running=bool(row["running"]),
             autostart=bool(row["autostart"]),
             pid=row["pid"],
-            container_id=row["container_id"],
             last_started_at=row["last_started_at"],
             last_stopped_at=row["last_stopped_at"],
         )
@@ -115,7 +104,7 @@ class RuntimeService:
         """Full detail: installation info + runtime state + active version."""
         with db_conn() as conn:
             install_rows = conn.execute(
-                "SELECT app_id, version, runtime, install_path, status, installed_at "
+                "SELECT app_id, version, install_path, status, installed_at "
                 "FROM app_installation WHERE app_id = ? ORDER BY installed_at DESC",
                 (app_id,),
             ).fetchall()
@@ -152,8 +141,8 @@ class RuntimeService:
         with db_conn() as conn:
             rows = conn.execute(
                 """
-                SELECT i.app_id, i.version, i.runtime, i.install_path, i.status, i.installed_at,
-                       r.running, r.autostart, r.pid, r.container_id,
+                SELECT i.app_id, i.version, i.install_path, i.status, i.installed_at,
+                       r.running, r.autostart, r.pid,
                        r.last_started_at, r.last_stopped_at
                 FROM app_installation i
                 LEFT JOIN app_runtime r ON r.app_id = i.app_id
@@ -179,14 +168,12 @@ class RuntimeService:
                     "name": name,
                     "active_version": active_ver,
                     "versions": [],
-                    "runtime": row["runtime"],
                     "install_path": str(self._versioning.active_link(aid)),
                     "status": row["status"],
                     "installed_at": row["installed_at"],
                     "running": bool(row["running"] or 0),
                     "autostart": bool(row["autostart"] or 0),
                     "pid": row["pid"],
-                    "container_id": row["container_id"],
                     "last_started_at": row["last_started_at"],
                     "last_stopped_at": row["last_stopped_at"],
                 }
@@ -207,73 +194,44 @@ class RuntimeService:
             raise AppNotInstalledError(f"{app_id} has no active version")
 
         runtime_state = self.get_runtime_state(app_id)
-        runtime = manifest.runtime
-        pid: int | None = None
-        container_id: str | None = None
 
-        if runtime == "host":
-            command = self._host_exec_command(manifest, install_path)
-            proc = subprocess.Popen(
-                command,
-                cwd=str(install_path),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            pid = proc.pid
-
-        elif runtime in {"docker", "podman"}:
-            container_id = self._start_container(manifest, app_id, runtime)
-
-        else:
-            raise AppRuntimeError(f"不支持的 runtime: {runtime}")
+        command = self._build_exec_command(manifest, install_path)
+        proc = subprocess.Popen(
+            command,
+            cwd=str(install_path),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
         with db_conn() as conn:
             conn.execute(
-                "INSERT INTO app_runtime (app_id, running, autostart, pid, container_id, last_started_at) "
-                "VALUES (?, 1, ?, ?, ?, ?) "
+                "INSERT INTO app_runtime (app_id, running, autostart, pid, last_started_at) "
+                "VALUES (?, 1, ?, ?, ?) "
                 "ON CONFLICT(app_id) DO UPDATE SET running=1, pid=excluded.pid, "
-                "container_id=excluded.container_id, last_started_at=excluded.last_started_at",
-                (app_id, int(runtime_state.autostart), pid, container_id, now),
+                "last_started_at=excluded.last_started_at",
+                (app_id, int(runtime_state.autostart), proc.pid, now),
             )
             conn.commit()
 
-        return {"ok": True, "app_id": app_id, "running": True, "runtime": runtime}
+        return {"ok": True, "app_id": app_id, "running": True}
 
     def stop(self, app_id: str) -> dict[str, Any]:
         now = int(time.time())
         runtime_state = self.get_runtime_state(app_id)
 
-        with db_conn() as conn:
-            row = conn.execute(
-                "SELECT runtime FROM app_installation WHERE app_id = ? LIMIT 1",
-                (app_id,),
-            ).fetchone()
-        if not row:
+        if not self._versioning.list_versions(app_id):
             raise AppNotInstalledError(f"{app_id} is not installed")
-        runtime = row["runtime"]
 
-        if runtime == "host":
-            if runtime_state.pid:
-                try:
-                    os.kill(runtime_state.pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
-        elif runtime in {"docker", "podman"}:
-            manifest = self._get_manifest(app_id)
-            rt_path = _runtime_bin(runtime)
-            cname = manifest.run.get("container_name", f"aivuda-{app_id}")
-            result = _run_cmd([rt_path, "stop", cname])
-            if result.returncode != 0 and "No such container" not in (
-                result.stderr or ""
-            ):
-                raise AppRuntimeError(
-                    (result.stderr or result.stdout or "").strip()
-                )
+        if runtime_state.pid:
+            try:
+                os.kill(runtime_state.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
 
         with db_conn() as conn:
             conn.execute(
-                "UPDATE app_runtime SET running=0, pid=NULL, container_id=NULL, last_stopped_at=? "
+                "UPDATE app_runtime SET running=0, pid=NULL, last_stopped_at=? "
                 "WHERE app_id=?",
                 (now, app_id),
             )
@@ -423,19 +381,11 @@ class RuntimeService:
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} has no active version")
 
-        runtime = manifest.runtime
         unit_path = self._systemd_user_dir() / self._unit_name(app_id)
 
-        if runtime == "host":
-            cmd = self._host_exec_command(manifest, install_path)
-            cmd_line = shlex.join(cmd)
-            exec_start = f"/bin/bash -lc {shlex.quote(f'cd {shlex.quote(str(install_path))} && {cmd_line}')}"
-            exec_stop = ""
-        else:
-            rt_path = _runtime_bin(runtime)
-            cname = manifest.run.get("container_name", f"aivuda-{app_id}")
-            exec_start = f"{rt_path} start -a {cname}"
-            exec_stop = f"{rt_path} stop {cname}"
+        cmd = self._build_exec_command(manifest, install_path)
+        cmd_line = shlex.join(cmd)
+        exec_start = f"/bin/bash -lc {shlex.quote(f'cd {shlex.quote(str(install_path))} && {cmd_line}')}"
 
         content = textwrap.dedent(
             f"""
@@ -449,7 +399,6 @@ class RuntimeService:
             ExecStart={exec_start}
             Restart=on-failure
             RestartSec=3
-            {f'ExecStop={exec_stop}' if exec_stop else ''}
 
             [Install]
             WantedBy=default.target
@@ -478,10 +427,10 @@ class RuntimeService:
             pass
 
     # ------------------------------------------------------------------ #
-    #  Process / container helpers
+    #  Process helpers
     # ------------------------------------------------------------------ #
 
-    def _host_exec_command(
+    def _build_exec_command(
         self, manifest: AppManifest, install_path: Path
     ) -> list[str]:
         entrypoint = manifest.run.get("entrypoint")
@@ -493,56 +442,3 @@ class RuntimeService:
         )
         args = manifest.run.get("args", [])
         return [str(resolved), *[str(x) for x in args]]
-
-    def _start_container(
-        self, manifest: AppManifest, app_id: str, runtime: str
-    ) -> str | None:
-        rt_path = _runtime_bin(runtime)
-        run_cfg = manifest.run
-        install_cfg = manifest.install
-        image = install_cfg.get("image")
-        cname = run_cfg.get("container_name", f"aivuda-{app_id}")
-
-        exists_check = _run_cmd(
-            [rt_path, "ps", "-a", "--filter", f"name=^{cname}$", "--format", "{{.ID}}"]
-        )
-        if exists_check.returncode != 0:
-            raise AppRuntimeError(
-                (exists_check.stderr or exists_check.stdout).strip()
-            )
-
-        existing_id = (exists_check.stdout or "").strip()
-        if existing_id:
-            start_result = _run_cmd([rt_path, "start", cname])
-            if start_result.returncode != 0:
-                raise AppRuntimeError(
-                    (start_result.stderr or start_result.stdout).strip()
-                )
-        else:
-            if not image:
-                raise AppRuntimeError("容器应用未配置镜像")
-            cmd = [rt_path, "run", "-d", "--name", cname]
-            for port in run_cfg.get("ports", []):
-                cmd.extend(["-p", str(port)])
-
-            # Merge default env with app config
-            app_cfg = self._config.get_app_config(app_id)
-            merged_env = dict(run_cfg.get("env", {}))
-            merged_env.update({k.upper(): str(v) for k, v in app_cfg.data.items()})
-            for key, value in merged_env.items():
-                cmd.extend(["-e", f"{key}={value}"])
-
-            cmd.append(image)
-            run_result = _run_cmd(cmd)
-            if run_result.returncode != 0:
-                raise AppRuntimeError(
-                    (run_result.stderr or run_result.stdout).strip()
-                )
-            existing_id = (run_result.stdout or "").strip()
-
-        id_check = _run_cmd(
-            [rt_path, "ps", "--filter", f"name=^{cname}$", "--format", "{{.ID}}"]
-        )
-        if id_check.returncode == 0 and id_check.stdout.strip():
-            return id_check.stdout.strip()
-        return existing_id[:12] if existing_id else None

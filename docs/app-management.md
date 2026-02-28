@@ -2,7 +2,7 @@
 
 ## 概述
 
-AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程/容器生命周期管理和 systemd 自启动。
+AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和 systemd 自启动。
 
 ## 核心模块
 
@@ -20,7 +20,7 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 ```
 my-app-1.0.0.tar.gz
 ├── manifest.yaml        # 必须
-├── start.sh             # 入口脚本（host 模式）
+├── start.sh             # 入口脚本
 └── ...                  # 其他应用文件
 ```
 
@@ -33,15 +33,9 @@ app_id: my-app                 # 唯一标识（必填）
 name: My App                   # 显示名称
 version: 1.0.0                 # 版本号（必填）
 description: 一个示例应用
-runtime: host                  # host | docker | podman
 run:
-  entrypoint: ./start.sh       # host 模式的启动入口
+  entrypoint: ./start.sh       # 启动入口（必填）
   args: []                     # 启动参数
-  container_name: my-app       # 容器名（docker/podman 模式）
-  ports: ["8080:8080"]         # 端口映射（docker/podman 模式）
-  env: {}                      # 环境变量（docker/podman 模式）
-install:
-  image: my-registry/app:1.0   # 容器镜像（docker/podman 模式）
 default_config: {}             # 默认配置，安装时写入 config/apps/{app_id}.yaml
 config_schema: null            # 配置校验 schema（可选）
 ```
@@ -72,7 +66,6 @@ aivudaOS/
 |---|---|---|
 | app_id | TEXT | App 唯一标识（联合主键） |
 | version | TEXT | 版本号（联合主键） |
-| runtime | TEXT | `host` / `docker` / `podman` |
 | install_path | TEXT | 版本目录绝对路径 |
 | status | TEXT | 安装状态（`installed`） |
 | installed_at | INTEGER | 安装时间戳 |
@@ -85,8 +78,7 @@ aivudaOS/
 | app_id | TEXT | 主键 |
 | running | INTEGER | 是否正在运行（0/1） |
 | autostart | INTEGER | 是否自启动（0/1） |
-| pid | INTEGER | 进程 PID（host 模式） |
-| container_id | TEXT | 容器 ID（docker/podman 模式） |
+| pid | INTEGER | 进程 PID |
 | last_started_at | INTEGER | 上次启动时间戳 |
 | last_stopped_at | INTEGER | 上次停止时间戳 |
 
@@ -111,9 +103,6 @@ aivudaOS/
   复制所有文件到版本目录
        │
        ▼
-  容器模式 → docker/podman pull image
-       │
-       ▼
   写入 app_installation 表 + app_runtime 表
        │
        ▼
@@ -125,18 +114,9 @@ aivudaOS/
 
 ## 运行时管理
 
-### Host 模式
-
 - **启动**：根据 `manifest.run.entrypoint` 构建命令，`subprocess.Popen` 启动（`start_new_session=True`）
 - **停止**：`os.kill(pid, SIGTERM)`
 - PID 记录在 `app_runtime` 表
-
-### Docker / Podman 模式
-
-- **启动**：检查容器是否存在 → 存在则 `start`，不存在则 `run -d` 新建
-- **停止**：`docker/podman stop {container_name}`
-- 容器名默认 `aivuda-{app_id}`
-- 环境变量会合并 app 配置（`config/apps/{app_id}.yaml`）
 
 ### 自启动（Autostart）
 

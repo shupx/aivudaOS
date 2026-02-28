@@ -1,30 +1,35 @@
 <script setup>
-import { login, robotState } from '../services/robotClient'
-import { useRouter } from 'vue-router'
+import { useLogin } from '../composables/useLogin'
 
-const router = useRouter()
-
-async function submit() {
-  const ok = await login()
-  if (ok) {
-    router.replace('/status')
-  }
-}
+const { form, busy, error, submit } = useLogin()
 </script>
 
 <template>
-  <section class="card login-card">
-    <h2>登录</h2>
-    <div class="form-row">
-      <label>用户名</label>
-      <input v-model="robotState.username" />
-    </div>
-    <div class="form-row">
-      <label>密码</label>
-      <input v-model="robotState.password" type="password" @keyup.enter="submit" />
-    </div>
-    <button class="btn" :disabled="robotState.busy" @click="submit">登录</button>
-    <p class="error" v-if="robotState.loginError">{{ robotState.loginError }}</p>
-    <p class="tip">默认账号：admin / admin123</p>
-  </section>
+  <main class="login-page">
+    <section class="login-card">
+      <h1>AivudaOS</h1>
+      <p class="muted">登录系统控制台</p>
+
+      <div class="field">
+        <label>后端地址</label>
+        <input v-model.trim="form.backendUrl" placeholder="http://127.0.0.1:8000" />
+      </div>
+
+      <div class="field">
+        <label>用户名</label>
+        <input v-model.trim="form.username" placeholder="admin" @keyup.enter="submit" />
+      </div>
+
+      <div class="field">
+        <label>密码</label>
+        <input v-model="form.password" type="password" placeholder="admin123" @keyup.enter="submit" />
+      </div>
+
+      <button class="btn primary" :disabled="busy" @click="submit">
+        {{ busy ? '登录中...' : '登录' }}
+      </button>
+
+      <p v-if="error" class="error-text">{{ error }}</p>
+    </section>
+  </main>
 </template>

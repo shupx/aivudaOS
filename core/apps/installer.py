@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -18,19 +17,6 @@ from core.errors import (
     PackageFormatError,
 )
 from core.paths import UPLOAD_TEMP_DIR
-
-
-def _run_cmd(
-    args: list[str], cwd: Path | None = None
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        text=True,
-        capture_output=True,
-        timeout=60,
-        check=False,
-    )
 
 
 class InstallerService:
@@ -60,11 +46,9 @@ class InstallerService:
             name: My App
             version: 1.0.0
             description: ...
-            runtime: host          # host | docker | podman
             run:
               entrypoint: ./start.sh
               args: []
-            install: {}
             default_config: {}
             config_schema: null
         """
@@ -100,7 +84,6 @@ class InstallerService:
 
             manifest = AppManifest.from_dict(app_id, manifest_raw)
             version = manifest.version
-            runtime = manifest.runtime
 
             # Prepare version directory
             install_path = self._versioning.prepare_version_dir(app_id, version)
@@ -114,16 +97,8 @@ class InstallerService:
                 else:
                     shutil.copy2(str(item), str(dest))
 
-            # For container runtime, pull image if specified
-            if runtime in {"docker", "podman"}:
-                image = manifest.install.get("image")
-                if image:
-                    rt_path = shutil.which(runtime)
-                    if rt_path:
-                        _run_cmd([rt_path, "pull", image])
-
             # Record in database
-            self._record_installation(app_id, version, runtime, install_path, manifest)
+            self._record_installation(app_id, version, install_path, manifest)
 
             # Initialize per-app config
             self._config.init_app_config(app_id, manifest.default_config)
@@ -136,7 +111,6 @@ class InstallerService:
             "app_id": app_id,
             "name": manifest.name,
             "version": version,
-            "runtime": runtime,
             "install_path": str(install_path),
         }
 
@@ -148,7 +122,6 @@ class InstallerService:
         self,
         app_id: str,
         version: str,
-        runtime: str,
         install_path: Path,
         manifest: AppManifest,
     ) -> None:
@@ -158,13 +131,13 @@ class InstallerService:
         with db_conn() as conn:
             conn.execute(
                 "INSERT INTO app_installation "
-                "(app_id, version, runtime, install_path, status, installed_at, manifest) "
-                "VALUES (?, ?, ?, ?, 'installed', ?, ?) "
+                "(app_id, version, install_path, status, installed_at, manifest) "
+                "VALUES (?, ?, ?, 'installed', ?, ?) "
                 "ON CONFLICT(app_id, version) DO UPDATE SET "
-                "runtime=excluded.runtime, install_path=excluded.install_path, "
+                "install_path=excluded.install_path, "
                 "status=excluded.status, installed_at=excluded.installed_at, "
                 "manifest=excluded.manifest",
-                (app_id, version, runtime, str(install_path), now, manifest_json),
+                (app_id, version, str(install_path), now, manifest_json),
             )
             conn.execute(
                 "INSERT INTO app_runtime (app_id, running, autostart) "

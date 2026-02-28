@@ -10,7 +10,6 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS app_installation (
                 app_id TEXT NOT NULL,
                 version TEXT NOT NULL,
-                runtime TEXT NOT NULL,
                 install_path TEXT NOT NULL,
                 status TEXT NOT NULL,
                 installed_at INTEGER NOT NULL,
@@ -27,7 +26,6 @@ def init_db() -> None:
                 running INTEGER NOT NULL DEFAULT 0,
                 autostart INTEGER NOT NULL DEFAULT 0,
                 pid INTEGER,
-                container_id TEXT,
                 last_started_at INTEGER,
                 last_stopped_at INTEGER
             )

@@ -1,0 +1,11 @@
+app_id: hello-world-demo
+name: Hello World Demo
+version: 1.0.1
+description: A minimal demo app package for AivudaOS
+run:
+  entrypoint: ./start.sh
+  args: []
+default_config:
+  message: "Hello from demo package"
+  interval: 5
+config_schema: null

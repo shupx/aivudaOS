@@ -1,17 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from './views/LoginView.vue'
+import DashboardView from './views/DashboardView.vue'
 import StatusView from './views/StatusView.vue'
-import ConfigView from './views/ConfigView.vue'
 import AppsView from './views/AppsView.vue'
-import { isAuthed } from './services/robotClient'
+import AppDetailView from './views/AppDetailView.vue'
+import { appState } from './state/appState'
 
 const routes = [
-  { path: '/', redirect: '/status' },
+  { path: '/', redirect: '/dashboard/apps' },
   { path: '/login', component: LoginView },
-  { path: '/status', component: StatusView },
-  { path: '/config', component: ConfigView },
-  { path: '/apps', component: AppsView },
-  { path: '/:pathMatch(.*)*', redirect: '/status' },
+  {
+    path: '/dashboard',
+    component: DashboardView,
+    children: [
+      { path: '', redirect: '/dashboard/apps' },
+      { path: 'status', component: StatusView },
+      { path: 'apps', component: AppsView },
+      { path: 'apps/:appId', component: AppDetailView },
+    ],
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/dashboard/apps' },
 ]
 
 const router = createRouter({
@@ -20,10 +28,11 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  if (to.path === '/login' && isAuthed()) {
-    return '/status'
+  const isAuthed = Boolean(appState.token)
+  if (to.path === '/login' && isAuthed) {
+    return '/dashboard/apps'
   }
-  if (to.path !== '/login' && !isAuthed()) {
+  if (to.path !== '/login' && !isAuthed) {
     return '/login'
   }
   return true

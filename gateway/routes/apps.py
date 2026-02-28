@@ -15,7 +15,6 @@ from core.errors import (
     ConfigVersionConflictError,
     NotFoundError,
     PackageFormatError,
-    RuntimeNotAvailableError,
 )
 from gateway.deps import (
     get_auth_service,
@@ -104,7 +103,7 @@ async def start_app(app_id: str, token: str) -> dict[str, Any]:
         return runtime.start(app_id)
     except AppNotInstalledError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except (AppRuntimeError, RuntimeNotAvailableError) as e:
+    except AppRuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -128,7 +127,7 @@ async def restart_app(app_id: str, token: str) -> dict[str, Any]:
         return runtime.restart(app_id)
     except AppNotInstalledError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except (AppRuntimeError, RuntimeNotAvailableError) as e:
+    except AppRuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

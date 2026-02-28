@@ -26,15 +26,7 @@ class AppNotInstalledError(NotFoundError):
 
 
 class AppRuntimeError(AivudaError):
-    """Runtime operation (start/stop/container) failed."""
-
-
-class RuntimeNotAvailableError(AivudaError):
-    """Required runtime (docker/podman) is not installed."""
-
-
-class ArtifactVerificationError(AivudaError):
-    """SHA256 mismatch on downloaded artifact."""
+    """Runtime operation (start/stop) failed."""
 
 
 class InvalidConfigError(AivudaError):
