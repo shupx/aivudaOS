@@ -39,3 +39,7 @@ class ArtifactVerificationError(AivudaError):
 
 class InvalidConfigError(AivudaError):
     """Config validation failed."""
+
+
+class PackageFormatError(AivudaError):
+    """App package format is invalid or missing manifest."""

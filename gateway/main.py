@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
             pass
 
     if UI_DIST_DIR.exists():
+        # 生产环境直接提供静态文件，可以去掉，生产环境建议使用专门的静态文件服务器（如 nginx）来提供 UI 文件
         app.mount(
             "/",
             StaticFiles(directory=str(UI_DIST_DIR), html=True),

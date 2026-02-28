@@ -24,6 +24,7 @@ def init_db() -> None:
                 install_path TEXT NOT NULL,
                 status TEXT NOT NULL,
                 installed_at INTEGER NOT NULL,
+                manifest TEXT,
                 PRIMARY KEY (app_id, version)
             )
             """
@@ -58,5 +59,13 @@ def init_db() -> None:
             )
             """
         )
+
+        # Migration: add manifest column to existing databases
+        try:
+            conn.execute(
+                "ALTER TABLE app_installation ADD COLUMN manifest TEXT"
+            )
+        except Exception:
+            pass  # Column already exists
 
         conn.commit()

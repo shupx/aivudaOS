@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import shutil
@@ -10,7 +11,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.apps.catalog import CatalogService
 from core.apps.models import AppManifest, AppRuntimeState
 from core.apps.versioning import VersioningService
 from core.config.service import ConfigService
@@ -43,15 +43,47 @@ def _runtime_bin(runtime: str) -> str:
 
 
 class RuntimeService:
+    """App lifecycle management — start / stop / autostart / version switch.
+
+    Manifest is always read from the app_installation DB table, so the service
+    works identically for apps installed via local upload or remote catalog.
+    """
+
     def __init__(
         self,
-        catalog: CatalogService,
         versioning: VersioningService,
         config_service: ConfigService,
     ) -> None:
-        self._catalog = catalog
         self._versioning = versioning
         self._config = config_service
+
+    # ------------------------------------------------------------------ #
+    #  Manifest from DB
+    # ------------------------------------------------------------------ #
+
+    def _get_manifest(self, app_id: str, version: str | None = None) -> AppManifest:
+        """Load the manifest for a specific (or active) version from DB."""
+        if version is None:
+            version = self._versioning.active_version(app_id)
+        if version is None:
+            raise AppNotInstalledError(f"{app_id} 未安装或无激活版本")
+
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT manifest FROM app_installation WHERE app_id = ? AND version = ?",
+                (app_id, version),
+            ).fetchone()
+
+        if not row or not row["manifest"]:
+            raise AppNotInstalledError(
+                f"未找到 {app_id}@{version} 的 manifest 信息"
+            )
+        raw = json.loads(row["manifest"])
+        return AppManifest.from_dict(app_id, raw)
+
+    # ------------------------------------------------------------------ #
+    #  Query helpers
+    # ------------------------------------------------------------------ #
 
     def get_runtime_state(self, app_id: str) -> AppRuntimeState:
         with db_conn() as conn:
@@ -84,7 +116,8 @@ class RuntimeService:
         """Full detail: installation info + runtime state + active version."""
         with db_conn() as conn:
             install_rows = conn.execute(
-                "SELECT * FROM app_installation WHERE app_id = ? ORDER BY installed_at DESC",
+                "SELECT app_id, version, runtime, install_path, status, installed_at "
+                "FROM app_installation WHERE app_id = ? ORDER BY installed_at DESC",
                 (app_id,),
             ).fetchall()
             runtime_row = conn.execute(
@@ -97,6 +130,14 @@ class RuntimeService:
         active_ver = self._versioning.active_version(app_id)
         cfg = self._config.get_app_config(app_id)
 
+        # Include manifest for the active version
+        manifest_info: dict[str, Any] | None = None
+        try:
+            m = self._get_manifest(app_id, active_ver)
+            manifest_info = m.to_dict()
+        except Exception:
+            pass
+
         return {
             "app_id": app_id,
             "installed": True,
@@ -104,10 +145,62 @@ class RuntimeService:
             "versions": [dict(r) for r in install_rows],
             "runtime": dict(runtime_row) if runtime_row else None,
             "config": {"version": cfg.version, "updated_at": cfg.updated_at},
+            "manifest": manifest_info,
         }
 
+    def get_installed_list(self) -> list[dict[str, Any]]:
+        """List all installed apps with runtime state and active version."""
+        with db_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT i.app_id, i.version, i.runtime, i.install_path, i.status, i.installed_at,
+                       r.running, r.autostart, r.pid, r.container_id,
+                       r.last_started_at, r.last_stopped_at
+                FROM app_installation i
+                LEFT JOIN app_runtime r ON r.app_id = i.app_id
+                ORDER BY i.installed_at DESC
+                """
+            ).fetchall()
+
+        # Group by app_id, return one entry per app with version list
+        seen: dict[str, dict] = {}
+        for row in rows:
+            aid = row["app_id"]
+            if aid not in seen:
+                active_ver = self._versioning.active_version(aid)
+                # Attempt to read manifest name
+                name = aid
+                try:
+                    m = self._get_manifest(aid, active_ver)
+                    name = m.name
+                except Exception:
+                    pass
+                seen[aid] = {
+                    "app_id": aid,
+                    "name": name,
+                    "active_version": active_ver,
+                    "versions": [],
+                    "runtime": row["runtime"],
+                    "install_path": str(self._versioning.active_link(aid)),
+                    "status": row["status"],
+                    "installed_at": row["installed_at"],
+                    "running": bool(row["running"] or 0),
+                    "autostart": bool(row["autostart"] or 0),
+                    "pid": row["pid"],
+                    "container_id": row["container_id"],
+                    "last_started_at": row["last_started_at"],
+                    "last_stopped_at": row["last_stopped_at"],
+                }
+            seen[aid]["versions"].append(row["version"])
+
+        return list(seen.values())
+
+    # ------------------------------------------------------------------ #
+    #  Lifecycle: start / stop / restart
+    # ------------------------------------------------------------------ #
+
     def start(self, app_id: str) -> dict[str, Any]:
-        manifest = self._catalog.get_manifest(app_id)
+        manifest = self._get_manifest(app_id)
         now = int(time.time())
 
         install_path = self._versioning.active_install_path(app_id)
@@ -168,7 +261,7 @@ class RuntimeService:
                 except ProcessLookupError:
                     pass
         elif runtime in {"docker", "podman"}:
-            manifest = self._catalog.get_manifest(app_id)
+            manifest = self._get_manifest(app_id)
             rt_path = _runtime_bin(runtime)
             cname = manifest.run.get("container_name", f"aivuda-{app_id}")
             result = _run_cmd([rt_path, "stop", cname])
@@ -188,6 +281,17 @@ class RuntimeService:
             conn.commit()
 
         return {"ok": True, "app_id": app_id, "running": False}
+
+    def restart(self, app_id: str) -> dict[str, Any]:
+        """Stop then start an app."""
+        runtime_state = self.get_runtime_state(app_id)
+        if runtime_state.running:
+            self.stop(app_id)
+        return self.start(app_id)
+
+    # ------------------------------------------------------------------ #
+    #  Autostart
+    # ------------------------------------------------------------------ #
 
     def set_autostart(self, app_id: str, enabled: bool) -> dict[str, Any]:
         install_path = self._versioning.active_install_path(app_id)
@@ -212,6 +316,10 @@ class RuntimeService:
             conn.commit()
 
         return {"ok": True, "app_id": app_id, "autostart": enabled}
+
+    # ------------------------------------------------------------------ #
+    #  Version management
+    # ------------------------------------------------------------------ #
 
     def switch_version(
         self, app_id: str, version: str, restart: bool = False
@@ -242,6 +350,10 @@ class RuntimeService:
             "previous_version": current_active,
             "active_version": version,
         }
+
+    # ------------------------------------------------------------------ #
+    #  Uninstall
+    # ------------------------------------------------------------------ #
 
     def uninstall(
         self,
@@ -287,46 +399,9 @@ class RuntimeService:
 
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
-    def get_installed_list(self) -> list[dict[str, Any]]:
-        """List all installed apps with runtime state and active version."""
-        with db_conn() as conn:
-            rows = conn.execute(
-                """
-                SELECT i.app_id, i.version, i.runtime, i.install_path, i.status, i.installed_at,
-                       r.running, r.autostart, r.pid, r.container_id,
-                       r.last_started_at, r.last_stopped_at
-                FROM app_installation i
-                LEFT JOIN app_runtime r ON r.app_id = i.app_id
-                ORDER BY i.installed_at DESC
-                """
-            ).fetchall()
-
-        # Group by app_id, return one entry per app with version list
-        seen: dict[str, dict] = {}
-        for row in rows:
-            aid = row["app_id"]
-            if aid not in seen:
-                active_ver = self._versioning.active_version(aid)
-                seen[aid] = {
-                    "app_id": aid,
-                    "active_version": active_ver,
-                    "versions": [],
-                    "runtime": row["runtime"],
-                    "install_path": str(self._versioning.active_link(aid)),
-                    "status": row["status"],
-                    "installed_at": row["installed_at"],
-                    "running": bool(row["running"] or 0),
-                    "autostart": bool(row["autostart"] or 0),
-                    "pid": row["pid"],
-                    "container_id": row["container_id"],
-                    "last_started_at": row["last_started_at"],
-                    "last_stopped_at": row["last_stopped_at"],
-                }
-            seen[aid]["versions"].append(row["version"])
-
-        return list(seen.values())
-
-    # --- Systemd helpers ---
+    # ------------------------------------------------------------------ #
+    #  Systemd helpers
+    # ------------------------------------------------------------------ #
 
     def _unit_name(self, app_id: str) -> str:
         return f"aivuda-app-{app_id}.service"
@@ -344,7 +419,7 @@ class RuntimeService:
             )
 
     def _ensure_systemd_unit(self, app_id: str) -> Path:
-        manifest = self._catalog.get_manifest(app_id)
+        manifest = self._get_manifest(app_id)
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} has no active version")
@@ -402,6 +477,10 @@ class RuntimeService:
             self._systemd_call("daemon-reload")
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ #
+    #  Process / container helpers
+    # ------------------------------------------------------------------ #
 
     def _host_exec_command(
         self, manifest: AppManifest, install_path: Path

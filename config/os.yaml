@@ -1,9 +1,8 @@
-_version: 1
-_updated_at: 0
-_updated_by: system
-
-port: 8000
-repo_url: "http://127.0.0.1:9001/repo"
-max_altitude_m: 120
-return_home_altitude_m: 30
+_updated_at: 1772266191
+_updated_by: admin
+_version: 2
 failsafe_action: rtl
+max_altitude_m: 120
+port: 8000
+repo_url: http://127.0.0.1:9001/repo
+return_home_altitude_m: 30

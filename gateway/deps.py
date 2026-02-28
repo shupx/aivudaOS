@@ -39,17 +39,16 @@ def get_versioning_service() -> VersioningService:
 @lru_cache
 def get_installer_service() -> InstallerService:
     return InstallerService(
-        get_catalog_service(),
-        get_versioning_service(),
-        get_config_service(),
+        versioning=get_versioning_service(),
+        config_service=get_config_service(),
+        catalog=get_catalog_service(),
     )
 
 
 @lru_cache
 def get_runtime_service() -> RuntimeService:
     return RuntimeService(
-        get_catalog_service(),
-        get_versioning_service(),
-        get_config_service(),
+        versioning=get_versioning_service(),
+        config_service=get_config_service(),
     )
 
