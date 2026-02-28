@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 
-from core.apps.catalog import CatalogService
 from core.apps.installer import InstallerService
 from core.apps.runtime import RuntimeService
 from core.apps.versioning import VersioningService
@@ -22,16 +20,6 @@ def get_auth_service() -> AuthService:
 
 
 @lru_cache
-def get_catalog_service() -> CatalogService:
-    cfg = get_config_service()
-    repo_url = cfg.get_os_setting(
-        "repo_url",
-        os.environ.get("APP_REPO_URL", "http://127.0.0.1:9001/repo"),
-    )
-    return CatalogService(repo_url)
-
-
-@lru_cache
 def get_versioning_service() -> VersioningService:
     return VersioningService()
 
@@ -41,7 +29,6 @@ def get_installer_service() -> InstallerService:
     return InstallerService(
         versioning=get_versioning_service(),
         config_service=get_config_service(),
-        catalog=get_catalog_service(),
     )
 
 

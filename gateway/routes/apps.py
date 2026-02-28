@@ -13,14 +13,12 @@ from core.errors import (
     AppRuntimeError,
     AuthenticationError,
     ConfigVersionConflictError,
-    InstallTaskConflictError,
     NotFoundError,
     PackageFormatError,
     RuntimeNotAvailableError,
 )
 from gateway.deps import (
     get_auth_service,
-    get_catalog_service,
     get_config_service,
     get_installer_service,
     get_runtime_service,
@@ -29,7 +27,6 @@ from gateway.deps import (
 from gateway.schemas import (
     AppAutostartUpdateRequest,
     AppConfigUpdateRequest,
-    AppInstallRequest,
     AppSwitchVersionRequest,
     AppUninstallRequest,
 )
@@ -68,49 +65,8 @@ async def upload_app(
         return installer.install_from_upload(file_data, filename)
     except PackageFormatError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except InstallTaskConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"安装失败: {e}")
-
-
-# ================================================================== #
-#  Remote catalog (secondary flow — app store)
-# ================================================================== #
-
-
-@router.post("/repo/sync")
-async def sync_repo(token: str) -> dict[str, Any]:
-    _require_auth(token)
-    catalog = get_catalog_service()
-    try:
-        return catalog.sync_from_repo()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"同步远端仓库失败: {exc}"
-        ) from exc
-
-
-@router.get("/catalog")
-async def get_catalog(token: str) -> dict[str, Any]:
-    _require_auth(token)
-    catalog = get_catalog_service()
-    return {"items": catalog.get_all()}
-
-
-@router.post("/{app_id}/install")
-async def install_app(
-    app_id: str, payload: AppInstallRequest, token: str
-) -> dict[str, Any]:
-    """Install from remote catalog (app store)."""
-    _require_auth(token)
-    installer = get_installer_service()
-    try:
-        return installer.create_install_task(app_id, payload.install_runtime)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except InstallTaskConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
 
 
 # ================================================================== #
@@ -123,16 +79,6 @@ async def get_installed(token: str) -> dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     return {"items": runtime.get_installed_list()}
-
-
-@router.get("/tasks/{task_id}")
-async def get_task(task_id: str, token: str) -> dict[str, Any]:
-    _require_auth(token)
-    installer = get_installer_service()
-    try:
-        return installer.get_task(task_id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{app_id}/status")
@@ -262,8 +208,6 @@ async def upgrade_app(
         result = installer.install_from_upload(file_data, filename)
     except PackageFormatError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except InstallTaskConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"升级失败: {e}")
 
@@ -307,8 +251,7 @@ async def uninstall_app(
 async def get_app_config(app_id: str, token: str) -> dict[str, Any]:
     """Get config for an installed app.
 
-    Reads default_config from the manifest stored in DB, so this works
-    for both uploaded and catalog-installed apps.
+    Reads default_config from the manifest stored in DB.
     """
     _require_auth(token)
     config = get_config_service()

@@ -45,8 +45,7 @@ def _runtime_bin(runtime: str) -> str:
 class RuntimeService:
     """App lifecycle management — start / stop / autostart / version switch.
 
-    Manifest is always read from the app_installation DB table, so the service
-    works identically for apps installed via local upload or remote catalog.
+    Manifest is always read from the app_installation DB table.
     """
 
     def __init__(

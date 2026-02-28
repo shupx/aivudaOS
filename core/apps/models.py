@@ -71,14 +71,4 @@ class AppRuntimeState:
     last_stopped_at: int | None
 
 
-@dataclass
-class TaskInfo:
-    task_id: str
-    app_id: str
-    task_type: str
-    status: str
-    progress: int
-    message: str
-    error: str | None
-    created_at: int
-    updated_at: int
+

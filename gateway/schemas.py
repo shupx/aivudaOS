@@ -21,10 +21,6 @@ class ConfigUpdateRequest(BaseModel):
     data: dict[str, Any]
 
 
-class AppInstallRequest(BaseModel):
-    install_runtime: bool = False
-
-
 class AppConfigUpdateRequest(BaseModel):
     version: int
     data: dict[str, Any]
