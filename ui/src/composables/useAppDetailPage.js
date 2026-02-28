@@ -159,15 +159,37 @@ export function useAppDetailPage() {
 
   async function runUninstall() {
     if (!app.value) return
+
+    const allVersions = Array.isArray(versions.value) && versions.value.length
+      ? versions.value
+      : (Array.isArray(app.value.versions) ? app.value.versions : [])
+    const isLastVersion = allVersions.length <= 1
+
+    let uninstallVersion = uninstallVersionOnly.value ? app.value.active_version || null : null
+
+    if (uninstallVersionOnly.value && isLastVersion) {
+      const confirmedAsWholeApp = confirmLastVersionUninstallAsWholeApp(app.value.app_id)
+      if (!confirmedAsWholeApp) return
+      uninstallVersion = null
+    } else if (!uninstallVersionOnly.value) {
+      const confirmedWholeApp = confirmWholeAppUninstall(app.value.app_id)
+      if (!confirmedWholeApp) return
+    } else {
+      const confirmedVersionOnly = window.confirm(
+        `确认卸载当前版本 ${app.value.active_version || '-'} 吗？`,
+      )
+      if (!confirmedVersionOnly) return
+    }
+
     actionBusy.value = true
     clearActionStatus()
     try {
       await uninstallApp(app.value.app_id, {
-        version: uninstallVersionOnly.value ? app.value.active_version || null : null,
+        version: uninstallVersion,
         purge: uninstallPurge.value,
       })
       await refresh()
-      if (uninstallVersionOnly.value) {
+      if (uninstallVersion) {
         await loadVersions(app.value.app_id)
         actionMessage.value = '卸载当前版本成功'
       } else {
@@ -225,6 +247,28 @@ export function useAppDetailPage() {
 
   function backToList() {
     router.push('/dashboard/apps')
+  }
+
+  function confirmWholeAppUninstall(appId) {
+    const first = window.confirm(
+      `将卸载整个应用 ${appId}（包含所有版本）。确认继续吗？`,
+    )
+    if (!first) return false
+
+    return window.confirm(
+      '再次确认：这是不可逆操作，应用及其版本都会被移除。确定执行吗？',
+    )
+  }
+
+  function confirmLastVersionUninstallAsWholeApp(appId) {
+    const first = window.confirm(
+      '你选择的是“仅卸载当前版本”，但当前已是最后一个版本。\n继续将等同于卸载整个应用。是否继续？',
+    )
+    if (!first) return false
+
+    return window.confirm(
+      `最终确认：将卸载整个应用 ${appId}。确定执行吗？`,
+    )
   }
 
   return {

@@ -5,6 +5,16 @@ export async function fetchInstalledApps() {
   return data?.items || []
 }
 
+export async function uploadAppPackage(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request('/api/apps/upload', {
+    method: 'POST',
+    body: form,
+    auth: true,
+  })
+}
+
 export async function fetchAppStatus(appId) {
   return request(`/api/apps/${encodeURIComponent(appId)}/status`, { auth: true })
 }
