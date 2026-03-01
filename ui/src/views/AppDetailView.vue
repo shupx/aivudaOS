@@ -1,5 +1,6 @@
 <script setup>
 import AppCard from '../components/apps/AppCard.vue'
+import { useDomAppendLog } from '../composables/useDomAppendLog'
 import { useAppDetailPage } from '../composables/useAppDetailPage'
 
 const {
@@ -38,6 +39,19 @@ const {
   runSwitchVersion,
   backToList,
 } = useAppDetailPage()
+
+const {
+  logRef: appLogRef,
+  onLogScroll: onAppLogScroll,
+} = useDomAppendLog(logText, { placeholder: '暂无输出' })
+
+const {
+  logRef: actionLogRef,
+  onLogScroll: onActionLogScroll,
+} = useDomAppendLog(actionLiveOutput, {
+  visibleRef: showActionOutputModal,
+  placeholder: '等待输出...',
+})
 </script>
 
 <template>
@@ -80,7 +94,7 @@ const {
       </header>
 
       <p v-if="logError" class="error-text">{{ logError }}</p>
-      <pre class="log-output">{{ logText || '暂无输出' }}</pre>
+      <pre ref="appLogRef" class="log-output" @scroll="onAppLogScroll"></pre>
     </article>
 
     <article v-if="app" class="actions-panel">
@@ -167,7 +181,7 @@ const {
           状态：{{ actionLiveStatus }}
         </p>
         <p v-if="actionError" class="error-text">{{ actionError }}</p>
-        <pre class="log-output">{{ actionLiveOutput || '等待输出...' }}</pre>
+        <pre ref="actionLogRef" class="log-output" @scroll="onActionLogScroll"></pre>
 
         <footer class="panel-actions">
           <button class="btn" @click="closeActionOutputModal">关闭</button>

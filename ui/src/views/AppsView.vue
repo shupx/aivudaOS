@@ -1,5 +1,6 @@
 <script setup>
 import AppCard from '../components/apps/AppCard.vue'
+import { useDomAppendLog } from '../composables/useDomAppendLog'
 import { useAppsPanel } from '../composables/useAppsPanel'
 
 const {
@@ -21,6 +22,14 @@ const {
   onUploadFileChange,
   submitUpload,
 } = useAppsPanel()
+
+const {
+  logRef: uploadLogRef,
+  onLogScroll: onUploadLogScroll,
+} = useDomAppendLog(uploadOutput, {
+  visibleRef: showUploadModal,
+  placeholder: '等待输出...',
+})
 </script>
 
 <template>
@@ -30,7 +39,7 @@ const {
       <div class="panel-actions wrap">
         <button class="link-btn" @click="openUploadModal">手动上传新应用安装包</button>
         <button class="btn btn-stable-refresh" :disabled="loading" @click="refresh">
-          {{ loading ? '...' : '刷新' }}
+          {{ loading ? '刷新中' : '刷新' }}
         </button>
       </div>
     </header>
@@ -76,7 +85,11 @@ const {
         >
           状态：{{ uploadStatus }}
         </p>
-        <pre v-if="uploadOutput" class="log-output small">{{ uploadOutput }}</pre>
+        <pre
+          ref="uploadLogRef"
+          class="log-output small"
+          @scroll="onUploadLogScroll"
+        ></pre>
 
         <footer class="panel-actions">
           <button class="btn" :disabled="uploadBusy" @click="closeUploadModal">取消</button>
