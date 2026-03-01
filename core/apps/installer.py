@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from core.apps.models import AppManifest
+from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from core.apps.versioning import VersioningService
 from core.config.service import ConfigService
 from core.db.connection import db_conn
@@ -29,6 +30,7 @@ class InstallerService:
     ) -> None:
         self._versioning = versioning
         self._config = config_service
+        self._script_hooks = ScriptHookRunner()
 
     # ------------------------------------------------------------------ #
     #  Local upload install (primary flow)
@@ -85,11 +87,22 @@ class InstallerService:
             manifest = AppManifest.from_dict(app_id, manifest_raw)
             version = manifest.version
 
+            content_root = manifest_path.parent
+            if manifest.pre_install:
+                try:
+                    self._script_hooks.run(
+                        app_id=app_id,
+                        hook_name="pre_install",
+                        script_path=manifest.pre_install,
+                        root_dir=content_root,
+                    )
+                except ScriptHookError as exc:
+                    raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
+
             # Prepare version directory
             install_path = self._versioning.prepare_version_dir(app_id, version)
 
             # Copy all files from content root to install path
-            content_root = manifest_path.parent
             for item in content_root.iterdir():
                 dest = install_path / item.name
                 if item.is_dir():

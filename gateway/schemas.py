@@ -38,3 +38,7 @@ class AppUninstallRequest(BaseModel):
 class AppSwitchVersionRequest(BaseModel):
     version: str
     restart: bool = False
+
+
+class AppUpdateVersionRequest(BaseModel):
+    version: str

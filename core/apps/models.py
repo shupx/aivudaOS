@@ -11,6 +11,9 @@ class AppManifest:
     description: str
     version: str
     run: dict[str, Any]
+    pre_install: str | None = None
+    pre_uninstall: str | None = None
+    update_version: str | None = None
     default_config: dict[str, Any] = field(default_factory=dict)
     config_schema: dict[str, Any] | None = None
 
@@ -22,6 +25,9 @@ class AppManifest:
             description=raw.get("description", ""),
             version=raw.get("version", "0.0.0"),
             run=raw.get("run", {}),
+            pre_install=raw.get("pre_install"),
+            pre_uninstall=raw.get("pre_uninstall"),
+            update_version=raw.get("update_version"),
             default_config=raw.get("default_config", {}),
             config_schema=raw.get("config_schema"),
         )
@@ -35,6 +41,12 @@ class AppManifest:
             "run": self.run,
             "default_config": self.default_config,
         }
+        if self.pre_install is not None:
+            d["pre_install"] = self.pre_install
+        if self.pre_uninstall is not None:
+            d["pre_uninstall"] = self.pre_uninstall
+        if self.update_version is not None:
+            d["update_version"] = self.update_version
         if self.config_schema is not None:
             d["config_schema"] = self.config_schema
         return d

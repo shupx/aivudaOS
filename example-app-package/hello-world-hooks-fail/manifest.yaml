@@ -1,0 +1,13 @@
+app_id: hello-world-hooks-fail
+name: Hello World Hooks Fail
+version: 1.0.0
+description: 示例应用，演示脚本失败时严格中断
+run:
+  entrypoint: ./start.sh
+  args: []
+pre_install: ./scripts/pre_install.sh
+pre_uninstall: ./scripts/pre_uninstall.sh
+update_version: ./scripts/update_version.sh
+default_config:
+  message: hello-hooks-fail
+config_schema: null

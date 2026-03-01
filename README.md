@@ -124,6 +124,7 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 - `POST /api/apps/{app_id}/autostart` — 设置开机自启
 - `GET  /api/apps/{app_id}/versions` — 已安装版本列表
 - `POST /api/apps/{app_id}/switch-version` — 切换激活版本
+- `POST /api/apps/{app_id}/update_version` — 执行指定版本 update_version 脚本
 - `POST /api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
 - `GET  /api/apps/{app_id}/config` — 读取应用配置
 - `PUT  /api/apps/{app_id}/config` — 更新应用配置

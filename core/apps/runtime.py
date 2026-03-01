@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.models import AppManifest, AppRuntimeState
+from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from core.apps.systemd_runtime import SystemdRuntimeBackend
 from core.apps.versioning import VersioningService
 from core.config.service import ConfigService
@@ -17,6 +18,7 @@ from core.db.connection import db_conn
 from core.errors import (
     AppNotInstalledError,
     AppRuntimeError,
+    NotFoundError,
 )
 from core.paths import APP_LOG_DIR
 from core.paths import PROJECT_ROOT
@@ -36,6 +38,7 @@ class RuntimeService:
         self._versioning = versioning
         self._config = config_service
         self._systemd = SystemdRuntimeBackend(PROJECT_ROOT)
+        self._script_hooks = ScriptHookRunner()
 
     # ------------------------------------------------------------------ #
     #  Manifest from DB
@@ -411,6 +414,32 @@ class RuntimeService:
             "active_version": version,
         }
 
+    def update_version(self, app_id: str, version: str) -> dict[str, Any]:
+        versions = self._versioning.list_versions(app_id)
+        if not versions:
+            raise AppNotInstalledError(f"{app_id} is not installed")
+        if version not in versions:
+            raise NotFoundError(
+                f"Version {version} is not installed for {app_id}"
+            )
+
+        manifest = self._get_manifest(app_id, version)
+        install_path = self._versioning.version_dir(app_id, version)
+        executed = self._run_manifest_hook(
+            app_id=app_id,
+            manifest=manifest,
+            hook_name="update_version",
+            root_dir=install_path,
+        )
+
+        return {
+            "ok": True,
+            "app_id": app_id,
+            "version": version,
+            "executed": executed,
+            "skipped": not executed,
+        }
+
     # ------------------------------------------------------------------ #
     #  Uninstall
     # ------------------------------------------------------------------ #
@@ -428,6 +457,20 @@ class RuntimeService:
             # Uninstall ALL versions
             if runtime_state.running:
                 self.stop(app_id)
+
+            all_versions = self._versioning.list_versions(app_id)
+            hook_version = self._versioning.active_version(app_id)
+            if hook_version is None and all_versions:
+                hook_version = all_versions[0]
+            if hook_version is not None:
+                manifest = self._get_manifest(app_id, hook_version)
+                self._run_manifest_hook(
+                    app_id=app_id,
+                    manifest=manifest,
+                    hook_name="pre_uninstall",
+                    root_dir=self._versioning.version_dir(app_id, hook_version),
+                )
+
             self._versioning.remove_app_entirely(app_id)
             with db_conn() as conn:
                 conn.execute(
@@ -438,6 +481,14 @@ class RuntimeService:
                 self._config.delete_app_config(app_id)
         else:
             # Uninstall specific version
+            manifest = self._get_manifest(app_id, version)
+            self._run_manifest_hook(
+                app_id=app_id,
+                manifest=manifest,
+                hook_name="pre_uninstall",
+                root_dir=self._versioning.version_dir(app_id, version),
+            )
+
             active = self._versioning.active_version(app_id)
             if active == version and runtime_state.running:
                 self.stop(app_id)
@@ -669,3 +720,26 @@ class RuntimeService:
             "chunk": raw.decode("utf-8", errors="replace"),
             "size": file_size,
         }
+
+    def _run_manifest_hook(
+        self,
+        *,
+        app_id: str,
+        manifest: AppManifest,
+        hook_name: str,
+        root_dir: Path,
+    ) -> bool:
+        script_path = getattr(manifest, hook_name, None)
+        if not script_path:
+            return False
+
+        try:
+            self._script_hooks.run(
+                app_id=app_id,
+                hook_name=hook_name,
+                script_path=str(script_path),
+                root_dir=root_dir,
+            )
+        except ScriptHookError as exc:
+            raise AppRuntimeError(f"{hook_name} 执行失败: {exc}") from exc
+        return True

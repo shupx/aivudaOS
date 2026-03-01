@@ -27,6 +27,7 @@ from gateway.schemas import (
     AppAutostartUpdateRequest,
     AppConfigUpdateRequest,
     AppSwitchVersionRequest,
+    AppUpdateVersionRequest,
     AppUninstallRequest,
 )
 
@@ -191,6 +192,22 @@ async def switch_version(
         return runtime.switch_version(
             app_id, payload.version, payload.restart
         )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except AppRuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{app_id}/update_version")
+async def update_version(
+    app_id: str, payload: AppUpdateVersionRequest, token: str
+) -> dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    try:
+        return runtime.update_version(app_id, payload.version)
+    except AppNotInstalledError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except AppRuntimeError as e:

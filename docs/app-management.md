@@ -38,9 +38,25 @@ description: 一个示例应用
 run:
   entrypoint: ./start.sh       # 启动入口（必填）
   args: []                     # 启动参数
+pre_install: ./scripts/pre_install.sh      # 安装前脚本（可选）
+pre_uninstall: ./scripts/pre_uninstall.sh  # 卸载前脚本（可选）
+update_version: ./scripts/update_version.sh # 版本更新脚本（可选）
 default_config: {}             # 默认配置，安装时写入 config/apps/{app_id}.yaml
 config_schema: null            # 配置校验 schema（可选）
 ```
+
+### 可选生命周期脚本
+
+- `pre_install`：安装时执行（严格模式，非 0 返回码会中断安装）
+- `pre_uninstall`：卸载时执行（严格模式，非 0 返回码会中断卸载）
+- `update_version`：通过 API 手动触发的版本更新脚本（严格模式）
+
+脚本执行规则：
+
+- 脚本字段为安装包内相对路径
+- 执行前会自动补齐可执行权限（`chmod +x`）
+- 不设置超时，允许用户手动终止
+- 输出写入 `data/logs/os/install.log`
 
 ## 文件系统布局
 
@@ -153,6 +169,7 @@ aivudaOS/
 |---|---|---|
 | POST | `/api/apps/upload` | 上传安装包（首次安装） |
 | POST | `/api/apps/{app_id}/upgrade` | 上传新版本（升级，若正在运行则自动重启） |
+| POST | `/api/apps/{app_id}/update_version` | 执行指定已安装版本的 `update_version` 脚本 |
 | GET | `/api/apps/installed` | 已安装应用列表 |
 | GET | `/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
 | POST | `/api/apps/{app_id}/start` | 启动 |
@@ -181,3 +198,21 @@ aivudaOS/
 1. 安装新版本（同 install 流程）
 2. 自动激活新版本
 3. 若 App 原先正在运行，自动重启
+
+## update_version 脚本执行
+
+`POST /api/apps/{app_id}/update_version`
+
+请求体：
+
+```json
+{
+     "version": "1.2.3"
+}
+```
+
+行为：
+
+1. 校验 `version` 已安装
+2. 读取该版本 manifest 的 `update_version` 字段
+3. 若有脚本则执行；若无脚本则返回 `skipped=true`
