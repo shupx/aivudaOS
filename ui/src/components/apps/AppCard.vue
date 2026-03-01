@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import SwitchToggle from './SwitchToggle.vue'
 
@@ -11,8 +11,22 @@ const props = defineProps({
 
 const emit = defineEmits(['toggle-running', 'toggle-autostart'])
 const router = useRouter()
+const iconLoadFailed = ref(false)
 
 const description = computed(() => props.app.description || '无描述')
+const iconSrc = computed(() => {
+  if (iconLoadFailed.value) {
+    return '/app-default-icon.png'
+  }
+  return `/api/apps/${encodeURIComponent(props.app.app_id)}/icon`
+})
+
+watch(
+  () => props.app.app_id,
+  () => {
+    iconLoadFailed.value = false
+  },
+)
 
 function onRunningChange(nextValue) {
   emit('toggle-running', props.app, nextValue)
@@ -26,6 +40,10 @@ function goDetail() {
   if (!props.clickable) return
   router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}`)
 }
+
+function onIconError() {
+  iconLoadFailed.value = true
+}
 </script>
 
 <template>
@@ -38,7 +56,15 @@ function goDetail() {
     @keydown.space.prevent="goDetail"
   >
     <header class="app-card-header">
-      <h3>{{ app.name || app.app_id }}</h3>
+      <div class="app-title-wrap">
+        <img
+          class="app-icon"
+          :src="iconSrc"
+          alt="app icon"
+          @error="onIconError"
+        >
+        <h3>{{ app.name || app.app_id }}</h3>
+      </div>
       <span class="app-version">v{{ app.active_version || '-' }}</span>
     </header>
 

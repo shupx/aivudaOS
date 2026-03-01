@@ -652,6 +652,48 @@ class RuntimeService:
     def _app_log_path(self, app_id: str) -> Path:
         return APP_LOG_DIR / app_id / "current.log"
 
+    def get_app_icon_path(self, app_id: str) -> Path:
+        install_path = self._versioning.active_install_path(app_id)
+        if install_path is not None:
+            try:
+                manifest = self._get_manifest(app_id)
+            except AppNotInstalledError:
+                manifest = None
+
+            if manifest and manifest.icon:
+                icon_path = self._resolve_manifest_relative_file(
+                    install_path,
+                    manifest.icon,
+                )
+                if icon_path is not None:
+                    return icon_path
+
+        default_icon = PROJECT_ROOT / "ui" / "public" / "app-default-icon.png"
+        if default_icon.exists() and default_icon.is_file():
+            return default_icon
+        return PROJECT_ROOT / "ui" / "public" / "vite.svg"
+
+    @staticmethod
+    def _resolve_manifest_relative_file(
+        install_path: Path,
+        relative_path: str,
+    ) -> Path | None:
+        raw = (relative_path or "").strip()
+        if not raw:
+            return None
+
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            return None
+
+        resolved_root = install_path.resolve()
+        resolved = (resolved_root / candidate).resolve()
+        if resolved_root != resolved and resolved_root not in resolved.parents:
+            return None
+        if not resolved.exists() or not resolved.is_file():
+            return None
+        return resolved
+
     @staticmethod
     def _is_pid_alive(pid: int) -> bool:
         if pid <= 0:

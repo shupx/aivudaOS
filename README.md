@@ -128,5 +128,6 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 - `POST /api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
 - `GET /api/apps/operations/{operation_id}` — 查询安装/卸载/更新操作状态
 - `GET /api/apps/operations/{operation_id}/events` — SSE 实时操作输出流
+- `GET /api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
 - `GET  /api/apps/{app_id}/config` — 读取应用配置
 - `PUT  /api/apps/{app_id}/config` — 更新应用配置

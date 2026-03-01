@@ -5,6 +5,7 @@ description: 示例应用，演示 pre_install / pre_uninstall / update_this_ver
 run:
   entrypoint: ./start.sh
   args: []
+icon: ./assets/icon.png
 pre_install: ./scripts/pre_install.sh
 pre_uninstall: ./scripts/pre_uninstall.sh
 update_this_version: ./scripts/update_this_version.sh

@@ -11,6 +11,7 @@ class AppManifest:
     description: str
     version: str
     run: dict[str, Any]
+    icon: str | None = None
     pre_install: str | None = None
     pre_uninstall: str | None = None
     update_this_version: str | None = None
@@ -25,6 +26,7 @@ class AppManifest:
             description=raw.get("description", ""),
             version=raw.get("version", "0.0.0"),
             run=raw.get("run", {}),
+            icon=raw.get("icon"),
             pre_install=raw.get("pre_install"),
             pre_uninstall=raw.get("pre_uninstall"),
             update_this_version=raw.get("update_this_version"),
@@ -43,6 +45,8 @@ class AppManifest:
         }
         if self.pre_install is not None:
             d["pre_install"] = self.pre_install
+        if self.icon is not None:
+            d["icon"] = self.icon
         if self.pre_uninstall is not None:
             d["pre_uninstall"] = self.pre_uninstall
         if self.update_this_version is not None:

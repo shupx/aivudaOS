@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from core.auth.models import SessionInfo
 from core.auth.service import AuthService
@@ -138,6 +138,14 @@ async def get_status(app_id: str, token: str) -> dict[str, Any]:
         return runtime.get_detail(app_id)
     except AppNotInstalledError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{app_id}/icon")
+async def get_app_icon(app_id: str) -> FileResponse:
+    runtime = get_runtime_service()
+    icon_path = runtime.get_app_icon_path(app_id)
+    media_type = "image/png" if icon_path.suffix.lower() == ".png" else "image/svg+xml"
+    return FileResponse(str(icon_path), media_type=media_type)
 
 
 @router.get("/{app_id}/logs")

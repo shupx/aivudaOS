@@ -430,6 +430,29 @@ input {
   gap: 10px;
 }
 
+.app-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-title-wrap h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .app-card-header h3 {
   font-size: 17px;
 }

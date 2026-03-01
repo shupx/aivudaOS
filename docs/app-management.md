@@ -22,11 +22,14 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 my-app-1.0.0.tar.gz
 ├── manifest.yaml        # 必须
 ├── start.sh             # 入口脚本
+├── assets/
+│   └── icon.png         # 可选，应用图标
 └── ...                  # 其他应用文件
 ```
 
 > 支持包内有一层包裹目录（如 `my-app/manifest.yaml`），系统会自动向下查找。
 > 安装时会校验 `run.entrypoint` 是否存在，并自动补齐可执行权限（`chmod +x`）。
+> App 图标由 manifest 的 `icon` 字段指定（可选）；未指定或文件不存在时使用默认图标。
 
 ### manifest.yaml 字段
 
@@ -38,9 +41,10 @@ description: 一个示例应用
 run:
   entrypoint: ./start.sh       # 启动入口（必填）
   args: []                     # 启动参数
+icon: ./assets/icon.png        # 应用图标路径（可选，相对安装根目录）
 pre_install: ./scripts/pre_install.sh      # 安装前脚本（可选）
 pre_uninstall: ./scripts/pre_uninstall.sh  # 卸载前脚本（可选）
-update_version: ./scripts/update_version.sh # update_this_version 脚本（可选）
+update_this_version: ./scripts/update_this_version.sh # update_this_version 脚本（可选）
 default_config: {}             # 默认配置，安装时写入 config/apps/{app_id}.yaml
 config_schema: null            # 配置校验 schema（可选）
 ```
@@ -49,7 +53,8 @@ config_schema: null            # 配置校验 schema（可选）
 
 - `pre_install`：安装时执行（严格模式，非 0 返回码会中断安装）
 - `pre_uninstall`：卸载时执行（严格模式，非 0 返回码会中断卸载）
-- `update_this_version`：通过 API 手动触发的版本更新脚本（严格模式，manifest 字段为 `update_version`）
+- `update_this_version`：通过 API 手动触发的版本更新脚本（严格模式）
+
 
 脚本执行规则：
 
@@ -58,6 +63,7 @@ config_schema: null            # 配置校验 schema（可选）
 - 不设置超时，允许用户手动终止
 - 输出写入 `data/logs/os/install.log`
 - 同时通过操作事件流实时回传到前端
+
 
 ## 文件系统布局
 
