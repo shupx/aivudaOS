@@ -1,7 +1,11 @@
 <script setup>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
 import { useDomAppendLog } from '../composables/useDomAppendLog'
 import { useAppsPanel } from '../composables/useAppsPanel'
+
+const { t } = useI18n()
 
 const {
   apps,
@@ -15,6 +19,7 @@ const {
   uploadBusy,
   uploadError,
   uploadStatus,
+  uploadStatusDone,
   uploadOutput,
   uploadFileName,
   openUploadModal,
@@ -23,31 +28,35 @@ const {
   submitUpload,
 } = useAppsPanel()
 
+const uploadLogPlaceholder = computed(() => t('apps.waitingOutput'))
+
 const {
   logRef: uploadLogRef,
   onLogScroll: onUploadLogScroll,
 } = useDomAppendLog(uploadOutput, {
   visibleRef: showUploadModal,
-  placeholder: '等待输出...',
+  placeholderRef: uploadLogPlaceholder,
 })
 </script>
 
 <template>
   <section class="apps-panel">
     <header class="panel-header">
-      <h2>应用菜单</h2>
-      <div class="panel-actions wrap">
-        <button class="link-btn" @click="openUploadModal">手动上传新应用安装包</button>
+      <div class="panel-actions panel-title-actions">
+        <h2>{{ t('apps.title') }}</h2>
         <button class="btn btn-stable-refresh" :disabled="loading" @click="refresh">
-          {{ loading ? '刷新中' : '刷新' }}
+          {{ loading ? t('common.refreshing') : t('common.refresh') }}
         </button>
+      </div>
+      <div class="panel-actions wrap">
+        <button class="link-btn" @click="openUploadModal">{{ t('apps.uploadLink') }}</button>
       </div>
     </header>
 
     <p v-if="error" class="error-text">{{ error }}</p>
 
     <div v-if="!apps.length && !loading" class="empty-box">
-      当前没有已安装应用
+      {{ t('apps.noInstalledApps') }}
     </div>
 
     <div class="apps-grid">
@@ -64,26 +73,26 @@ const {
     <div v-if="showUploadModal" class="modal-overlay" @click.self="closeUploadModal">
       <section class="modal-card">
         <header class="modal-header">
-          <h3>上传新应用安装包</h3>
+          <h3>{{ t('apps.uploadModalTitle') }}</h3>
         </header>
 
         <div class="field">
-          <label>安装包文件（.tar.gz / .zip）</label>
+          <label>{{ t('apps.packageFile') }}</label>
           <input
             class="file-input"
             type="file"
             accept=".tar.gz,.zip"
             @change="onUploadFileChange($event.target.files)"
           >
-          <p class="muted">{{ uploadFileName || '未选择文件' }}</p>
+          <p class="muted">{{ uploadFileName || t('apps.noFileSelected') }}</p>
         </div>
 
         <p v-if="uploadError" class="error-text">{{ uploadError }}</p>
         <p
           v-if="uploadStatus"
-          :class="uploadStatus.includes('完成') ? 'ok-text' : 'muted'"
+          :class="uploadStatusDone ? 'ok-text' : 'muted'"
         >
-          状态：{{ uploadStatus }}
+          {{ t('common.status') }}：{{ uploadStatus }}
         </p>
         <pre
           ref="uploadLogRef"
@@ -92,9 +101,9 @@ const {
         ></pre>
 
         <footer class="panel-actions">
-          <button class="btn" :disabled="uploadBusy" @click="closeUploadModal">取消</button>
+          <button class="btn" :disabled="uploadBusy" @click="closeUploadModal">{{ t('common.cancel') }}</button>
           <button class="btn primary" :disabled="uploadBusy || !uploadFileName" @click="submitUpload">
-            {{ uploadBusy ? '上传中...' : '上传并安装' }}
+            {{ uploadBusy ? t('apps.uploading') : t('apps.uploadAndInstall') }}
           </button>
         </footer>
       </section>

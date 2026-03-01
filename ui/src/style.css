@@ -91,7 +91,7 @@ input {
 }
 
 .btn-stable-refresh {
-  min-width: 78px;
+  min-width: 88px;
   text-align: center;
 }
 
@@ -240,6 +240,10 @@ input {
 .panel-actions {
   display: flex;
   gap: 8px;
+}
+
+.panel-title-actions {
+  align-items: center;
 }
 
 .link-btn {

@@ -1,6 +1,6 @@
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { appState } from '../state/appState'
+import { appState, setLocale } from '../state/appState'
 import { fetchMe, logout } from '../services/core/auth'
 import { useAppsPanel } from './useAppsPanel'
 
@@ -12,6 +12,7 @@ export function useDashboard() {
   const sidebarCollapsed = computed(() => appState.sidebarCollapsed)
   const isStatusRoute = computed(() => route.path === '/dashboard/status')
   const isAppsRoute = computed(() => route.path.startsWith('/dashboard/apps'))
+  const locale = computed(() => appState.locale)
   const user = computed(() => appState.user)
   const role = computed(() => appState.role)
 
@@ -44,15 +45,21 @@ export function useDashboard() {
     router.replace('/login')
   }
 
+  function changeLocale(nextLocale) {
+    setLocale(nextLocale)
+  }
+
   return {
     sidebarCollapsed,
     isStatusRoute,
     isAppsRoute,
+    locale,
     user,
     role,
     goStatus,
     goApps,
     toggleSidebar,
     doLogout,
+    changeLocale,
   }
 }

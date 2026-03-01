@@ -1,6 +1,8 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { useLogin } from '../composables/useLogin'
 
+const { t } = useI18n()
 const { form, busy, error, submit } = useLogin()
 </script>
 
@@ -8,20 +10,20 @@ const { form, busy, error, submit } = useLogin()
   <main class="login-page">
     <section class="login-card">
       <h1>AivudaOS</h1>
-      <p class="muted">登录系统控制台</p>
+      <p class="muted">{{ t('login.subtitle') }}</p>
 
       <div class="field">
-        <label>用户名</label>
+        <label>{{ t('login.username') }}</label>
         <input v-model.trim="form.username" placeholder="admin" @keyup.enter="submit" />
       </div>
 
       <div class="field">
-        <label>密码</label>
+        <label>{{ t('login.password') }}</label>
         <input v-model="form.password" type="password" placeholder="admin123" @keyup.enter="submit" />
       </div>
 
       <button class="btn primary" :disabled="busy" @click="submit">
-        {{ busy ? '登录中...' : '登录' }}
+        {{ busy ? t('login.loggingIn') : t('login.login') }}
       </button>
 
       <p v-if="error" class="error-text">{{ error }}</p>

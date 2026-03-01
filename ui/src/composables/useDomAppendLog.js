@@ -10,6 +10,7 @@ export function useDomAppendLog(contentRef, options = {}) {
   const autoFollow = ref(true)
 
   const visibleRef = options.visibleRef || null
+  const placeholderRef = options.placeholderRef || null
   const placeholder = options.placeholder || ''
 
   let renderedText = ''
@@ -44,8 +45,9 @@ export function useDomAppendLog(contentRef, options = {}) {
 
     clearElement()
 
-    if (!placeholder) return
-    placeholderNode = document.createTextNode(placeholder)
+    const text = placeholderRef ? String(placeholderRef.value || '') : String(placeholder || '')
+    if (!text) return
+    placeholderNode = document.createTextNode(text)
     el.appendChild(placeholderNode)
   }
 
@@ -130,6 +132,13 @@ export function useDomAppendLog(contentRef, options = {}) {
       if (!visible) return
       syncText(contentRef.value || '')
       scrollToBottom(true)
+    })
+  }
+
+  if (placeholderRef) {
+    watch(placeholderRef, () => {
+      if (renderedText) return
+      renderPlaceholder()
     })
   }
 

@@ -1,5 +1,6 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAppsPanel } from './useAppsPanel'
 import {
   fetchAppLogs,
@@ -12,6 +13,7 @@ import {
 } from '../services/core/apps'
 
 export function useAppDetailPage() {
+  const { t } = useI18n()
   const route = useRoute()
   const router = useRouter()
 
@@ -39,6 +41,7 @@ export function useAppDetailPage() {
   const actionError = ref('')
   const actionMessage = ref('')
   const actionLiveStatus = ref('')
+  const actionLiveStatusDone = ref(false)
   const actionLiveOutput = ref('')
   const showActionOutputModal = ref(false)
 
@@ -70,6 +73,7 @@ export function useAppDetailPage() {
     actionError.value = ''
     actionMessage.value = ''
     actionLiveStatus.value = ''
+    actionLiveStatusDone.value = false
     actionLiveOutput.value = ''
   }
 
@@ -99,17 +103,20 @@ export function useAppDetailPage() {
             appendActionLine(event.line || '')
           }
           if (event.type === 'error') {
-            appendActionLine(event.message || '执行失败')
-            actionError.value = event.message || '执行失败'
+            appendActionLine(event.message || t('apps.operationFailed'))
+            actionError.value = event.message || t('apps.operationFailed')
+            actionLiveStatusDone.value = false
           }
           if (event.type === 'completed') {
             if (settled) return
             settled = true
             subscription.close()
             if (event.status === 'completed') {
+              actionLiveStatusDone.value = true
               resolve(event.result || {})
             } else {
-              reject(new Error(event.error || event.message || '操作失败'))
+              actionLiveStatusDone.value = false
+              reject(new Error(event.error || event.message || t('appDetail.operationFailed')))
             }
           }
         },
@@ -158,7 +165,7 @@ export function useAppDetailPage() {
       logOffset.value = Number(data.next_offset || 0)
       logError.value = ''
     } catch (err) {
-      logError.value = String(err?.message || err || '读取日志失败')
+      logError.value = String(err?.message || err || t('appDetail.readLogsFailed'))
     } finally {
       logBusy.value = false
     }
@@ -189,9 +196,9 @@ export function useAppDetailPage() {
       await refresh()
       await loadVersions(app.value.app_id)
       clearAndReloadLogs()
-      actionMessage.value = '上传并升级成功'
+      actionMessage.value = t('appDetail.upgradeSuccess')
     } catch (err) {
-      actionError.value = String(err?.message || err || '升级失败')
+      actionError.value = String(err?.message || err || t('appDetail.upgradeFailed'))
     } finally {
       actionBusy.value = false
     }
@@ -206,9 +213,9 @@ export function useAppDetailPage() {
       await refresh()
       await loadVersions(app.value.app_id)
       clearAndReloadLogs()
-      actionMessage.value = '版本切换成功'
+      actionMessage.value = t('appDetail.switchSuccess')
     } catch (err) {
-      actionError.value = String(err?.message || err || '切换版本失败')
+      actionError.value = String(err?.message || err || t('appDetail.switchFailed'))
     } finally {
       actionBusy.value = false
     }
@@ -233,14 +240,14 @@ export function useAppDetailPage() {
       if (!confirmedWholeApp) return
     } else {
       const confirmedVersionOnly = window.confirm(
-        `确认卸载当前版本 ${app.value.active_version || '-'} 吗？`,
+        t('appDetail.uninstallVersionConfirm', { version: app.value.active_version || '-' }),
       )
       if (!confirmedVersionOnly) return
     }
 
     actionBusy.value = true
     clearActionStatus()
-    actionLiveStatus.value = '任务已提交'
+    actionLiveStatus.value = t('appDetail.queued')
     showActionOutputModal.value = true
     try {
       const operation = await uninstallApp(app.value.app_id, {
@@ -251,12 +258,12 @@ export function useAppDetailPage() {
       await refresh()
       if (uninstallVersion) {
         await loadVersions(app.value.app_id)
-        actionMessage.value = '卸载当前版本成功'
+        actionMessage.value = t('appDetail.uninstallCurrentSuccess')
       } else {
         router.push('/dashboard/apps')
       }
     } catch (err) {
-      actionError.value = String(err?.message || err || '卸载失败')
+      actionError.value = String(err?.message || err || t('appDetail.uninstallFailed'))
     } finally {
       actionBusy.value = false
     }
@@ -264,16 +271,21 @@ export function useAppDetailPage() {
 
   async function runUpdateThisVersionScript() {
     if (!app.value || !selectedVersion.value) return
+    const confirmed = window.confirm(
+      t('appDetail.updateThisVersionConfirm', { version: selectedVersion.value }),
+    )
+    if (!confirmed) return
+
     actionBusy.value = true
     clearActionStatus()
-    actionLiveStatus.value = '任务已提交'
+    actionLiveStatus.value = t('appDetail.queued')
     showActionOutputModal.value = true
     try {
       const operation = await updateAppThisVersion(app.value.app_id, selectedVersion.value)
       await waitForOperation(operation.operation_id)
-      actionMessage.value = '更新脚本执行成功'
+      actionMessage.value = t('appDetail.updateScriptSuccess')
     } catch (err) {
-      actionError.value = String(err?.message || err || '执行更新脚本失败')
+      actionError.value = String(err?.message || err || t('appDetail.updateScriptFailed'))
     } finally {
       actionBusy.value = false
     }
@@ -328,23 +340,23 @@ export function useAppDetailPage() {
 
   function confirmWholeAppUninstall(appId) {
     const first = window.confirm(
-      `将卸载整个应用 ${appId}（包含所有版本）。确认继续吗？`,
+      t('appDetail.uninstallWholeFirst', { appId }),
     )
     if (!first) return false
 
     return window.confirm(
-      '再次确认：这是不可逆操作，应用及其版本都会被移除。确定执行吗？',
+      t('appDetail.uninstallWholeSecond'),
     )
   }
 
   function confirmLastVersionUninstallAsWholeApp(appId) {
     const first = window.confirm(
-      '你选择的是“仅卸载当前版本”，但当前已是最后一个版本。\n继续将等同于卸载整个应用。是否继续？',
+      t('appDetail.uninstallLastVersionFirst'),
     )
     if (!first) return false
 
     return window.confirm(
-      `最终确认：将卸载整个应用 ${appId}。确定执行吗？`,
+      t('appDetail.uninstallLastVersionSecond', { appId }),
     )
   }
 
@@ -365,6 +377,7 @@ export function useAppDetailPage() {
     actionError,
     actionMessage,
     actionLiveStatus,
+    actionLiveStatusDone,
     actionLiveOutput,
     showActionOutputModal,
     closeActionOutputModal,

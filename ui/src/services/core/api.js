@@ -1,4 +1,5 @@
 import { appState } from '../../state/appState'
+import i18n from '../../i18n'
 
 function buildUrl(path, auth) {
   const raw = path.startsWith('/') ? path : `/${path}`
@@ -35,7 +36,7 @@ export async function request(path, { method = 'GET', body, auth = false } = {})
   }
 
   if (!resp.ok) {
-    throw new Error(payload?.detail || `请求失败: ${resp.status}`)
+    throw new Error(payload?.detail || i18n.global.t('errors.requestFailed', { status: resp.status }))
   }
   return payload
 }

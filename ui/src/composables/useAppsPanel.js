@@ -1,4 +1,6 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import i18n from '../i18n'
 import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy } from '../state/appState'
 import {
   fetchAppStatus,
@@ -48,7 +50,7 @@ async function refresh() {
     setApps(mergeAppsWithDetail(items))
     markGatewayOnline(true)
   } catch (err) {
-    appState.appsError = String(err?.message || err || '加载失败')
+    appState.appsError = String(err?.message || err || i18n.global.t('errors.loadFailed'))
     markGatewayOnline(false)
   } finally {
     appState.appsLoading = false
@@ -70,7 +72,7 @@ async function toggleRunning(app, nextValue) {
     await refresh()
   } catch (err) {
     patchApp(appId, { running: previousValue })
-    appState.appsError = String(err?.message || err || '操作失败')
+    appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
   } finally {
     setBusy(appId, false)
   }
@@ -87,7 +89,7 @@ async function toggleAutostart(app, nextValue) {
     await refresh()
   } catch (err) {
     patchApp(appId, { autostart: previousValue })
-    appState.appsError = String(err?.message || err || '操作失败')
+    appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
   } finally {
     setBusy(appId, false)
   }
@@ -107,6 +109,7 @@ function stopPolling() {
 }
 
 export function useAppsPanel() {
+  const { t } = useI18n()
   const apps = computed(() => appState.apps)
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
@@ -116,12 +119,14 @@ export function useAppsPanel() {
   const uploadBusy = ref(false)
   const uploadError = ref('')
   const uploadStatus = ref('')
+  const uploadStatusDone = ref(false)
   const uploadOutput = ref('')
   const uploadFile = ref(null)
   const uploadFileName = ref('')
 
   function openUploadModal() {
     uploadError.value = ''
+    uploadStatusDone.value = false
     showUploadModal.value = true
   }
 
@@ -130,6 +135,7 @@ export function useAppsPanel() {
     showUploadModal.value = false
     uploadError.value = ''
     uploadStatus.value = ''
+    uploadStatusDone.value = false
     uploadOutput.value = ''
     uploadFile.value = null
     uploadFileName.value = ''
@@ -146,17 +152,19 @@ export function useAppsPanel() {
     if (!uploadFile.value || uploadBusy.value) return
     uploadBusy.value = true
     uploadError.value = ''
-    uploadStatus.value = '任务已提交'
+    uploadStatus.value = t('apps.taskQueued')
+    uploadStatusDone.value = false
     uploadOutput.value = ''
     try {
       const operation = await uploadAppPackage(uploadFile.value)
       await waitForOperation(operation.operation_id)
       await refresh()
-      uploadStatus.value = '安装完成'
+      uploadStatus.value = t('apps.installed')
+      uploadStatusDone.value = true
       uploadFile.value = null
       uploadFileName.value = ''
     } catch (err) {
-      uploadError.value = String(err?.message || err || '上传失败')
+      uploadError.value = String(err?.message || err || t('apps.uploadFailed'))
     } finally {
       uploadBusy.value = false
     }
@@ -184,18 +192,21 @@ export function useAppsPanel() {
             appendUploadLine(event.line || '')
           }
           if (event.type === 'error') {
-            appendUploadLine(event.message || '执行失败')
-            uploadError.value = event.message || '执行失败'
+            appendUploadLine(event.message || t('apps.operationFailed'))
+            uploadError.value = event.message || t('apps.operationFailed')
+            uploadStatusDone.value = false
           }
           if (event.type === 'completed') {
             if (settled) return
             settled = true
             subscription.close()
             if (event.status === 'completed') {
-              uploadStatus.value = '安装完成'
+              uploadStatus.value = t('apps.installed')
+              uploadStatusDone.value = true
               resolve(event.result || {})
             } else {
-              reject(new Error(event.error || event.message || '安装失败'))
+              uploadStatusDone.value = false
+              reject(new Error(event.error || event.message || t('apps.installFailed')))
             }
           }
         },
@@ -230,6 +241,7 @@ export function useAppsPanel() {
     uploadBusy,
     uploadError,
     uploadStatus,
+    uploadStatusDone,
     uploadOutput,
     uploadFileName,
     openUploadModal,

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import SwitchToggle from './SwitchToggle.vue'
 
 const props = defineProps({
@@ -12,8 +13,9 @@ const props = defineProps({
 const emit = defineEmits(['toggle-running', 'toggle-autostart'])
 const router = useRouter()
 const iconLoadFailed = ref(false)
+const { t } = useI18n()
 
-const description = computed(() => props.app.description || '无描述')
+const description = computed(() => props.app.description || t('appCard.noDescription'))
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
@@ -60,7 +62,7 @@ function onIconError() {
         <img
           class="app-icon"
           :src="iconSrc"
-          alt="app icon"
+          :alt="t('appCard.iconAlt')"
           @error="onIconError"
         >
         <h3>{{ app.name || app.app_id }}</h3>
@@ -69,19 +71,19 @@ function onIconError() {
     </header>
 
     <div class="app-meta">
-      <p><strong>app_id:</strong> {{ app.app_id }}</p>
-      <p><strong>描述:</strong> {{ description }}</p>
-      <p><strong>状态:</strong> {{ app.running ? '运行中' : '已停止' }}</p>
+      <p><strong>{{ t('appCard.appId') }}:</strong> {{ app.app_id }}</p>
+      <p><strong>{{ t('appCard.description') }}:</strong> {{ description }}</p>
+      <p><strong>{{ t('appCard.status') }}:</strong> {{ app.running ? t('appCard.running') : t('appCard.stopped') }}</p>
     </div>
 
     <div class="switch-row">
       <div class="switch-item" @click.stop>
-        <span>启动</span>
+        <span>{{ t('appCard.start') }}</span>
         <SwitchToggle :model-value="Boolean(app.running)" :disabled="busy" @update:model-value="onRunningChange" />
       </div>
 
       <div class="switch-item" @click.stop>
-        <span>自启动</span>
+        <span>{{ t('appCard.autostart') }}</span>
         <SwitchToggle :model-value="Boolean(app.autostart)" :disabled="busy" @update:model-value="onAutostartChange" />
       </div>
     </div>

@@ -1,21 +1,23 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { useSystemStatus } from '../composables/useSystemStatus'
 
+const { t } = useI18n()
 const { user, role, gatewayOnline, totalApps, runningApps, autostartApps, lastSyncAt } = useSystemStatus()
 </script>
 
 <template>
   <section class="status-grid">
     <article class="status-card">
-      <h2>系统状态</h2>
+      <h2>{{ t('status.title') }}</h2>
       <ul>
-        <li>网关连通：<span :class="gatewayOnline ? 'ok' : 'bad'">{{ gatewayOnline ? '在线' : '离线' }}</span></li>
-        <li>当前用户：{{ user || '-' }}</li>
-        <li>角色：{{ role || '-' }}</li>
-        <li>应用总数：{{ totalApps }}</li>
-        <li>运行中：{{ runningApps }}</li>
-        <li>自启动：{{ autostartApps }}</li>
-        <li>最近同步：{{ lastSyncAt || '-' }}</li>
+        <li>{{ t('status.gateway') }}：<span :class="gatewayOnline ? 'ok' : 'bad'">{{ gatewayOnline ? t('status.online') : t('status.offline') }}</span></li>
+        <li>{{ t('status.currentUser') }}：{{ user || '-' }}</li>
+        <li>{{ t('status.role') }}：{{ role || '-' }}</li>
+        <li>{{ t('status.totalApps') }}：{{ totalApps }}</li>
+        <li>{{ t('status.runningApps') }}：{{ runningApps }}</li>
+        <li>{{ t('status.autostartApps') }}：{{ autostartApps }}</li>
+        <li>{{ t('status.lastSync') }}：{{ lastSyncAt || '-' }}</li>
       </ul>
     </article>
   </section>

@@ -1,9 +1,11 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { markGatewayOnline } from '../state/appState'
 import { fetchMe, login } from '../services/core/auth'
 
 export function useLogin() {
+  const { t } = useI18n()
   const router = useRouter()
   const busy = ref(false)
   const error = ref('')
@@ -24,7 +26,7 @@ export function useLogin() {
       router.replace('/dashboard')
     } catch (err) {
       markGatewayOnline(false)
-      error.value = String(err?.message || err || '登录失败')
+      error.value = String(err?.message || err || t('login.failed'))
     } finally {
       busy.value = false
     }

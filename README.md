@@ -93,6 +93,13 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 - 用户名: `admin`
 - 密码: `admin123`
 
+## 前端多语言
+
+- UI 支持语言切换：`简体中文 (zh-CN)` / `English (en-US)`。
+- 切换入口位于 Dashboard 左侧栏底部的 `语言` 下拉框。
+- 语言偏好会持久化到浏览器本地存储（key: `aivuda_ui_locale`）。
+- 首版仅翻译前端固定文案；后端实时消息/API 错误详情保持原文透传显示。
+
 ## 前端路由
 
 | 路径 | 功能 |
