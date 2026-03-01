@@ -90,6 +90,16 @@ input {
   cursor: not-allowed;
 }
 
+.btn-stable-refresh {
+  min-width: 78px;
+  text-align: center;
+}
+
+.btn-stable-log {
+  min-width: 86px;
+  text-align: center;
+}
+
 .error-text {
   color: #b91c1c;
   font-size: 13px;

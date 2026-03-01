@@ -6,3 +6,5 @@ max_altitude_m: 120
 port: 8000
 repo_url: http://127.0.0.1:9001/repo
 return_home_altitude_m: 30
+runtime_process_manager: auto
+runtime_systemd_scope: user

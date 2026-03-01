@@ -2,7 +2,7 @@
 
 ## 概述
 
-AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和后端托管自启动。
+AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和自启动。
 
 ## 核心模块
 
@@ -11,6 +11,7 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 | InstallerService | `core/apps/installer.py` | 解压安装包、解析 manifest、写入文件和数据库 |
 | VersioningService | `core/apps/versioning.py` | 多版本目录管理、symlink 切换 |
 | RuntimeService | `core/apps/runtime.py` | 启动/停止/重启、autostart、卸载 |
+| SystemdRuntimeBackend | `core/apps/systemd_runtime.py` | systemd 单元生成与 systemctl 调用 |
 | ConfigService | `core/config/service.py` | 每个 App 的 YAML 配置读写 |
 
 依赖注入在 `gateway/deps.py`，API 路由在 `gateway/routes/apps.py`。
@@ -115,6 +116,20 @@ aivudaOS/
 
 ## 运行时管理
 
+运行时支持两种模式，由 `config/os.yaml` 决定：
+
+- `runtime_process_manager`: `auto` | `systemd` | `popen`
+- `runtime_systemd_scope`: `user` | `system`
+
+### systemd 模式（优先）
+
+- 启动/停止/重启通过 `systemctl` 调用对应 `.service`
+- 自启动对应 `systemctl enable/disable`
+- 状态由 `systemctl show` 查询并同步到 `app_runtime`
+- 单元名格式：`aivuda-app-{app_id}.service`（会做安全规范化）
+
+### popen 回退模式
+
 - **启动**：根据 `manifest.run.entrypoint` 构建命令，`subprocess.Popen` 启动（`start_new_session=True`）
 - **停止**：`os.kill(pid, SIGTERM)`
 - PID 记录在 `app_runtime` 表
@@ -122,10 +137,15 @@ aivudaOS/
 
 ### 自启动（Autostart）
 
-通过 `app_runtime.autostart` 标记实现：
-- `POST /api/apps/{app_id}/autostart` 仅更新数据库标记
-- aivudaOS 后端启动时会扫描 `autostart=1` 的应用，并调用与手动启动相同的 `start()` 流程
-- 状态由同一套运行时逻辑写回数据库（`running/pid/last_started_at`）
+通过 `POST /api/apps/{app_id}/autostart` 设置：
+
+- systemd 模式：更新 unit 的 enabled 状态，同时同步 `app_runtime.autostart`
+- popen 模式：仅更新 `app_runtime.autostart`，由后端启动时回放拉起
+
+后端启动阶段：
+
+- systemd 模式：跳过 DB 自启动回放（由 systemd 自身管理）
+- popen 模式：扫描 `autostart=1` 并执行 `start()`
 
 ## API 端点
 

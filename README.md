@@ -68,6 +68,26 @@ Nginx 托管前端静态文件并反代 `/api`，详见 [`docs/deploy-nginx.md`]
 curl -X POST http://localhost:8000/api/apps/repo/sync
 ```
 
+## App 运行模式（systemd / popen）
+
+应用生命周期支持两种后端：
+
+- `systemd`：由 `.service` 管理 `start/stop/restart/autostart`
+- `popen`：使用 Python `subprocess.Popen`（兼容回退）
+
+通过 `config/os.yaml` 的 OS 配置项控制：
+
+- `runtime_process_manager`: `auto` | `systemd` | `popen`（默认 `auto`）
+- `runtime_systemd_scope`: `user` | `system`（默认 `user`）
+
+说明：
+
+- `auto`：检测到可用 systemd 时优先使用 systemd，否则自动回退到 `popen`
+- `systemd`：优先尝试 systemd；若当前环境不可用会回退到 `popen`
+- `popen`：始终使用旧进程模型
+
+日志接口保持不变：`GET /api/apps/{app_id}/logs` 继续读取 `data/logs/apps/{app_id}/current.log`。
+
 ## 默认账号
 
 - 用户名: `admin`

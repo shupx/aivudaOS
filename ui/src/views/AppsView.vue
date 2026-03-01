@@ -27,8 +27,8 @@ const {
       <h2>应用菜单</h2>
       <div class="panel-actions wrap">
         <button class="link-btn" @click="openUploadModal">手动上传新应用安装包</button>
-        <button class="btn" :disabled="loading" @click="refresh">
-          {{ loading ? '刷新中...' : '刷新' }}
+        <button class="btn btn-stable-refresh" :disabled="loading" @click="refresh">
+          {{ loading ? '...' : '刷新' }}
         </button>
       </div>
     </header>

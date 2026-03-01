@@ -35,6 +35,9 @@ def create_app() -> FastAPI:
         init_db()
         runtime = get_runtime_service()
         summary = runtime.start_autostart_apps()
+        mode = summary.get("mode", "popen")
+        if mode == "systemd":
+            logger.info("Autostart managed by systemd; startup replay skipped")
         if summary["failed"]:
             logger.warning("Autostart failures: %s", summary["failed"])
         if summary["started"]:

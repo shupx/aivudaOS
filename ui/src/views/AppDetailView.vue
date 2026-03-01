@@ -41,8 +41,8 @@ const {
       <h2>应用详情</h2>
       <div class="panel-actions">
         <button class="btn" @click="backToList">返回列表</button>
-        <button class="btn" :disabled="loading" @click="refresh">
-          {{ loading ? '刷新中...' : '刷新' }}
+        <button class="btn btn-stable-refresh" :disabled="loading" @click="refresh">
+          {{ loading ? '...' : '刷新' }}
         </button>
       </div>
     </header>
@@ -67,7 +67,7 @@ const {
       <header class="log-header">
         <h3>输出</h3>
         <div class="panel-actions">
-          <button class="btn" :disabled="logBusy" @click="loadLogs">
+          <button class="btn btn-stable-log" :disabled="logBusy" @click="loadLogs">
             {{ logBusy ? '读取中...' : '拉取最新' }}
           </button>
           <button class="btn" @click="clearAndReloadLogs">清空并重读</button>

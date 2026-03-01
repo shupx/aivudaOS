@@ -125,3 +125,22 @@ sudo systemctl status aivudaos-backend
 
 - 当前文档不包含 HTTPS（443）与证书申请。
 - 若后续接入证书，可在此配置基础上新增 443 `server` 块并将 80 跳转到 443。
+
+## 9. App 生命周期由 systemd 管理（可选）
+
+如果希望应用 `start/stop/restart/autostart` 统一由 systemd 管理，请在 `config/os.yaml` 配置：
+
+```yaml
+runtime_process_manager: auto      # auto | systemd | popen
+runtime_systemd_scope: user        # user | system
+```
+
+推荐：
+
+- 开发机：`runtime_systemd_scope: user`
+- 生产机：`runtime_systemd_scope: system`（需后端进程具备写 unit 和执行 systemctl 权限）
+
+说明：
+
+- `auto` 会优先使用 systemd，不可用时自动回退 `popen`
+- 日志接口仍读取 `data/logs/apps/{app_id}/current.log`

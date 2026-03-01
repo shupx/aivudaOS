@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.models import AppManifest, AppRuntimeState
+from core.apps.systemd_runtime import SystemdRuntimeBackend
 from core.apps.versioning import VersioningService
 from core.config.service import ConfigService
 from core.db.connection import db_conn
@@ -18,6 +19,7 @@ from core.errors import (
     AppRuntimeError,
 )
 from core.paths import APP_LOG_DIR
+from core.paths import PROJECT_ROOT
 
 
 class RuntimeService:
@@ -33,6 +35,7 @@ class RuntimeService:
     ) -> None:
         self._versioning = versioning
         self._config = config_service
+        self._systemd = SystemdRuntimeBackend(PROJECT_ROOT)
 
     # ------------------------------------------------------------------ #
     #  Manifest from DB
@@ -81,9 +84,29 @@ class RuntimeService:
 
         running = bool(row["running"])
         pid = row["pid"]
+        autostart = bool(row["autostart"])
         stopped_at = row["last_stopped_at"]
 
-        if running and (not pid or not self._is_pid_alive(int(pid))):
+        scope = self._systemd_scope()
+        using_systemd = False
+        if self._should_use_systemd(scope):
+            try:
+                live = self._systemd.get_state(app_id, scope)
+                using_systemd = True
+                running = live.running
+                pid = live.pid
+                autostart = live.enabled
+                self._sync_runtime_row(
+                    app_id,
+                    running=running,
+                    pid=pid,
+                    autostart=autostart,
+                    last_stopped_at=int(time.time()) if not running else None,
+                )
+            except (subprocess.SubprocessError, OSError):
+                using_systemd = False
+
+        if (not using_systemd) and running and (not pid or not self._is_pid_alive(int(pid))):
             stopped_at = int(time.time())
             self._mark_stopped_if_pid_matches(app_id, pid, stopped_at)
             running = False
@@ -92,7 +115,7 @@ class RuntimeService:
         return AppRuntimeState(
             app_id=app_id,
             running=running,
-            autostart=bool(row["autostart"]),
+            autostart=autostart,
             pid=pid,
             last_started_at=row["last_started_at"],
             last_stopped_at=stopped_at,
@@ -202,6 +225,34 @@ class RuntimeService:
         command = self._build_exec_command(manifest, install_path)
         log_path = self._app_log_path(app_id)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            try:
+                log_path.write_text("", encoding="utf-8")
+                self._systemd.write_unit(
+                    app_id=app_id,
+                    scope=scope,
+                    command=command,
+                    working_dir=install_path,
+                    log_path=log_path,
+                    description=f"AivudaOS app {manifest.name} ({app_id})",
+                )
+                self._systemd.daemon_reload(scope)
+                self._systemd.start(app_id, scope)
+                live = self._systemd.get_state(app_id, scope)
+            except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                raise AppRuntimeError(f"启动 {app_id} 失败（systemd）: {exc}") from exc
+
+            self._sync_runtime_row(
+                app_id,
+                running=live.running,
+                pid=live.pid,
+                autostart=live.enabled or runtime_state.autostart,
+                last_started_at=now,
+            )
+            return {"ok": True, "app_id": app_id, "running": live.running}
+
         try:
             with log_path.open("wb") as log_file:
                 proc = subprocess.Popen(
@@ -214,15 +265,13 @@ class RuntimeService:
         except OSError as exc:
             raise AppRuntimeError(f"启动 {app_id} 失败，无法写入日志: {exc}") from exc
 
-        with db_conn() as conn:
-            conn.execute(
-                "INSERT INTO app_runtime (app_id, running, autostart, pid, last_started_at) "
-                "VALUES (?, 1, ?, ?, ?) "
-                "ON CONFLICT(app_id) DO UPDATE SET running=1, pid=excluded.pid, "
-                "last_started_at=excluded.last_started_at",
-                (app_id, int(runtime_state.autostart), proc.pid, now),
-            )
-            conn.commit()
+        self._sync_runtime_row(
+            app_id,
+            running=True,
+            pid=proc.pid,
+            autostart=runtime_state.autostart,
+            last_started_at=now,
+        )
 
         watcher = threading.Thread(
             target=self._watch_process_exit,
@@ -240,24 +289,60 @@ class RuntimeService:
         if not self._versioning.list_versions(app_id):
             raise AppNotInstalledError(f"{app_id} is not installed")
 
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            try:
+                self._systemd.stop(app_id, scope)
+            except subprocess.CalledProcessError as exc:
+                if "not loaded" not in (exc.stderr or "") and "not found" not in (
+                    exc.stderr or ""
+                ):
+                    pass
+            except OSError:
+                pass
+
         if runtime_state.pid:
             try:
                 os.kill(runtime_state.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
 
-        with db_conn() as conn:
-            conn.execute(
-                "UPDATE app_runtime SET running=0, pid=NULL, last_stopped_at=? "
-                "WHERE app_id=?",
-                (now, app_id),
-            )
-            conn.commit()
+        self._sync_runtime_row(
+            app_id,
+            running=False,
+            pid=None,
+            autostart=runtime_state.autostart,
+            last_stopped_at=now,
+        )
 
         return {"ok": True, "app_id": app_id, "running": False}
 
     def restart(self, app_id: str) -> dict[str, Any]:
         """Stop then start an app."""
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            if not self._versioning.list_versions(app_id):
+                raise AppNotInstalledError(f"{app_id} is not installed")
+            now = int(time.time())
+            try:
+                self._systemd.restart(app_id, scope)
+                live = self._systemd.get_state(app_id, scope)
+            except (subprocess.SubprocessError, OSError):
+                runtime_state = self.get_runtime_state(app_id)
+                if runtime_state.running:
+                    self.stop(app_id)
+                return self.start(app_id)
+
+            self._sync_runtime_row(
+                app_id,
+                running=live.running,
+                pid=live.pid,
+                autostart=live.enabled,
+                last_started_at=now,
+                last_stopped_at=None,
+            )
+            return {"ok": True, "app_id": app_id, "running": live.running}
+
         runtime_state = self.get_runtime_state(app_id)
         if runtime_state.running:
             self.stop(app_id)
@@ -271,6 +356,26 @@ class RuntimeService:
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} is not installed")
+
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            manifest = self._get_manifest(app_id)
+            command = self._build_exec_command(manifest, install_path)
+            log_path = self._app_log_path(app_id)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                self._systemd.write_unit(
+                    app_id=app_id,
+                    scope=scope,
+                    command=command,
+                    working_dir=install_path,
+                    log_path=log_path,
+                    description=f"AivudaOS app {manifest.name} ({app_id})",
+                )
+                self._systemd.daemon_reload(scope)
+                self._systemd.set_enabled(app_id, scope, enabled)
+            except (subprocess.SubprocessError, OSError, ValueError):
+                pass
 
         with db_conn() as conn:
             conn.execute(
@@ -351,9 +456,31 @@ class RuntimeService:
                 if purge:
                     self._config.delete_app_config(app_id)
 
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            try:
+                self._systemd.set_enabled(app_id, scope, False)
+            except subprocess.SubprocessError:
+                pass
+            except OSError:
+                pass
+            try:
+                self._systemd.remove_unit(app_id, scope)
+            except OSError:
+                pass
+
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
     def start_autostart_apps(self) -> dict[str, Any]:
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            return {
+                "started": [],
+                "skipped": [],
+                "failed": [],
+                "mode": "systemd",
+            }
+
         with db_conn() as conn:
             rows = conn.execute(
                 "SELECT app_id FROM app_runtime WHERE autostart = 1 ORDER BY app_id"
@@ -379,7 +506,34 @@ class RuntimeService:
             "started": started,
             "skipped": skipped,
             "failed": failed,
+            "mode": "popen",
         }
+
+    def _runtime_mode(self) -> str:
+        raw = str(self._config.get_os_setting("runtime_process_manager", "auto"))
+        mode = raw.strip().lower()
+        if mode not in {"auto", "systemd", "popen"}:
+            return "auto"
+        return mode
+
+    def _systemd_scope(self) -> str:
+        raw = str(self._config.get_os_setting("runtime_systemd_scope", "user"))
+        scope = raw.strip().lower()
+        if scope not in {"user", "system"}:
+            return "user"
+        return scope
+
+    def _should_use_systemd(self, scope: str | None = None) -> bool:
+        mode = self._runtime_mode()
+        selected_scope = scope or self._systemd_scope()
+
+        if mode == "popen":
+            return False
+
+        available = self._systemd.is_available(selected_scope)
+        if mode == "systemd":
+            return available
+        return available
 
     # ------------------------------------------------------------------ #
     #  Process helpers
@@ -435,6 +589,36 @@ class RuntimeService:
                 "SET running=0, pid=NULL, last_stopped_at=? "
                 "WHERE app_id=? AND pid=?",
                 (stopped_at, app_id, pid),
+            )
+            conn.commit()
+
+    def _sync_runtime_row(
+        self,
+        app_id: str,
+        *,
+        running: bool,
+        pid: int | None,
+        autostart: bool,
+        last_started_at: int | None = None,
+        last_stopped_at: int | None = None,
+    ) -> None:
+        with db_conn() as conn:
+            conn.execute(
+                "INSERT INTO app_runtime "
+                "(app_id, running, autostart, pid, last_started_at, last_stopped_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(app_id) DO UPDATE SET "
+                "running=excluded.running, autostart=excluded.autostart, pid=excluded.pid, "
+                "last_started_at=COALESCE(excluded.last_started_at, app_runtime.last_started_at), "
+                "last_stopped_at=COALESCE(excluded.last_stopped_at, app_runtime.last_stopped_at)",
+                (
+                    app_id,
+                    1 if running else 0,
+                    1 if autostart else 0,
+                    pid,
+                    last_started_at,
+                    last_stopped_at,
+                ),
             )
             conn.commit()
 
