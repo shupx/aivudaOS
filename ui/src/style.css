@@ -365,6 +365,17 @@ input {
   flex: 1 1 140px;
 }
 
+.left-sidebar .select-input {
+  border-color: #334155;
+  background: #111827;
+  color: #e2e8f0;
+}
+
+.left-sidebar .select-input option {
+  background: #111827;
+  color: #e2e8f0;
+}
+
 .check-item {
   display: inline-flex;
   align-items: center;
