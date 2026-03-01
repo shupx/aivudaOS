@@ -30,7 +30,7 @@ const {
   selectedFileName,
   canUpgrade,
   runUpgrade,
-  runUpdateVersionScript,
+  runUpdateThisVersionScript,
   uninstallVersionOnly,
   uninstallPurge,
   canUninstall,
@@ -115,7 +115,7 @@ const {
         </div>
 
         <div class="action-block">
-          <h4>切换版本</h4>
+          <h4>管理版本</h4>
           <div class="panel-actions wrap">
             <select v-model="selectedVersion" class="select-input">
               <option v-for="version in versions" :key="version" :value="version">
@@ -129,8 +129,8 @@ const {
             <button class="btn" :disabled="!canSwitchVersion || actionBusy" @click="runSwitchVersion">
               {{ actionBusy ? '处理中...' : '切换版本' }}
             </button>
-            <button class="btn" :disabled="!selectedVersion || actionBusy" @click="runUpdateVersionScript">
-              {{ actionBusy ? '处理中...' : '执行更新脚本' }}
+            <button class="btn" :disabled="!selectedVersion || actionBusy" @click="runUpdateThisVersionScript">
+              {{ actionBusy ? '处理中...' : '更新这个版本' }}
             </button>
           </div>
         </div>

@@ -414,7 +414,7 @@ class RuntimeService:
             "active_version": version,
         }
 
-    def update_version(
+    def update_this_version(
         self,
         app_id: str,
         version: str,
@@ -436,7 +436,7 @@ class RuntimeService:
             "status",
             phase="prepare",
             status="running",
-            message="准备执行 update_version",
+            message="准备执行 update_this_version",
             app_id=app_id,
             version=version,
         )
@@ -445,7 +445,7 @@ class RuntimeService:
         executed = self._run_manifest_hook(
             app_id=app_id,
             manifest=manifest,
-            hook_name="update_version",
+            hook_name="update_this_version",
             root_dir=install_path,
             event_cb=event_cb,
         )
@@ -454,7 +454,7 @@ class RuntimeService:
             "status",
             phase="completed",
             status="completed",
-            message="update_version 执行完成",
+            message="update_this_version 执行完成",
             app_id=app_id,
             version=version,
             executed=executed,

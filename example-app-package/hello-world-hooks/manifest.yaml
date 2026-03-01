@@ -1,13 +1,13 @@
 app_id: hello-world-hooks
 name: Hello World Hooks
-version: 2.0.0
-description: 示例应用，演示 pre_install / pre_uninstall / update_version 脚本
+version: 1.0.0
+description: 示例应用，演示 pre_install / pre_uninstall / update_this_version 脚本
 run:
   entrypoint: ./start.sh
   args: []
 pre_install: ./scripts/pre_install.sh
 pre_uninstall: ./scripts/pre_uninstall.sh
-update_version: ./scripts/update_version.sh
+update_this_version: ./scripts/update_this_version.sh
 default_config:
   message: hello-hooks
 config_schema: null

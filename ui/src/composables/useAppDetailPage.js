@@ -7,7 +7,7 @@ import {
   subscribeAppOperationEvents,
   switchAppVersion,
   uninstallApp,
-  updateAppVersion,
+  updateAppThisVersion,
   upgradeAppPackage,
 } from '../services/core/apps'
 
@@ -262,14 +262,14 @@ export function useAppDetailPage() {
     }
   }
 
-  async function runUpdateVersionScript() {
+  async function runUpdateThisVersionScript() {
     if (!app.value || !selectedVersion.value) return
     actionBusy.value = true
     clearActionStatus()
     actionLiveStatus.value = '任务已提交'
     showActionOutputModal.value = true
     try {
-      const operation = await updateAppVersion(app.value.app_id, selectedVersion.value)
+      const operation = await updateAppThisVersion(app.value.app_id, selectedVersion.value)
       await waitForOperation(operation.operation_id)
       actionMessage.value = '更新脚本执行成功'
     } catch (err) {
@@ -376,7 +376,7 @@ export function useAppDetailPage() {
     selectedFileName,
     canUpgrade,
     runUpgrade,
-    runUpdateVersionScript,
+    runUpdateThisVersionScript,
     runSwitchVersion,
     uninstallVersionOnly,
     uninstallPurge,

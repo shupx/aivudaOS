@@ -32,7 +32,7 @@ from gateway.schemas import (
     AppAutostartUpdateRequest,
     AppConfigUpdateRequest,
     AppSwitchVersionRequest,
-    AppUpdateVersionRequest,
+    AppUpdateThisVersionRequest,
     AppUninstallRequest,
 )
 
@@ -247,16 +247,16 @@ async def switch_version(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{app_id}/update_version", status_code=202)
-async def update_version(
-    app_id: str, payload: AppUpdateVersionRequest, token: str
+@router.post("/{app_id}/update_this_version", status_code=202)
+async def update_this_version(
+    app_id: str, payload: AppUpdateThisVersionRequest, token: str
 ) -> dict[str, Any]:
     _require_auth(token)
     operations = get_app_operation_manager()
     runtime = get_runtime_service()
 
     try:
-        record = operations.start_operation("update_version", app_id=app_id)
+        record = operations.start_operation("update_this_version", app_id=app_id)
     except AppOperationConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -264,7 +264,7 @@ async def update_version(
         operations.publish(record.operation_id, event_type, **event_payload)
 
     def task() -> dict[str, Any]:
-        return runtime.update_version(
+        return runtime.update_this_version(
             app_id,
             payload.version,
             event_cb=emit,
@@ -275,7 +275,7 @@ async def update_version(
         "ok": True,
         "operation_id": record.operation_id,
         "status": "queued",
-        "operation_type": "update_version",
+        "operation_type": "update_this_version",
         "app_id": app_id,
     }
 

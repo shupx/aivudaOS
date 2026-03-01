@@ -70,8 +70,8 @@ export async function upgradeAppPackage(appId, file) {
   })
 }
 
-export async function updateAppVersion(appId, version) {
-  return request(`/api/apps/${encodeURIComponent(appId)}/update_version`, {
+export async function updateAppThisVersion(appId, version) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/update_this_version`, {
     method: 'POST',
     body: { version },
     auth: true,

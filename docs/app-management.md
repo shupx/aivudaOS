@@ -40,7 +40,7 @@ run:
   args: []                     # 启动参数
 pre_install: ./scripts/pre_install.sh      # 安装前脚本（可选）
 pre_uninstall: ./scripts/pre_uninstall.sh  # 卸载前脚本（可选）
-update_version: ./scripts/update_version.sh # 版本更新脚本（可选）
+update_version: ./scripts/update_version.sh # update_this_version 脚本（可选）
 default_config: {}             # 默认配置，安装时写入 config/apps/{app_id}.yaml
 config_schema: null            # 配置校验 schema（可选）
 ```
@@ -49,7 +49,7 @@ config_schema: null            # 配置校验 schema（可选）
 
 - `pre_install`：安装时执行（严格模式，非 0 返回码会中断安装）
 - `pre_uninstall`：卸载时执行（严格模式，非 0 返回码会中断卸载）
-- `update_version`：通过 API 手动触发的版本更新脚本（严格模式）
+- `update_this_version`：通过 API 手动触发的版本更新脚本（严格模式，manifest 字段为 `update_version`）
 
 脚本执行规则：
 
@@ -170,7 +170,7 @@ aivudaOS/
 |---|---|---|
 | POST | `/api/apps/upload` | 上传安装包（首次安装） |
 | POST | `/api/apps/{app_id}/upgrade` | 上传新版本（升级，若正在运行则自动重启） |
-| POST | `/api/apps/{app_id}/update_version` | 执行指定已安装版本的 `update_version` 脚本 |
+| POST | `/api/apps/{app_id}/update_this_version` | 执行指定已安装版本的 `update_this_version` 脚本 |
 | GET | `/api/apps/operations/{operation_id}` | 查询操作状态 |
 | GET | `/api/apps/operations/{operation_id}/events` | SSE 实时事件流 |
 | GET | `/api/apps/installed` | 已安装应用列表 |
@@ -189,7 +189,7 @@ aivudaOS/
 
 ### 实时操作事件（SSE）
 
-`POST /api/apps/upload`、`POST /api/apps/{app_id}/uninstall`、`POST /api/apps/{app_id}/update_version` 现在返回：
+`POST /api/apps/upload`、`POST /api/apps/{app_id}/uninstall`、`POST /api/apps/{app_id}/update_this_version` 现在返回：
 
 ```json
 {
@@ -225,9 +225,9 @@ aivudaOS/
 2. 自动激活新版本
 3. 若 App 原先正在运行，自动重启
 
-## update_version 脚本执行
+## update_this_version 脚本执行
 
-`POST /api/apps/{app_id}/update_version`
+`POST /api/apps/{app_id}/update_this_version`
 
 请求体：
 
@@ -240,6 +240,6 @@ aivudaOS/
 行为：
 
 1. 校验 `version` 已安装
-2. 读取该版本 manifest 的 `update_version` 字段
+2. 读取该版本 manifest 的 `update_version` 字段（逻辑名称：`update_this_version`）
 3. 若有脚本则执行；若无脚本则返回 `skipped=true`
 4. 运行过程通过 SSE 事件流实时返回脚本输出

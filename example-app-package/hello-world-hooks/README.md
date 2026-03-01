@@ -4,7 +4,7 @@
 
 - `pre_install`
 - `pre_uninstall`
-- `update_version`
+- `update_this_version`
 
 ## 打包
 

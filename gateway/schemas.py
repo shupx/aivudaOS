@@ -40,5 +40,5 @@ class AppSwitchVersionRequest(BaseModel):
     restart: bool = False
 
 
-class AppUpdateVersionRequest(BaseModel):
+class AppUpdateThisVersionRequest(BaseModel):
     version: str
