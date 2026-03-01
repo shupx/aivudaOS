@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from core.apps.models import AppManifest, AppRuntimeState
 from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
@@ -414,7 +414,16 @@ class RuntimeService:
             "active_version": version,
         }
 
-    def update_version(self, app_id: str, version: str) -> dict[str, Any]:
+    def update_version(
+        self,
+        app_id: str,
+        version: str,
+        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        def emit(event_type: str, **payload: Any) -> None:
+            if event_cb:
+                event_cb(event_type, payload)
+
         versions = self._versioning.list_versions(app_id)
         if not versions:
             raise AppNotInstalledError(f"{app_id} is not installed")
@@ -423,6 +432,14 @@ class RuntimeService:
                 f"Version {version} is not installed for {app_id}"
             )
 
+        emit(
+            "status",
+            phase="prepare",
+            status="running",
+            message="准备执行 update_version",
+            app_id=app_id,
+            version=version,
+        )
         manifest = self._get_manifest(app_id, version)
         install_path = self._versioning.version_dir(app_id, version)
         executed = self._run_manifest_hook(
@@ -430,6 +447,17 @@ class RuntimeService:
             manifest=manifest,
             hook_name="update_version",
             root_dir=install_path,
+            event_cb=event_cb,
+        )
+
+        emit(
+            "status",
+            phase="completed",
+            status="completed",
+            message="update_version 执行完成",
+            app_id=app_id,
+            version=version,
+            executed=executed,
         )
 
         return {
@@ -449,9 +477,15 @@ class RuntimeService:
         app_id: str,
         version: str | None = None,
         purge: bool = False,
+        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         """Uninstall a specific version or the entire app."""
+        def emit(event_type: str, **payload: Any) -> None:
+            if event_cb:
+                event_cb(event_type, payload)
+
         runtime_state = self.get_runtime_state(app_id)
+        emit("status", phase="prepare", status="running", message="准备卸载", app_id=app_id)
 
         if version is None:
             # Uninstall ALL versions
@@ -469,8 +503,10 @@ class RuntimeService:
                     manifest=manifest,
                     hook_name="pre_uninstall",
                     root_dir=self._versioning.version_dir(app_id, hook_version),
+                    event_cb=event_cb,
                 )
 
+            emit("status", phase="remove", status="running", message="删除应用目录", app_id=app_id)
             self._versioning.remove_app_entirely(app_id)
             with db_conn() as conn:
                 conn.execute(
@@ -487,11 +523,20 @@ class RuntimeService:
                 manifest=manifest,
                 hook_name="pre_uninstall",
                 root_dir=self._versioning.version_dir(app_id, version),
+                event_cb=event_cb,
             )
 
             active = self._versioning.active_version(app_id)
             if active == version and runtime_state.running:
                 self.stop(app_id)
+            emit(
+                "status",
+                phase="remove",
+                status="running",
+                message="删除版本",
+                app_id=app_id,
+                version=version,
+            )
             self._versioning.remove_version(app_id, version)
             # If we removed the active version, try to activate another
             remaining = self._versioning.list_versions(app_id)
@@ -518,6 +563,8 @@ class RuntimeService:
                 self._systemd.remove_unit(app_id, scope)
             except OSError:
                 pass
+
+        emit("status", phase="completed", status="completed", message="卸载完成", app_id=app_id)
 
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
@@ -728,17 +775,36 @@ class RuntimeService:
         manifest: AppManifest,
         hook_name: str,
         root_dir: Path,
+        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> bool:
+        def emit(event_type: str, **payload: Any) -> None:
+            if event_cb:
+                event_cb(event_type, payload)
+
         script_path = getattr(manifest, hook_name, None)
         if not script_path:
             return False
 
+        emit(
+            "status",
+            phase=hook_name,
+            status="running",
+            message=f"执行 {hook_name}",
+            app_id=app_id,
+        )
         try:
             self._script_hooks.run(
                 app_id=app_id,
                 hook_name=hook_name,
                 script_path=str(script_path),
                 root_dir=root_dir,
+                on_output=lambda line: emit(
+                    "log",
+                    phase=hook_name,
+                    hook=hook_name,
+                    line=line,
+                    app_id=app_id,
+                ),
             )
         except ScriptHookError as exc:
             raise AppRuntimeError(f"{hook_name} 执行失败: {exc}") from exc

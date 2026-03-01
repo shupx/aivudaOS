@@ -57,6 +57,7 @@ config_schema: null            # 配置校验 schema（可选）
 - 执行前会自动补齐可执行权限（`chmod +x`）
 - 不设置超时，允许用户手动终止
 - 输出写入 `data/logs/os/install.log`
+- 同时通过操作事件流实时回传到前端
 
 ## 文件系统布局
 
@@ -170,6 +171,8 @@ aivudaOS/
 | POST | `/api/apps/upload` | 上传安装包（首次安装） |
 | POST | `/api/apps/{app_id}/upgrade` | 上传新版本（升级，若正在运行则自动重启） |
 | POST | `/api/apps/{app_id}/update_version` | 执行指定已安装版本的 `update_version` 脚本 |
+| GET | `/api/apps/operations/{operation_id}` | 查询操作状态 |
+| GET | `/api/apps/operations/{operation_id}/events` | SSE 实时事件流 |
 | GET | `/api/apps/installed` | 已安装应用列表 |
 | GET | `/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
 | POST | `/api/apps/{app_id}/start` | 启动 |
@@ -183,6 +186,29 @@ aivudaOS/
 | PUT | `/api/apps/{app_id}/config` | 更新 App 配置 `{ "version": 1, "data": {...} }` |
 
 > 所有端点需要 `token` 参数进行身份验证。
+
+### 实时操作事件（SSE）
+
+`POST /api/apps/upload`、`POST /api/apps/{app_id}/uninstall`、`POST /api/apps/{app_id}/update_version` 现在返回：
+
+```json
+{
+     "ok": true,
+     "operation_id": "...",
+     "status": "queued"
+}
+```
+
+前端随后连接：
+
+`GET /api/apps/operations/{operation_id}/events?token=...`
+
+典型事件：
+
+- `status`：阶段状态（prepare/extract/pre_install/remove/completed 等）
+- `log`：脚本输出逐行内容（stdout/stderr）
+- `error`：失败信息
+- `completed`：操作结束（成功或失败）
 
 ## 版本管理
 
@@ -216,3 +242,4 @@ aivudaOS/
 1. 校验 `version` 已安装
 2. 读取该版本 manifest 的 `update_version` 字段
 3. 若有脚本则执行；若无脚本则返回 `skipped=true`
+4. 运行过程通过 SSE 事件流实时返回脚本输出

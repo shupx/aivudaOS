@@ -18,6 +18,10 @@ const {
   actionBusy,
   actionError,
   actionMessage,
+  actionLiveStatus,
+  actionLiveOutput,
+  showActionOutputModal,
+  closeActionOutputModal,
   versions,
   selectedVersion,
   switchWithRestart,
@@ -26,6 +30,7 @@ const {
   selectedFileName,
   canUpgrade,
   runUpgrade,
+  runUpdateVersionScript,
   uninstallVersionOnly,
   uninstallPurge,
   canUninstall,
@@ -65,7 +70,7 @@ const {
 
     <article v-if="app" class="log-panel">
       <header class="log-header">
-        <h3>输出</h3>
+        <h3>Log</h3>
         <div class="panel-actions">
           <button class="btn btn-stable-log" :disabled="logBusy" @click="loadLogs">
             {{ logBusy ? '读取中...' : '拉取最新' }}
@@ -85,6 +90,12 @@ const {
 
       <p v-if="actionError" class="error-text">{{ actionError }}</p>
       <p v-if="actionMessage" class="ok-text">{{ actionMessage }}</p>
+      <p
+        v-if="actionLiveStatus"
+        :class="actionLiveStatus.includes('完成') ? 'ok-text' : 'muted'"
+      >
+        状态：{{ actionLiveStatus }}
+      </p>
 
       <div class="actions-grid">
         <div class="action-block">
@@ -118,6 +129,9 @@ const {
             <button class="btn" :disabled="!canSwitchVersion || actionBusy" @click="runSwitchVersion">
               {{ actionBusy ? '处理中...' : '切换版本' }}
             </button>
+            <button class="btn" :disabled="!selectedVersion || actionBusy" @click="runUpdateVersionScript">
+              {{ actionBusy ? '处理中...' : '执行更新脚本' }}
+            </button>
           </div>
         </div>
 
@@ -139,5 +153,26 @@ const {
         </div>
       </div>
     </article>
+
+    <div v-if="showActionOutputModal" class="modal-overlay" @click.self="closeActionOutputModal">
+      <section class="modal-card modal-wide">
+        <header class="modal-header">
+          <h3>操作实时输出</h3>
+        </header>
+
+        <p
+          v-if="actionLiveStatus"
+          :class="actionLiveStatus.includes('完成') ? 'ok-text' : 'muted'"
+        >
+          状态：{{ actionLiveStatus }}
+        </p>
+        <p v-if="actionError" class="error-text">{{ actionError }}</p>
+        <pre class="log-output">{{ actionLiveOutput || '等待输出...' }}</pre>
+
+        <footer class="panel-actions">
+          <button class="btn" @click="closeActionOutputModal">关闭</button>
+        </footer>
+      </section>
+    </div>
   </section>
 </template>

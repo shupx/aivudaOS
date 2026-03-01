@@ -3,13 +3,27 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from core.paths import OS_LOG_DIR
 
 
 class ScriptHookError(Exception):
     """Raised when a lifecycle script hook fails."""
+
+    def __init__(self, message: str, output: str = "") -> None:
+        super().__init__(message)
+        self.output = output
+
+
+@dataclass
+class ScriptHookRunResult:
+    hook_name: str
+    script_path: str
+    exit_code: int
+    output: str
 
 
 class ScriptHookRunner:
@@ -25,12 +39,15 @@ class ScriptHookRunner:
         hook_name: str,
         script_path: str,
         root_dir: Path,
-    ) -> None:
+        on_output: Callable[[str], None] | None = None,
+    ) -> ScriptHookRunResult:
         script = self._resolve_script(script_path, root_dir)
         self._ensure_executable(script)
 
         OS_LOG_DIR.mkdir(parents=True, exist_ok=True)
         started_at = int(time.time())
+
+        output_lines: list[str] = []
 
         with self._log_path.open("ab") as log_file:
             header = (
@@ -42,22 +59,41 @@ class ScriptHookRunner:
             proc = subprocess.Popen(
                 [str(script)],
                 cwd=str(root_dir),
-                stdout=log_file,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=os.environ.copy(),
+                text=True,
+                bufsize=1,
             )
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                output_lines.append(line)
+                log_file.write(line.encode("utf-8", errors="replace"))
+                log_file.flush()
+                if on_output:
+                    on_output(line.rstrip("\n"))
             code = proc.wait()
+            output = "".join(output_lines)
 
             ended_at = int(time.time())
             footer = (
                 f"[{ended_at}] [{app_id}] [{hook_name}] exit_code={code}\n"
             )
             log_file.write(footer.encode("utf-8", errors="replace"))
+            log_file.flush()
 
         if code != 0:
             raise ScriptHookError(
-                f"脚本执行失败: hook={hook_name}, script={script_path}, exit_code={code}"
+                f"脚本执行失败: hook={hook_name}, script={script_path}, exit_code={code}",
+                output=output,
             )
+
+        return ScriptHookRunResult(
+            hook_name=hook_name,
+            script_path=script_path,
+            exit_code=code,
+            output=output,
+        )
 
     @staticmethod
     def _resolve_script(script_path: str, root_dir: Path) -> Path:

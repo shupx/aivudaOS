@@ -1,4 +1,4 @@
-import { request } from './api'
+import { buildAuthUrl, request } from './api'
 
 export async function fetchInstalledApps() {
   const data = await request('/api/apps/installed', { auth: true })
@@ -70,6 +70,14 @@ export async function upgradeAppPackage(appId, file) {
   })
 }
 
+export async function updateAppVersion(appId, version) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/update_version`, {
+    method: 'POST',
+    body: { version },
+    auth: true,
+  })
+}
+
 export async function uninstallApp(appId, { version = null, purge = false } = {}) {
   return request(`/api/apps/${encodeURIComponent(appId)}/uninstall`, {
     method: 'POST',
@@ -79,4 +87,54 @@ export async function uninstallApp(appId, { version = null, purge = false } = {}
     },
     auth: true,
   })
+}
+
+export function subscribeAppOperationEvents(
+  operationId,
+  {
+    onEvent,
+    onError,
+    onOpen,
+  } = {},
+) {
+  const url = buildAuthUrl(`/api/apps/operations/${encodeURIComponent(operationId)}/events`)
+  const es = new EventSource(url)
+
+  const forward = (event) => {
+    try {
+      const payload = event?.data ? JSON.parse(event.data) : {}
+      if (onEvent) {
+        onEvent(payload)
+      }
+    } catch (err) {
+      if (onError) {
+        onError(err)
+      }
+    }
+  }
+
+  es.onopen = () => {
+    if (onOpen) {
+      onOpen()
+    }
+  }
+
+  es.onerror = () => {
+    if (onError) {
+      onError(new Error('实时连接异常'))
+    }
+  }
+
+  es.onmessage = forward
+  es.addEventListener('status', forward)
+  es.addEventListener('log', forward)
+  es.addEventListener('error', forward)
+  es.addEventListener('completed', forward)
+  es.addEventListener('heartbeat', forward)
+
+  return {
+    close() {
+      es.close()
+    },
+  }
 }

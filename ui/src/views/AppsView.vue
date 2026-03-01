@@ -13,6 +13,8 @@ const {
   showUploadModal,
   uploadBusy,
   uploadError,
+  uploadStatus,
+  uploadOutput,
   uploadFileName,
   openUploadModal,
   closeUploadModal,
@@ -68,6 +70,13 @@ const {
         </div>
 
         <p v-if="uploadError" class="error-text">{{ uploadError }}</p>
+        <p
+          v-if="uploadStatus"
+          :class="uploadStatus.includes('完成') ? 'ok-text' : 'muted'"
+        >
+          状态：{{ uploadStatus }}
+        </p>
+        <pre v-if="uploadOutput" class="log-output small">{{ uploadOutput }}</pre>
 
         <footer class="panel-actions">
           <button class="btn" :disabled="uploadBusy" @click="closeUploadModal">取消</button>
@@ -77,5 +86,6 @@ const {
         </footer>
       </section>
     </div>
+
   </section>
 </template>

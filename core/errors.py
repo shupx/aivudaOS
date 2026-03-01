@@ -29,6 +29,10 @@ class AppRuntimeError(AivudaError):
     """Runtime operation (start/stop) failed."""
 
 
+class AppOperationConflictError(AivudaError):
+    """Another operation for the same app is already running."""
+
+
 class InvalidConfigError(AivudaError):
     """Config validation failed."""
 

@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -36,7 +36,12 @@ class InstallerService:
     #  Local upload install (primary flow)
     # ------------------------------------------------------------------ #
 
-    def install_from_upload(self, file_data: bytes, filename: str) -> dict[str, Any]:
+    def install_from_upload(
+        self,
+        file_data: bytes,
+        filename: str,
+        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         """Install an app from an uploaded package file (.tar.gz / .zip).
 
         Package structure:
@@ -54,7 +59,13 @@ class InstallerService:
             default_config: {}
             config_schema: null
         """
+
+        def emit(event_type: str, **payload: Any) -> None:
+            if event_cb:
+                event_cb(event_type, payload)
+
         UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        emit("status", phase="prepare", status="running", message="准备安装")
 
         with tempfile.TemporaryDirectory(dir=str(UPLOAD_TEMP_DIR)) as tmpdir_str:
             tmpdir = Path(tmpdir_str)
@@ -64,6 +75,7 @@ class InstallerService:
             # Extract archive
             extract_dir = tmpdir / "extracted"
             extract_dir.mkdir()
+            emit("status", phase="extract", status="running", message="解压安装包")
             try:
                 shutil.unpack_archive(str(pkg_file), str(extract_dir))
             except (shutil.ReadError, ValueError) as exc:
@@ -86,20 +98,43 @@ class InstallerService:
 
             manifest = AppManifest.from_dict(app_id, manifest_raw)
             version = manifest.version
+            emit(
+                "status",
+                phase="manifest",
+                status="running",
+                message="读取 manifest",
+                app_id=app_id,
+                version=version,
+            )
 
             content_root = manifest_path.parent
             if manifest.pre_install:
+                emit(
+                    "status",
+                    phase="pre_install",
+                    status="running",
+                    message="执行 pre_install",
+                    app_id=app_id,
+                )
                 try:
                     self._script_hooks.run(
                         app_id=app_id,
                         hook_name="pre_install",
                         script_path=manifest.pre_install,
                         root_dir=content_root,
+                        on_output=lambda line: emit(
+                            "log",
+                            phase="pre_install",
+                            hook="pre_install",
+                            line=line,
+                            app_id=app_id,
+                        ),
                     )
                 except ScriptHookError as exc:
                     raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
 
             # Prepare version directory
+            emit("status", phase="install", status="running", message="写入版本目录", app_id=app_id)
             install_path = self._versioning.prepare_version_dir(app_id, version)
 
             # Copy all files from content root to install path
@@ -114,12 +149,16 @@ class InstallerService:
 
             # Record in database
             self._record_installation(app_id, version, install_path, manifest)
+            emit("status", phase="db", status="running", message="写入数据库", app_id=app_id)
 
             # Initialize per-app config
             self._config.init_app_config(app_id, manifest.default_config)
 
             # Activate this version
             self._versioning.activate_version(app_id, version)
+            emit("status", phase="activate", status="running", message="激活版本", app_id=app_id)
+
+        emit("status", phase="completed", status="completed", message="安装完成", app_id=app_id)
 
         return {
             "ok": True,

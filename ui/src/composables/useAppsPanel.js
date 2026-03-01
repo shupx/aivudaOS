@@ -4,6 +4,7 @@ import {
   fetchAppStatus,
   fetchInstalledApps,
   setAutostart,
+  subscribeAppOperationEvents,
   startApp,
   stopApp,
   uploadAppPackage,
@@ -114,6 +115,8 @@ export function useAppsPanel() {
   const showUploadModal = ref(false)
   const uploadBusy = ref(false)
   const uploadError = ref('')
+  const uploadStatus = ref('')
+  const uploadOutput = ref('')
   const uploadFile = ref(null)
   const uploadFileName = ref('')
 
@@ -126,6 +129,8 @@ export function useAppsPanel() {
     if (uploadBusy.value) return
     showUploadModal.value = false
     uploadError.value = ''
+    uploadStatus.value = ''
+    uploadOutput.value = ''
     uploadFile.value = null
     uploadFileName.value = ''
   }
@@ -141,15 +146,67 @@ export function useAppsPanel() {
     if (!uploadFile.value || uploadBusy.value) return
     uploadBusy.value = true
     uploadError.value = ''
+    uploadStatus.value = '任务已提交'
+    uploadOutput.value = ''
     try {
-      await uploadAppPackage(uploadFile.value)
+      const operation = await uploadAppPackage(uploadFile.value)
+      await waitForOperation(operation.operation_id)
       await refresh()
-      closeUploadModal()
+      uploadStatus.value = '安装完成'
+      uploadFile.value = null
+      uploadFileName.value = ''
     } catch (err) {
       uploadError.value = String(err?.message || err || '上传失败')
     } finally {
       uploadBusy.value = false
     }
+  }
+
+  function appendUploadLine(line) {
+    if (!line) return
+    uploadOutput.value += `${line}\n`
+    if (uploadOutput.value.length > 200000) {
+      uploadOutput.value = uploadOutput.value.slice(-120000)
+    }
+  }
+
+  function waitForOperation(operationId) {
+    return new Promise((resolve, reject) => {
+      let settled = false
+      const subscription = subscribeAppOperationEvents(operationId, {
+        onEvent(event) {
+          if (!event || typeof event !== 'object') return
+
+          if (event.type === 'status') {
+            uploadStatus.value = event.message || event.phase || event.status || uploadStatus.value
+          }
+          if (event.type === 'log') {
+            appendUploadLine(event.line || '')
+          }
+          if (event.type === 'error') {
+            appendUploadLine(event.message || '执行失败')
+            uploadError.value = event.message || '执行失败'
+          }
+          if (event.type === 'completed') {
+            if (settled) return
+            settled = true
+            subscription.close()
+            if (event.status === 'completed') {
+              uploadStatus.value = '安装完成'
+              resolve(event.result || {})
+            } else {
+              reject(new Error(event.error || event.message || '安装失败'))
+            }
+          }
+        },
+        onError(err) {
+          if (settled) return
+          settled = true
+          subscription.close()
+          reject(err)
+        },
+      })
+    })
   }
 
   onMounted(() => {
@@ -172,6 +229,8 @@ export function useAppsPanel() {
     showUploadModal,
     uploadBusy,
     uploadError,
+    uploadStatus,
+    uploadOutput,
     uploadFileName,
     openUploadModal,
     closeUploadModal,

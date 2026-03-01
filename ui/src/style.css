@@ -275,6 +275,10 @@ input {
   gap: 12px;
 }
 
+.modal-card.modal-wide {
+  width: min(900px, 100%);
+}
+
 .modal-header h3 {
   margin: 0;
   font-size: 17px;

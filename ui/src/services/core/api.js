@@ -9,6 +9,10 @@ function buildUrl(path, auth) {
   return `${raw}${separator}token=${token}`
 }
 
+export function buildAuthUrl(path) {
+  return buildUrl(path, true)
+}
+
 export async function request(path, { method = 'GET', body, auth = false } = {}) {
   const headers = {}
   const options = { method, headers }

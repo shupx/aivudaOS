@@ -4,8 +4,10 @@ import { useAppsPanel } from './useAppsPanel'
 import {
   fetchAppLogs,
   fetchAppVersions,
+  subscribeAppOperationEvents,
   switchAppVersion,
   uninstallApp,
+  updateAppVersion,
   upgradeAppPackage,
 } from '../services/core/apps'
 
@@ -36,6 +38,9 @@ export function useAppDetailPage() {
   const actionBusy = ref(false)
   const actionError = ref('')
   const actionMessage = ref('')
+  const actionLiveStatus = ref('')
+  const actionLiveOutput = ref('')
+  const showActionOutputModal = ref(false)
 
   const versions = ref([])
   const selectedVersion = ref('')
@@ -64,6 +69,58 @@ export function useAppDetailPage() {
   function clearActionStatus() {
     actionError.value = ''
     actionMessage.value = ''
+    actionLiveStatus.value = ''
+    actionLiveOutput.value = ''
+  }
+
+  function closeActionOutputModal() {
+    showActionOutputModal.value = false
+  }
+
+  function appendActionLine(line) {
+    if (!line) return
+    actionLiveOutput.value += `${line}\n`
+    if (actionLiveOutput.value.length > 250000) {
+      actionLiveOutput.value = actionLiveOutput.value.slice(-150000)
+    }
+  }
+
+  function waitForOperation(operationId) {
+    return new Promise((resolve, reject) => {
+      let settled = false
+      const subscription = subscribeAppOperationEvents(operationId, {
+        onEvent(event) {
+          if (!event || typeof event !== 'object') return
+
+          if (event.type === 'status') {
+            actionLiveStatus.value = event.message || event.phase || event.status || actionLiveStatus.value
+          }
+          if (event.type === 'log') {
+            appendActionLine(event.line || '')
+          }
+          if (event.type === 'error') {
+            appendActionLine(event.message || '执行失败')
+            actionError.value = event.message || '执行失败'
+          }
+          if (event.type === 'completed') {
+            if (settled) return
+            settled = true
+            subscription.close()
+            if (event.status === 'completed') {
+              resolve(event.result || {})
+            } else {
+              reject(new Error(event.error || event.message || '操作失败'))
+            }
+          }
+        },
+        onError(err) {
+          if (settled) return
+          settled = true
+          subscription.close()
+          reject(err)
+        },
+      })
+    })
   }
 
   async function loadVersions(appId) {
@@ -183,11 +240,14 @@ export function useAppDetailPage() {
 
     actionBusy.value = true
     clearActionStatus()
+    actionLiveStatus.value = '任务已提交'
+    showActionOutputModal.value = true
     try {
-      await uninstallApp(app.value.app_id, {
+      const operation = await uninstallApp(app.value.app_id, {
         version: uninstallVersion,
         purge: uninstallPurge.value,
       })
+      await waitForOperation(operation.operation_id)
       await refresh()
       if (uninstallVersion) {
         await loadVersions(app.value.app_id)
@@ -197,6 +257,23 @@ export function useAppDetailPage() {
       }
     } catch (err) {
       actionError.value = String(err?.message || err || '卸载失败')
+    } finally {
+      actionBusy.value = false
+    }
+  }
+
+  async function runUpdateVersionScript() {
+    if (!app.value || !selectedVersion.value) return
+    actionBusy.value = true
+    clearActionStatus()
+    actionLiveStatus.value = '任务已提交'
+    showActionOutputModal.value = true
+    try {
+      const operation = await updateAppVersion(app.value.app_id, selectedVersion.value)
+      await waitForOperation(operation.operation_id)
+      actionMessage.value = '更新脚本执行成功'
+    } catch (err) {
+      actionError.value = String(err?.message || err || '执行更新脚本失败')
     } finally {
       actionBusy.value = false
     }
@@ -287,6 +364,10 @@ export function useAppDetailPage() {
     actionBusy,
     actionError,
     actionMessage,
+    actionLiveStatus,
+    actionLiveOutput,
+    showActionOutputModal,
+    closeActionOutputModal,
     versions,
     selectedVersion,
     switchWithRestart,
@@ -295,6 +376,7 @@ export function useAppDetailPage() {
     selectedFileName,
     canUpgrade,
     runUpgrade,
+    runUpdateVersionScript,
     runSwitchVersion,
     uninstallVersionOnly,
     uninstallPurge,

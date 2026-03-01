@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 from core.auth.models import SessionInfo
 from core.auth.service import AuthService
 from core.db.connection import db_conn
 from core.errors import (
+    AppOperationConflictError,
     AppNotInstalledError,
     AppRuntimeError,
     AuthenticationError,
@@ -17,6 +21,7 @@ from core.errors import (
     PackageFormatError,
 )
 from gateway.deps import (
+    get_app_operation_manager,
     get_auth_service,
     get_config_service,
     get_installer_service,
@@ -42,12 +47,35 @@ def _require_auth(token: str) -> SessionInfo:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+def _sse_event(event: str, payload: dict[str, Any]) -> str:
+    body = json.dumps(payload, ensure_ascii=False)
+    return f"event: {event}\ndata: {body}\n\n"
+
+
+def _spawn_operation(
+    operation_id: str,
+    task: Any,
+) -> None:
+    operations = get_app_operation_manager()
+
+    def runner() -> None:
+        operations.mark_running(operation_id)
+        try:
+            result = task()
+            operations.mark_completed(operation_id, result)
+        except Exception as exc:
+            operations.mark_failed(operation_id, str(exc))
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+
+
 # ================================================================== #
 #  Upload & Install (primary flow — local package upload)
 # ================================================================== #
 
 
-@router.post("/upload")
+@router.post("/upload", status_code=202)
 async def upload_app(
     file: UploadFile = File(...),
     token: str = "",
@@ -58,15 +86,36 @@ async def upload_app(
     deep) describing the app metadata, runtime, entrypoint, etc.
     """
     _require_auth(token)
+    operations = get_app_operation_manager()
     installer = get_installer_service()
     file_data = await file.read()
     filename = file.filename or "package.tar.gz"
-    try:
-        return installer.install_from_upload(file_data, filename)
-    except PackageFormatError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"安装失败: {e}")
+
+    record = operations.start_operation("upload", app_id=None)
+
+    def emit(event_type: str, payload: dict[str, Any]) -> None:
+        app_id = payload.get("app_id")
+        if app_id:
+            operations.bind_app_id(record.operation_id, str(app_id))
+        operations.publish(record.operation_id, event_type, **payload)
+
+    def task() -> dict[str, Any]:
+        try:
+            return installer.install_from_upload(
+                file_data,
+                filename,
+                event_cb=emit,
+            )
+        except PackageFormatError as exc:
+            raise AppRuntimeError(str(exc)) from exc
+
+    _spawn_operation(record.operation_id, task)
+    return {
+        "ok": True,
+        "operation_id": record.operation_id,
+        "status": "queued",
+        "operation_type": "upload",
+    }
 
 
 # ================================================================== #
@@ -198,20 +247,37 @@ async def switch_version(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{app_id}/update_version")
+@router.post("/{app_id}/update_version", status_code=202)
 async def update_version(
     app_id: str, payload: AppUpdateVersionRequest, token: str
 ) -> dict[str, Any]:
     _require_auth(token)
+    operations = get_app_operation_manager()
     runtime = get_runtime_service()
+
     try:
-        return runtime.update_version(app_id, payload.version)
-    except AppNotInstalledError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        record = operations.start_operation("update_version", app_id=app_id)
+    except AppOperationConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    def emit(event_type: str, event_payload: dict[str, Any]) -> None:
+        operations.publish(record.operation_id, event_type, **event_payload)
+
+    def task() -> dict[str, Any]:
+        return runtime.update_version(
+            app_id,
+            payload.version,
+            event_cb=emit,
+        )
+
+    _spawn_operation(record.operation_id, task)
+    return {
+        "ok": True,
+        "operation_id": record.operation_id,
+        "status": "queued",
+        "operation_type": "update_version",
+        "app_id": app_id,
+    }
 
 
 @router.post("/{app_id}/upgrade")
@@ -261,18 +327,94 @@ async def upgrade_app(
 # ================================================================== #
 
 
-@router.post("/{app_id}/uninstall")
+@router.post("/{app_id}/uninstall", status_code=202)
 async def uninstall_app(
     app_id: str, payload: AppUninstallRequest, token: str
 ) -> dict[str, Any]:
     _require_auth(token)
+    operations = get_app_operation_manager()
     runtime = get_runtime_service()
+
     try:
+        record = operations.start_operation("uninstall", app_id=app_id)
+    except AppOperationConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    def emit(event_type: str, event_payload: dict[str, Any]) -> None:
+        operations.publish(record.operation_id, event_type, **event_payload)
+
+    def task() -> dict[str, Any]:
         return runtime.uninstall(
-            app_id, version=payload.version, purge=payload.purge
+            app_id,
+            version=payload.version,
+            purge=payload.purge,
+            event_cb=emit,
         )
-    except AppNotInstalledError as e:
+
+    _spawn_operation(record.operation_id, task)
+    return {
+        "ok": True,
+        "operation_id": record.operation_id,
+        "status": "queued",
+        "operation_type": "uninstall",
+        "app_id": app_id,
+    }
+
+
+@router.get("/operations/{operation_id}")
+async def get_operation(operation_id: str, token: str) -> dict[str, Any]:
+    _require_auth(token)
+    operations = get_app_operation_manager()
+    try:
+        return operations.get_operation(operation_id)
+    except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/operations/{operation_id}/events")
+async def stream_operation_events(
+    operation_id: str,
+    token: str,
+) -> StreamingResponse:
+    _require_auth(token)
+    operations = get_app_operation_manager()
+    try:
+        operations.get_operation(operation_id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    def event_iter() -> Any:
+        seq = 0
+        while True:
+            events, done = operations.wait_events(operation_id, seq, timeout=15.0)
+            if not events:
+                heartbeat = {
+                    "operation_id": operation_id,
+                    "type": "heartbeat",
+                    "ts": int(time.time()),
+                }
+                yield _sse_event("heartbeat", heartbeat)
+                if done:
+                    break
+                continue
+
+            for event in events:
+                seq = int(event.get("seq", seq))
+                event_name = str(event.get("type", "message"))
+                yield _sse_event(event_name, event)
+
+            if done:
+                break
+
+    return StreamingResponse(
+        event_iter(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ================================================================== #

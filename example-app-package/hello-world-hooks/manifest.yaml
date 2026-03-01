@@ -1,6 +1,6 @@
 app_id: hello-world-hooks
 name: Hello World Hooks
-version: 1.0.0
+version: 2.0.0
 description: 示例应用，演示 pre_install / pre_uninstall / update_version 脚本
 run:
   entrypoint: ./start.sh
