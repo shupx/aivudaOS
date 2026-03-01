@@ -229,7 +229,6 @@ class RuntimeService:
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
             try:
-                log_path.write_text("", encoding="utf-8")
                 self._systemd.write_unit(
                     app_id=app_id,
                     scope=scope,

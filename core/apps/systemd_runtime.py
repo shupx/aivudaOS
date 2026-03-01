@@ -59,6 +59,11 @@ class SystemdRuntimeBackend:
         unit_path.parent.mkdir(parents=True, exist_ok=True)
 
         exec_start = " ".join(shlex.quote(part) for part in command)
+        truncate_bin = shutil.which("truncate") or "/usr/bin/truncate"
+        exec_start_pre = " ".join(
+            shlex.quote(part)
+            for part in [truncate_bin, "-s", "0", str(log_path)]
+        )
         escaped_workdir = shlex.quote(str(working_dir))
         escaped_log = shlex.quote(str(log_path))
         wanted_by = "multi-user.target" if scope == "system" else "default.target"
@@ -72,6 +77,7 @@ class SystemdRuntimeBackend:
                 "[Service]",
                 "Type=simple",
                 f"WorkingDirectory={escaped_workdir}",
+                f"ExecStartPre={exec_start_pre}",
                 f"ExecStart={exec_start}",
                 f"StandardOutput=append:{escaped_log}",
                 f"StandardError=append:{escaped_log}",
