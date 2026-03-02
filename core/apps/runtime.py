@@ -569,6 +569,7 @@ class RuntimeService:
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
     def start_autostart_apps(self) -> dict[str, Any]:
+        # only for popen mode, systemd will manage autostart itself and we skip replay to avoid conflicts
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
             return {

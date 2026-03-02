@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AivudaOS", version="1.0.0")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # app.add_middleware(
+    #     CORSMiddleware,
+    #     allow_origins=["*"], # dangerous in production, should be restricted to specific origins
+    #     allow_credentials=False, # if true, also need to specify allowed origins and cannot be "*"
+    #     allow_methods=["*"],
+    #     allow_headers=["*"],
+    # )
 
     app.include_router(auth.router)
     app.include_router(config.router)
@@ -34,7 +34,7 @@ def create_app() -> FastAPI:
         ensure_dirs()
         init_db()
         runtime = get_runtime_service()
-        summary = runtime.start_autostart_apps()
+        summary = runtime.start_autostart_apps() # only for popen mode, systemd will manage autostart itself and we skip replay to avoid conflicts
         mode = summary.get("mode", "popen")
         if mode == "systemd":
             logger.info("Autostart managed by systemd; startup replay skipped")
@@ -44,7 +44,7 @@ def create_app() -> FastAPI:
             logger.info("Autostart started apps: %s", summary["started"])
 
     if UI_DIST_DIR.exists():
-        # 生产环境直接提供静态文件，可以去掉，生产环境建议使用专门的静态文件服务器（如 nginx）来提供 UI 文件
+        # 开发环境直接提供静态文件(使得访问后端ip:port也能打开前端网页)，可以去掉，生产环境建议使用专门的静态文件服务器（如 nginx）来提供 UI 文件
         app.mount(
             "/",
             StaticFiles(directory=str(UI_DIST_DIR), html=True),
