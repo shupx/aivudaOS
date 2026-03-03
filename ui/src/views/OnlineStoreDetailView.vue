@@ -63,7 +63,7 @@ const {
 
     <div class="store-version-grid">
       <article class="action-block" v-for="version in versions" :key="version.version">
-        <h4>v{{ version.version }}</h4>
+        <h4>{{ version.version }}</h4>
         <p class="muted">{{ version.description || t('store.noDescription') }}</p>
         <p class="muted">{{ t('store.updatedAt') }}: {{ version.updated_at_display || '-' }}</p>
         <p class="muted">{{ t('store.size') }}: {{ version.artifact_size_display || '0 kB' }}</p>

@@ -31,7 +31,7 @@ function goDetail() {
         <img class="app-icon" src="/app-default-icon.png" alt="store app icon">
         <h3>{{ title }}</h3>
       </div>
-      <span class="app-version">v{{ item.version || '-' }}</span>
+      <span class="app-version">{{ item.version || '-' }}</span>
     </header>
 
     <div class="app-meta">

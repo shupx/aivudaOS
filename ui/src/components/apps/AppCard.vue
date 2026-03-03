@@ -68,7 +68,7 @@ function onIconError() {
         >
         <h3>{{ app.name || app.app_id }}</h3>
       </div>
-      <span class="app-version">v{{ app.active_version || '-' }}</span>
+      <span class="app-version">{{ app.active_version || '-' }}</span>
     </header>
 
     <div class="app-meta">
