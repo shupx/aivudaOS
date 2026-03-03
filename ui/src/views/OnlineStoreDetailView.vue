@@ -1,5 +1,6 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
+import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { useOnlineStoreDetailPage } from '../composables/useOnlineStoreDetailPage'
 
 const { t } = useI18n()
@@ -12,13 +13,25 @@ const {
   actionMessage,
   appInfo,
   versions,
-  downloadingByVersion,
-  installingByVersion,
+  actingByVersion,
+  localDownloadingByVersion,
+  getDownloadProgress,
   load,
-  downloadVersion,
-  installVersion,
+  downloadAndInstallVersion,
+  downloadPackageToLocal,
   backToStore,
-  isVersionDownloaded,
+  showUploadModal,
+  uploadBusy,
+  uploadError,
+  uploadStatus,
+  uploadStatusDone,
+  uploadOutput,
+  uploadFileName,
+  uploadHint,
+  uploadShowFilePicker,
+  closeUploadModal,
+  onUploadFileChange,
+  submitUpload,
 } = useOnlineStoreDetailPage()
 </script>
 
@@ -52,30 +65,53 @@ const {
       <article class="action-block" v-for="version in versions" :key="version.version">
         <h4>v{{ version.version }}</h4>
         <p class="muted">{{ version.description || t('store.noDescription') }}</p>
-        <p class="muted">{{ t('store.updatedAt') }}: {{ version.updated_at || '-' }}</p>
-        <p class="muted">{{ t('store.size') }}: {{ version.artifact_size || 0 }}</p>
+        <p class="muted">{{ t('store.updatedAt') }}: {{ version.updated_at_display || '-' }}</p>
+        <p class="muted">{{ t('store.size') }}: {{ version.artifact_size_display || '0 kB' }}</p>
 
         <div class="panel-actions wrap">
           <button
-            class="btn"
-            :disabled="Boolean(downloadingByVersion[version.version])"
-            @click="downloadVersion(version.version)"
+            class="btn primary"
+            :disabled="Boolean(actingByVersion[version.version])"
+            @click="downloadAndInstallVersion(version.version)"
           >
-            {{ downloadingByVersion[version.version] ? t('store.downloading') : t('store.download') }}
+            {{ actingByVersion[version.version] ? t('common.processing') : t('store.downloadAndInstall') }}
           </button>
           <button
-            class="btn primary"
-            :disabled="Boolean(installingByVersion[version.version]) || !isVersionDownloaded(version.version)"
-            @click="installVersion(version.version)"
+            class="btn"
+            :title="t('store.downloadLocalTooltip')"
+            :aria-label="t('store.downloadLocalTooltip')"
+            :disabled="Boolean(localDownloadingByVersion[version.version])"
+            @click="downloadPackageToLocal(version.version)"
           >
-            {{ installingByVersion[version.version] ? t('store.installing') : t('store.install') }}
+            {{ localDownloadingByVersion[version.version] ? t('common.processing') : '⬇' }}
           </button>
         </div>
 
-        <p class="muted" v-if="isVersionDownloaded(version.version)">
-          {{ t('store.downloadedTag') }}
-        </p>
+        <div v-if="getDownloadProgress(version.version) > 0" class="download-progress">
+          <div class="download-progress-track">
+            <div
+              class="download-progress-bar"
+              :style="{ width: `${getDownloadProgress(version.version)}%` }"
+            ></div>
+          </div>
+          <p class="muted">{{ t('store.downloadProgress', { percent: getDownloadProgress(version.version) }) }}</p>
+        </div>
       </article>
     </div>
+
+    <UploadInstallModal
+      :visible="showUploadModal"
+      :busy="uploadBusy"
+      :error="uploadError"
+      :status="uploadStatus"
+      :status-done="uploadStatusDone"
+      :output="uploadOutput"
+      :file-name="uploadFileName"
+      :hint="uploadHint"
+      :show-file-picker="uploadShowFilePicker"
+      @close="closeUploadModal"
+      @file-change="onUploadFileChange"
+      @submit="submitUpload"
+    />
   </section>
 </template>

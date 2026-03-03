@@ -37,7 +37,7 @@ function goDetail() {
     <div class="app-meta">
       <p><strong>{{ $t('store.appId') }}:</strong> {{ item.app_id }}</p>
       <p><strong>{{ $t('store.description') }}:</strong> {{ description || $t('store.noDescription') }}</p>
-      <p><strong>{{ $t('store.updatedAt') }}:</strong> {{ item.updated_at || '-' }}</p>
+      <p><strong>{{ $t('store.updatedAt') }}:</strong> {{ item.updated_at_display || '-' }}</p>
     </div>
   </article>
 </template>

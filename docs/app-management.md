@@ -205,6 +205,13 @@ aivudaOS/
 4. 点击“下载到本机”后，前端调用 `.../download-url` 与 `.../download`，将安装包下载到浏览器本机。
 5. 点击“安装到 AivudaOS”后，前端把该下载文件通过 `POST /api/apps/upload` 上传给本机 AivudaOS，安装流程与手动上传一致。
 
+当前在线商店页已改为单按钮“下载并安装到 AivudaOS”流程：
+
+1. 先触发浏览器原生下载，保存到用户指定的本机位置（由浏览器下载设置决定）。
+2. 随后询问是否立即安装。
+3. 若确认，打开与“手动上传新应用安装包”完全复用的上传安装弹窗。
+4. 用户在弹窗中选择刚下载的本机文件并提交安装，后端仍走 `POST /api/apps/upload` 同一流程。
+
 ### 实时操作事件（SSE）
 
 `POST /api/apps/upload`、`POST /api/apps/{app_id}/uninstall`、`POST /api/apps/{app_id}/update_this_version` 现在返回：

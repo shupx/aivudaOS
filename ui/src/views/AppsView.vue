@@ -1,8 +1,7 @@
 <script setup>
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
-import { useDomAppendLog } from '../composables/useDomAppendLog'
+import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { useAppsPanel } from '../composables/useAppsPanel'
 
 const { t } = useI18n()
@@ -22,21 +21,13 @@ const {
   uploadStatusDone,
   uploadOutput,
   uploadFileName,
+  uploadHint,
+  uploadShowFilePicker,
   openUploadModal,
   closeUploadModal,
   onUploadFileChange,
   submitUpload,
 } = useAppsPanel()
-
-const uploadLogPlaceholder = computed(() => t('apps.waitingOutput'))
-
-const {
-  logRef: uploadLogRef,
-  onLogScroll: onUploadLogScroll,
-} = useDomAppendLog(uploadOutput, {
-  visibleRef: showUploadModal,
-  placeholderRef: uploadLogPlaceholder,
-})
 </script>
 
 <template>
@@ -70,44 +61,20 @@ const {
       />
     </div>
 
-    <div v-if="showUploadModal" class="modal-overlay" @click.self="closeUploadModal">
-      <section class="modal-card">
-        <header class="modal-header">
-          <h3>{{ t('apps.uploadModalTitle') }}</h3>
-        </header>
-
-        <div class="field">
-          <label>{{ t('apps.packageFile') }}</label>
-          <input
-            class="file-input"
-            type="file"
-            accept=".tar.gz,.zip"
-            @change="onUploadFileChange($event.target.files)"
-          >
-          <p class="muted">{{ uploadFileName || t('apps.noFileSelected') }}</p>
-        </div>
-
-        <p v-if="uploadError" class="error-text">{{ uploadError }}</p>
-        <p
-          v-if="uploadStatus"
-          :class="uploadStatusDone ? 'ok-text' : 'muted'"
-        >
-          {{ t('common.status') }}：{{ uploadStatus }}
-        </p>
-        <pre
-          ref="uploadLogRef"
-          class="log-output small"
-          @scroll="onUploadLogScroll"
-        ></pre>
-
-        <footer class="panel-actions">
-          <button class="btn" :disabled="uploadBusy" @click="closeUploadModal">{{ t('common.cancel') }}</button>
-          <button class="btn primary" :disabled="uploadBusy || !uploadFileName" @click="submitUpload">
-            {{ uploadBusy ? t('apps.uploading') : t('apps.uploadAndInstall') }}
-          </button>
-        </footer>
-      </section>
-    </div>
+    <UploadInstallModal
+      :visible="showUploadModal"
+      :busy="uploadBusy"
+      :error="uploadError"
+      :status="uploadStatus"
+      :status-done="uploadStatusDone"
+      :output="uploadOutput"
+      :file-name="uploadFileName"
+      :hint="uploadHint"
+      :show-file-picker="uploadShowFilePicker"
+      @close="closeUploadModal"
+      @file-change="onUploadFileChange"
+      @submit="submitUpload"
+    />
 
   </section>
 </template>

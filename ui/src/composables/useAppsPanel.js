@@ -1,16 +1,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
 import i18n from '../i18n'
 import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy } from '../state/appState'
 import {
   fetchAppStatus,
   fetchInstalledApps,
   setAutostart,
-  subscribeAppOperationEvents,
   startApp,
   stopApp,
-  uploadAppPackage,
 } from '../services/core/apps'
+import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 
 let pollTimer = null
 
@@ -109,116 +107,16 @@ function stopPolling() {
 }
 
 export function useAppsPanel() {
-  const { t } = useI18n()
   const apps = computed(() => appState.apps)
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
 
-  const showUploadModal = ref(false)
-  const uploadBusy = ref(false)
-  const uploadError = ref('')
-  const uploadStatus = ref('')
-  const uploadStatusDone = ref(false)
-  const uploadOutput = ref('')
-  const uploadFile = ref(null)
-  const uploadFileName = ref('')
-
-  function openUploadModal() {
-    uploadError.value = ''
-    uploadStatusDone.value = false
-    showUploadModal.value = true
-  }
-
-  function closeUploadModal() {
-    if (uploadBusy.value) return
-    showUploadModal.value = false
-    uploadError.value = ''
-    uploadStatus.value = ''
-    uploadStatusDone.value = false
-    uploadOutput.value = ''
-    uploadFile.value = null
-    uploadFileName.value = ''
-  }
-
-  function onUploadFileChange(fileList) {
-    const file = fileList?.[0] || null
-    uploadFile.value = file
-    uploadFileName.value = file?.name || ''
-    uploadError.value = ''
-  }
-
-  async function submitUpload() {
-    if (!uploadFile.value || uploadBusy.value) return
-    uploadBusy.value = true
-    uploadError.value = ''
-    uploadStatus.value = t('apps.taskQueued')
-    uploadStatusDone.value = false
-    uploadOutput.value = ''
-    try {
-      const operation = await uploadAppPackage(uploadFile.value)
-      await waitForOperation(operation.operation_id)
+  const uploadModal = useAppUploadInstallModal({
+    async onInstalled() {
       await refresh()
-      uploadStatus.value = t('apps.installed')
-      uploadStatusDone.value = true
-      uploadFile.value = null
-      uploadFileName.value = ''
-    } catch (err) {
-      uploadError.value = String(err?.message || err || t('apps.uploadFailed'))
-    } finally {
-      uploadBusy.value = false
-    }
-  }
-
-  function appendUploadLine(line) {
-    if (!line) return
-    uploadOutput.value += `${line}\n`
-    if (uploadOutput.value.length > 200000) {
-      uploadOutput.value = uploadOutput.value.slice(-120000)
-    }
-  }
-
-  function waitForOperation(operationId) {
-    return new Promise((resolve, reject) => {
-      let settled = false
-      const subscription = subscribeAppOperationEvents(operationId, {
-        onEvent(event) {
-          if (!event || typeof event !== 'object') return
-
-          if (event.type === 'status') {
-            uploadStatus.value = event.message || event.phase || event.status || uploadStatus.value
-          }
-          if (event.type === 'log') {
-            appendUploadLine(event.line || '')
-          }
-          if (event.type === 'error') {
-            appendUploadLine(event.message || t('apps.operationFailed'))
-            uploadError.value = event.message || t('apps.operationFailed')
-            uploadStatusDone.value = false
-          }
-          if (event.type === 'completed') {
-            if (settled) return
-            settled = true
-            subscription.close()
-            if (event.status === 'completed') {
-              uploadStatus.value = t('apps.installed')
-              uploadStatusDone.value = true
-              resolve(event.result || {})
-            } else {
-              uploadStatusDone.value = false
-              reject(new Error(event.error || event.message || t('apps.installFailed')))
-            }
-          }
-        },
-        onError(err) {
-          if (settled) return
-          settled = true
-          subscription.close()
-          reject(err)
-        },
-      })
-    })
-  }
+    },
+  })
 
   onMounted(() => {
     refresh()
@@ -237,16 +135,6 @@ export function useAppsPanel() {
     refresh,
     toggleRunning,
     toggleAutostart,
-    showUploadModal,
-    uploadBusy,
-    uploadError,
-    uploadStatus,
-    uploadStatusDone,
-    uploadOutput,
-    uploadFileName,
-    openUploadModal,
-    closeUploadModal,
-    onUploadFileChange,
-    submitUpload,
+    ...uploadModal,
   }
 }

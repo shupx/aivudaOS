@@ -6,10 +6,11 @@ export async function fetchInstalledApps() {
   return data?.items || []
 }
 
-export async function uploadAppPackage(file) {
+export async function uploadAppPackage(file, { overwrite = false } = {}) {
   const form = new FormData()
   form.append('file', file)
-  return request('/api/apps/upload', {
+  const overwriteFlag = overwrite ? '1' : '0'
+  return request(`/api/apps/upload?overwrite=${overwriteFlag}`, {
     method: 'POST',
     body: form,
     auth: true,

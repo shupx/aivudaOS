@@ -6,9 +6,11 @@ import {
   saveAppStoreBaseUrl,
 } from '../services/core/config'
 import { fetchStoreIndex, normalizeStoreBaseUrl } from '../services/core/store'
+import { useStoreDisplayFormat } from './useStoreDisplayFormat'
 
 export function useOnlineStorePage() {
   const { t } = useI18n()
+  const { formatStoreUpdatedAt } = useStoreDisplayFormat()
 
   const loading = ref(false)
   const savingAddress = ref(false)
@@ -18,6 +20,12 @@ export function useOnlineStorePage() {
   const items = ref([])
 
   const hasItems = computed(() => items.value.length > 0)
+  const displayItems = computed(() => (
+    items.value.map((item) => ({
+      ...item,
+      updated_at_display: formatStoreUpdatedAt(item?.updated_at),
+    }))
+  ))
 
   async function load() {
     loading.value = true
@@ -67,6 +75,7 @@ export function useOnlineStorePage() {
     addressError,
     storeAddress,
     items,
+    displayItems,
     hasItems,
     load,
     saveAddress,

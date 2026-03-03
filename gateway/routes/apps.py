@@ -78,6 +78,7 @@ def _spawn_operation(
 @router.post("/upload", status_code=202)
 async def upload_app(
     file: UploadFile = File(...),
+    overwrite: bool = False,
     token: str = "",
 ) -> dict[str, Any]:
     """Upload an app package (.tar.gz / .zip) and install it.
@@ -104,6 +105,7 @@ async def upload_app(
             return installer.install_from_upload(
                 file_data,
                 filename,
+                overwrite=overwrite,
                 event_cb=emit,
             )
         except PackageFormatError as exc:

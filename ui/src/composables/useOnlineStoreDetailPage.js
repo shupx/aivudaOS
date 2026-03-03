@@ -2,11 +2,18 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { resolveAppStoreBaseUrl, fetchOsConfig } from '../services/core/config'
-import { downloadStorePackage, fetchStoreAppDetail } from '../services/core/store'
-import { subscribeAppOperationEvents, uploadAppPackage } from '../services/core/apps'
+import {
+  MAX_IN_MEMORY_INSTALL_BYTES,
+  downloadStorePackageByBrowser,
+  downloadStorePackageForInstall,
+  fetchStoreAppDetail,
+} from '../services/core/store'
+import { useAppUploadInstallModal } from './useAppUploadInstallModal'
+import { useStoreDisplayFormat } from './useStoreDisplayFormat'
 
 export function useOnlineStoreDetailPage() {
   const { t } = useI18n()
+  const { formatStoreUpdatedAt, formatStorePackageSize } = useStoreDisplayFormat()
   const route = useRoute()
   const router = useRouter()
 
@@ -20,20 +27,33 @@ export function useOnlineStoreDetailPage() {
   const appInfo = ref(null)
   const versions = ref([])
 
-  const downloadingByVersion = ref({})
-  const installingByVersion = ref({})
-  const downloadedFileByVersion = ref({})
+  const actingByVersion = ref({})
+  const localDownloadingByVersion = ref({})
+  const downloadProgressByVersion = ref({})
 
-  function setDownloading(version, busy) {
-    downloadingByVersion.value = {
-      ...downloadingByVersion.value,
+  const uploadModal = useAppUploadInstallModal({
+    async onInstalled() {
+      actionMessage.value = t('store.installCompleted')
+    },
+  })
+
+  function setActing(version, busy) {
+    actingByVersion.value = {
+      ...actingByVersion.value,
       [version]: Boolean(busy),
     }
   }
 
-  function setInstalling(version, busy) {
-    installingByVersion.value = {
-      ...installingByVersion.value,
+  function setDownloadProgress(version, percent) {
+    downloadProgressByVersion.value = {
+      ...downloadProgressByVersion.value,
+      [version]: Math.max(0, Math.min(100, Number(percent) || 0)),
+    }
+  }
+
+  function setLocalDownloading(version, busy) {
+    localDownloadingByVersion.value = {
+      ...localDownloadingByVersion.value,
       [version]: Boolean(busy),
     }
   }
@@ -51,7 +71,13 @@ export function useOnlineStoreDetailPage() {
       const detail = await fetchStoreAppDetail(baseUrl, appId.value)
       appInfo.value = detail?.app || null
       versions.value = Array.isArray(detail?.versions)
-        ? detail.versions.filter((item) => item?.status === 'published')
+        ? detail.versions
+          .filter((item) => item?.status === 'published')
+          .map((item) => ({
+            ...item,
+            updated_at_display: formatStoreUpdatedAt(item?.updated_at),
+            artifact_size_display: formatStorePackageSize(item?.artifact_size),
+          }))
         : []
     } catch (err) {
       error.value = String(err?.message || err || t('store.loadFailed'))
@@ -60,80 +86,73 @@ export function useOnlineStoreDetailPage() {
     }
   }
 
-  async function downloadVersion(version) {
-    if (!version || downloadingByVersion.value[version]) return
-    setDownloading(version, true)
+  async function downloadAndInstallVersion(version) {
+    if (!version || actingByVersion.value[version]) return
+    setActing(version, true)
     actionError.value = ''
     actionMessage.value = ''
     try {
-      const result = await downloadStorePackage(storeBaseUrl.value, appId.value, version)
-      downloadedFileByVersion.value = {
-        ...downloadedFileByVersion.value,
-        [version]: result.file,
+      const result = await downloadStorePackageForInstall(
+        storeBaseUrl.value,
+        appId.value,
+        version,
+        {
+          onProgress(progress) {
+            setDownloadProgress(version, progress.percent)
+          },
+        },
+      )
+
+      if (result.mode === 'auto') {
+        actionMessage.value = t('store.downloadPrepared', { version })
+        uploadModal.setUploadFile(result.file)
+        uploadModal.openUploadModal({
+          hint: t('store.installAutoSelected', { filename: result.filename }),
+          showFilePicker: false,
+        })
+        await Promise.resolve()
+        await uploadModal.submitUpload()
+      } else {
+        actionMessage.value = t('store.downloadTriggered', { version })
+        const sizeLimitMb = Math.floor(MAX_IN_MEMORY_INSTALL_BYTES / (1024 * 1024))
+        const shouldInstallNow = window.confirm(
+          t('store.installNowManualConfirm', { version, sizeLimitMb }),
+        )
+        if (shouldInstallNow) {
+          uploadModal.openUploadModal({
+            hint: t('store.installSelectDownloaded', { filename: result.filename }),
+          })
+        }
       }
-      actionMessage.value = t('store.downloadedReadyInstall', { version })
     } catch (err) {
       actionError.value = String(err?.message || err || t('store.downloadFailed'))
     } finally {
-      setDownloading(version, false)
+      setDownloadProgress(version, 0)
+      setActing(version, false)
     }
   }
 
-  function waitForOperation(operationId) {
-    return new Promise((resolve, reject) => {
-      let settled = false
-      const subscription = subscribeAppOperationEvents(operationId, {
-        onEvent(event) {
-          if (!event || typeof event !== 'object') return
-          if (event.type !== 'completed') return
-
-          if (settled) return
-          settled = true
-          subscription.close()
-          if (event.status === 'completed') {
-            resolve(event.result || {})
-          } else {
-            reject(new Error(event.error || event.message || t('store.installFailed')))
-          }
-        },
-        onError(err) {
-          if (settled) return
-          settled = true
-          subscription.close()
-          reject(err)
-        },
-      })
-    })
-  }
-
-  async function installVersion(version) {
-    if (!version || installingByVersion.value[version]) return
-    const file = downloadedFileByVersion.value[version]
-    if (!file) {
-      actionError.value = t('store.installNeedDownload')
-      return
-    }
-
-    setInstalling(version, true)
+  async function downloadPackageToLocal(version) {
+    if (!version || localDownloadingByVersion.value[version]) return
+    setLocalDownloading(version, true)
     actionError.value = ''
     actionMessage.value = ''
     try {
-      const operation = await uploadAppPackage(file)
-      await waitForOperation(operation.operation_id)
-      actionMessage.value = t('store.installSuccess', { version })
+      await downloadStorePackageByBrowser(storeBaseUrl.value, appId.value, version)
+      actionMessage.value = t('store.downloadTriggered', { version })
     } catch (err) {
-      actionError.value = String(err?.message || err || t('store.installFailed'))
+      actionError.value = String(err?.message || err || t('store.downloadFailed'))
     } finally {
-      setInstalling(version, false)
+      setLocalDownloading(version, false)
     }
+  }
+
+  function getDownloadProgress(version) {
+    return Number(downloadProgressByVersion.value[version] || 0)
   }
 
   function backToStore() {
     router.push('/dashboard/store')
-  }
-
-  function isVersionDownloaded(version) {
-    return Boolean(downloadedFileByVersion.value[version])
   }
 
   onMounted(() => {
@@ -148,12 +167,13 @@ export function useOnlineStoreDetailPage() {
     actionMessage,
     appInfo,
     versions,
-    downloadingByVersion,
-    installingByVersion,
+    actingByVersion,
+    localDownloadingByVersion,
+    getDownloadProgress,
     load,
-    downloadVersion,
-    installVersion,
+    downloadAndInstallVersion,
+    downloadPackageToLocal,
     backToStore,
-    isVersionDownloaded,
+    ...uploadModal,
   }
 }

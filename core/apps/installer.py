@@ -40,6 +40,7 @@ class InstallerService:
         self,
         file_data: bytes,
         filename: str,
+        overwrite: bool = False,
         event_cb: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         """Install an app from an uploaded package file (.tar.gz / .zip).
@@ -98,6 +99,12 @@ class InstallerService:
 
             manifest = AppManifest.from_dict(app_id, manifest_raw)
             version = manifest.version
+
+            existing_versions = self._versioning.list_versions(app_id)
+            if (version in existing_versions) and (not overwrite):
+                raise PackageFormatError(
+                    f"App version already installed: {app_id}@{version}"
+                )
             emit(
                 "status",
                 phase="manifest",

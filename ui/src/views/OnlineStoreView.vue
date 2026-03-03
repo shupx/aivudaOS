@@ -10,7 +10,7 @@ const {
   error,
   addressError,
   storeAddress,
-  items,
+  displayItems,
   hasItems,
   load,
   saveAddress,
@@ -53,7 +53,7 @@ const {
 
     <div class="apps-grid">
       <StoreAppCard
-        v-for="item in items"
+        v-for="item in displayItems"
         :key="`${item.app_id}:${item.version}`"
         :item="item"
       />
