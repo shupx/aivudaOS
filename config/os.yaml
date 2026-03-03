@@ -1,6 +1,7 @@
-_updated_at: 1772274526
+_updated_at: 1772516334
 _updated_by: admin
-_version: 3
+_version: 8
+appstore_base_url: http://127.0.0.1:9001
 failsafe_action: rtl
 max_altitude_m: 120
 port: 8000

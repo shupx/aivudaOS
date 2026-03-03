@@ -4,6 +4,8 @@
 
 AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和自启动。
 
+当前 UI 还支持“在线应用商店”入口：从 aivudaAppStore 的 `store` API 查看应用与版本，先下载安装包到浏览器本机，再一键上传到 AivudaOS 安装。
+
 前端 UI 支持 `zh-CN / en-US` 语言切换（Dashboard 左侧栏入口），并将选择持久化到本地存储。当前版本只对前端固定文案做国际化，后端返回的动态文本（如 SSE 日志、错误详情）按原文显示。
 
 ## 核心模块
@@ -194,6 +196,14 @@ aivudaOS/
 | PUT | `/api/apps/{app_id}/config` | 更新 App 配置 `{ "version": 1, "data": {...} }` |
 
 > 所有端点需要 `token` 参数进行身份验证。
+
+## 在线应用商店流程
+
+1. 在 UI 的“在线应用商店”页面设置 `appstore_base_url`（保存到 `config/os.yaml`）。
+2. 前端调用：`{appstore_base_url}/aivuda_app_store/store/index` 获取应用卡片列表。
+3. 点击应用后调用：`.../store/apps/{app_id}` 查看版本详情。
+4. 点击“下载到本机”后，前端调用 `.../download-url` 与 `.../download`，将安装包下载到浏览器本机。
+5. 点击“安装到 AivudaOS”后，前端把该下载文件通过 `POST /api/apps/upload` 上传给本机 AivudaOS，安装流程与手动上传一致。
 
 ### 实时操作事件（SSE）
 

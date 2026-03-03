@@ -418,6 +418,24 @@ input {
   gap: 12px;
 }
 
+.store-setting-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.store-address-input {
+  min-width: min(560px, 100%);
+}
+
+.store-version-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+
 .app-card {
   border: 1px solid #e2e8f0;
   border-radius: 12px;

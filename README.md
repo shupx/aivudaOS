@@ -108,6 +108,7 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 | `/status` | 会话状态 |
 | `/config` | OS 配置管理 |
 | `/apps` | 应用安装 / 版本管理 |
+| `/dashboard/store` | 在线应用商店（查看与下载/安装） |
 
 ## API 接口
 
@@ -138,3 +139,10 @@ curl -X POST http://localhost:8000/api/apps/repo/sync
 - `GET /api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
 - `GET  /api/apps/{app_id}/config` — 读取应用配置
 - `PUT  /api/apps/{app_id}/config` — 更新应用配置
+
+## 在线应用商店接入
+
+- UI 左侧菜单新增“在线应用商店”，位置在“应用菜单”下方。
+- 商店地址配置写入 `config/os.yaml` 的 `appstore_base_url`（通过 `GET/PUT /api/config` 读写）。
+- 前端按“商店地址 + /aivuda_app_store/store/...”拼接调用 store API（列表、详情、下载链接、下载文件）。
+- 下载流程：先下载应用包到用户浏览器本机；安装流程：再将该包按本地上传接口 `POST /api/apps/upload` 传给 AivudaOS 安装。

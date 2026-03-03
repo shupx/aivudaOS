@@ -9,9 +9,11 @@ const {
   sidebarCollapsed,
   isStatusRoute,
   isAppsRoute,
+  isStoreRoute,
   locale,
   goStatus,
   goApps,
+  goStore,
   toggleSidebar,
   doLogout,
   changeLocale,
@@ -45,6 +47,15 @@ const {
         >
           <span v-if="!sidebarCollapsed">{{ t('dashboard.appsMenu') }}</span>
           <span v-else>A</span>
+        </button>
+
+        <button
+          class="menu-btn"
+          :class="{ active: isStoreRoute }"
+          @click="goStore"
+        >
+          <span v-if="!sidebarCollapsed">{{ t('dashboard.onlineStore') }}</span>
+          <span v-else>O</span>
         </button>
       </nav>
 
