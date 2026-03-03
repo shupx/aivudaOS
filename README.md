@@ -58,16 +58,6 @@ PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --b
 
 Nginx 托管前端静态文件并反代 `/api`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
 
-## 远端应用仓库（aivudaAppStore）
-
-应用目录从远端仓库同步，仓库服务由 aivudaAppStore 提供（默认端口 `9001`）。
-
-启动后在 OS 管理界面点击「同步应用目录」，或调用：
-
-```bash
-curl -X POST http://localhost:8000/api/apps/repo/sync
-```
-
 ## App 运行模式（systemd / popen）
 
 应用生命周期支持两种后端：

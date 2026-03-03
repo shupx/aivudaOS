@@ -1,6 +1,6 @@
-_updated_at: 1772526456
+_updated_at: 1772534639
 _updated_by: admin
-_version: 9
+_version: 19
 appstore_base_url: http://127.0.0.1:9001
 failsafe_action: rtl
 max_altitude_m: 120
