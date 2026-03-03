@@ -1,11 +1,7 @@
-import { useI18n } from 'vue-i18n'
-
 const KB = 1024
 const MB = 1024 * 1024
 
 export function useStoreDisplayFormat() {
-  const { locale } = useI18n()
-
   function parseToDate(value) {
     if (value === null || value === undefined || value === '') return null
 
@@ -35,16 +31,13 @@ export function useStoreDisplayFormat() {
       return String(value)
     }
 
-    const currentLocale = locale.value === 'zh-CN' ? 'zh-CN' : 'en-US'
-    return new Intl.DateTimeFormat(currentLocale, {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(date)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hour = String(date.getHours()).padStart(2, '0')
+    const minute = String(date.getMinutes()).padStart(2, '0')
+    const second = String(date.getSeconds()).padStart(2, '0')
+    return `${year}.${month}.${day} ${hour}:${minute}:${second}`
   }
 
   function formatStorePackageSize(sizeBytes) {
