@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import SwitchToggle from './SwitchToggle.vue'
+import { buildApiPath } from '../../services/core/api'
 
 const props = defineProps({
   app: { type: Object, required: true },
@@ -20,7 +21,7 @@ const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
   }
-  return `/api/apps/${encodeURIComponent(props.app.app_id)}/icon`
+  return buildApiPath(`/api/apps/${encodeURIComponent(props.app.app_id)}/icon`)
 })
 
 watch(

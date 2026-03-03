@@ -1,9 +1,9 @@
 # Nginx 部署说明（主机直装，HTTP）
 
-目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/api`，实现单端口对外服务。
+目标：Nginx 托管前端静态文件并反代 FastAPI 的 `/aivuda_os/api`，实现单端口对外服务。
 
 - Nginx 提供前端静态文件与 SPA 路由
-- Nginx 反代 FastAPI 的 `/api/*`
+- Nginx 反代 FastAPI 的 `/aivuda_os/api/*`
 - 后端仅监听 `127.0.0.1:8000`
 
 ## 1. 前置条件
@@ -67,8 +67,8 @@ sudo systemctl reload nginx
 
 1. 打开 `http://<设备IP>/`，可看到前端页面
 2. 登录后功能正常：
-   - `/api/auth/me`
-   - `/api/config`
+  - `/aivuda_os/api/auth/me`
+  - `/aivuda_os/api/config`
 3. 页面刷新 `/status`、`/config` 不应出现 404
 
 ## 6. 常见检查命令

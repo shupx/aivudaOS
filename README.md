@@ -36,7 +36,7 @@ npm install
 npm run dev
 ```
 
-打开http://localhost:5173/，`/api` 自动代理到 `:8000`（vite.config.js配置了）。
+打开http://localhost:5173/，`/aivuda_os/api` 自动代理到 `:8000`（vite.config.js配置了）。
 
 ### 生产模式（gunicorn + uvicorn worker）
 
@@ -56,7 +56,7 @@ PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --b
 
 ## Nginx 生产部署（可选）
 
-Nginx 托管前端静态文件并反代 `/api`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
+Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
 
 ## App 运行模式（systemd / popen）
 
@@ -76,7 +76,7 @@ Nginx 托管前端静态文件并反代 `/api`，详见 [`docs/deploy-nginx.md`]
 - `systemd`：优先尝试 systemd；若当前环境不可用会回退到 `popen`
 - `popen`：始终使用旧进程模型
 
-日志接口保持不变：`GET /api/apps/{app_id}/logs` 继续读取 `data/logs/apps/{app_id}/current.log`。
+日志接口保持不变：`GET /aivuda_os/api/apps/{app_id}/logs` 继续读取 `data/logs/apps/{app_id}/current.log`。
 
 ## 默认账号
 
@@ -103,36 +103,36 @@ Nginx 托管前端静态文件并反代 `/api`，详见 [`docs/deploy-nginx.md`]
 ## API 接口
 
 ### 认证
-- `POST /api/auth/login`
-- `GET  /api/auth/me`
+- `POST /aivuda_os/api/auth/login`
+- `GET  /aivuda_os/api/auth/me`
 
 ### 配置
-- `GET  /api/config`
-- `PUT  /api/config`
+- `GET  /aivuda_os/api/config`
+- `PUT  /aivuda_os/api/config`
 
 ### 应用管理
-- `POST /api/apps/repo/sync` — 从仓库同步应用目录
-- `GET  /api/apps/catalog` — 可安装应用列表
-- `GET  /api/apps/installed` — 已安装应用列表
-- `POST /api/apps/{app_id}/install` — 安装应用
-- `GET  /api/apps/tasks/{task_id}` — 查询安装任务进度
-- `GET  /api/apps/{app_id}/status` — 应用运行状态
-- `POST /api/apps/{app_id}/start` — 启动
-- `POST /api/apps/{app_id}/stop` — 停止
-- `POST /api/apps/{app_id}/autostart` — 设置开机自启
-- `GET  /api/apps/{app_id}/versions` — 已安装版本列表
-- `POST /api/apps/{app_id}/switch-version` — 切换激活版本
-- `POST /api/apps/{app_id}/update_this_version` — 执行指定版本 update_this_version 脚本
-- `POST /api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
-- `GET /api/apps/operations/{operation_id}` — 查询安装/卸载/更新操作状态
-- `GET /api/apps/operations/{operation_id}/events` — SSE 实时操作输出流
-- `GET /api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
-- `GET  /api/apps/{app_id}/config` — 读取应用配置
-- `PUT  /api/apps/{app_id}/config` — 更新应用配置
+- `POST /aivuda_os/api/apps/repo/sync` — 从仓库同步应用目录
+- `GET  /aivuda_os/api/apps/catalog` — 可安装应用列表
+- `GET  /aivuda_os/api/apps/installed` — 已安装应用列表
+- `POST /aivuda_os/api/apps/{app_id}/install` — 安装应用
+- `GET  /aivuda_os/api/apps/tasks/{task_id}` — 查询安装任务进度
+- `GET  /aivuda_os/api/apps/{app_id}/status` — 应用运行状态
+- `POST /aivuda_os/api/apps/{app_id}/start` — 启动
+- `POST /aivuda_os/api/apps/{app_id}/stop` — 停止
+- `POST /aivuda_os/api/apps/{app_id}/autostart` — 设置开机自启
+- `GET  /aivuda_os/api/apps/{app_id}/versions` — 已安装版本列表
+- `POST /aivuda_os/api/apps/{app_id}/switch-version` — 切换激活版本
+- `POST /aivuda_os/api/apps/{app_id}/update_this_version` — 执行指定版本 update_this_version 脚本
+- `POST /aivuda_os/api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
+- `GET /aivuda_os/api/apps/operations/{operation_id}` — 查询安装/卸载/更新操作状态
+- `GET /aivuda_os/api/apps/operations/{operation_id}/events` — SSE 实时操作输出流
+- `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
+- `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置
+- `PUT  /aivuda_os/api/apps/{app_id}/config` — 更新应用配置
 
 ## 在线应用商店接入
 
 - UI 左侧菜单新增“在线应用商店”，位置在“应用菜单”下方。
-- 商店地址配置写入 `config/os.yaml` 的 `appstore_base_url`（通过 `GET/PUT /api/config` 读写）。
+- 商店地址配置写入 `config/os.yaml` 的 `appstore_base_url`（通过 `GET/PUT /aivuda_os/api/config` 读写）。
 - 前端按“商店地址 + /aivuda_app_store/store/...”拼接调用 store API（列表、详情、下载链接、下载文件）。
-- 下载流程：先下载应用包到用户浏览器本机；安装流程：再将该包按本地上传接口 `POST /api/apps/upload` 传给 AivudaOS 安装。
+- 下载流程：先下载应用包到用户浏览器本机；安装流程：再将该包按本地上传接口 `POST /aivuda_os/api/apps/upload` 传给 AivudaOS 安装。

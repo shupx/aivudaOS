@@ -164,7 +164,7 @@ aivudaOS/
 
 ### 自启动（Autostart）
 
-通过 `POST /api/apps/{app_id}/autostart` 设置：
+通过 `POST /aivuda_os/api/apps/{app_id}/autostart` 设置：
 
 - systemd 模式：更新 unit 的 enabled 状态，同时同步 `app_runtime.autostart`
 - popen 模式：仅更新 `app_runtime.autostart`，由后端启动时回放拉起
@@ -178,22 +178,22 @@ aivudaOS/
 
 | 方法 | 端点 | 说明 |
 |---|---|---|
-| POST | `/api/apps/upload` | 上传安装包（首次安装） |
-| POST | `/api/apps/{app_id}/upgrade` | 上传新版本（升级，若正在运行则自动重启） |
-| POST | `/api/apps/{app_id}/update_this_version` | 执行指定已安装版本的 `update_this_version` 脚本 |
-| GET | `/api/apps/operations/{operation_id}` | 查询操作状态 |
-| GET | `/api/apps/operations/{operation_id}/events` | SSE 实时事件流 |
-| GET | `/api/apps/installed` | 已安装应用列表 |
-| GET | `/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
-| POST | `/api/apps/{app_id}/start` | 启动 |
-| POST | `/api/apps/{app_id}/stop` | 停止 |
-| POST | `/api/apps/{app_id}/restart` | 重启 |
-| POST | `/api/apps/{app_id}/autostart` | 设置自启动 `{ "enabled": true }` |
-| GET | `/api/apps/{app_id}/versions` | 版本列表 |
-| POST | `/api/apps/{app_id}/switch-version` | 切换版本 `{ "version": "1.0.0", "restart": true }` |
-| POST | `/api/apps/{app_id}/uninstall` | 卸载 `{ "purge": false, "version": null }` |
-| GET | `/api/apps/{app_id}/config` | 获取 App 配置 |
-| PUT | `/api/apps/{app_id}/config` | 更新 App 配置 `{ "version": 1, "data": {...} }` |
+| POST | `/aivuda_os/api/apps/upload` | 上传安装包（首次安装） |
+| POST | `/aivuda_os/api/apps/{app_id}/upgrade` | 上传新版本（升级，若正在运行则自动重启） |
+| POST | `/aivuda_os/api/apps/{app_id}/update_this_version` | 执行指定已安装版本的 `update_this_version` 脚本 |
+| GET | `/aivuda_os/api/apps/operations/{operation_id}` | 查询操作状态 |
+| GET | `/aivuda_os/api/apps/operations/{operation_id}/events` | SSE 实时事件流 |
+| GET | `/aivuda_os/api/apps/installed` | 已安装应用列表 |
+| GET | `/aivuda_os/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
+| POST | `/aivuda_os/api/apps/{app_id}/start` | 启动 |
+| POST | `/aivuda_os/api/apps/{app_id}/stop` | 停止 |
+| POST | `/aivuda_os/api/apps/{app_id}/restart` | 重启 |
+| POST | `/aivuda_os/api/apps/{app_id}/autostart` | 设置自启动 `{ "enabled": true }` |
+| GET | `/aivuda_os/api/apps/{app_id}/versions` | 版本列表 |
+| POST | `/aivuda_os/api/apps/{app_id}/switch-version` | 切换版本 `{ "version": "1.0.0", "restart": true }` |
+| POST | `/aivuda_os/api/apps/{app_id}/uninstall` | 卸载 `{ "purge": false, "version": null }` |
+| GET | `/aivuda_os/api/apps/{app_id}/config` | 获取 App 配置 |
+| PUT | `/aivuda_os/api/apps/{app_id}/config` | 更新 App 配置 `{ "version": 1, "data": {...} }` |
 
 > 所有端点需要 `token` 参数进行身份验证。
 
@@ -203,18 +203,18 @@ aivudaOS/
 2. 前端调用：`{appstore_base_url}/aivuda_app_store/store/index` 获取应用卡片列表。
 3. 点击应用后调用：`.../store/apps/{app_id}` 查看版本详情。
 4. 点击“下载到本机”后，前端调用 `.../download-url` 与 `.../download`，将安装包下载到浏览器本机。
-5. 点击“安装到 AivudaOS”后，前端把该下载文件通过 `POST /api/apps/upload` 上传给本机 AivudaOS，安装流程与手动上传一致。
+5. 点击“安装到 AivudaOS”后，前端把该下载文件通过 `POST /aivuda_os/api/apps/upload` 上传给本机 AivudaOS，安装流程与手动上传一致。
 
 当前在线商店页已改为单按钮“下载并安装到 AivudaOS”流程：
 
 1. 先触发浏览器原生下载，保存到用户指定的本机位置（由浏览器下载设置决定）。
 2. 随后询问是否立即安装。
 3. 若确认，打开与“手动上传新应用安装包”完全复用的上传安装弹窗。
-4. 用户在弹窗中选择刚下载的本机文件并提交安装，后端仍走 `POST /api/apps/upload` 同一流程。
+4. 用户在弹窗中选择刚下载的本机文件并提交安装，后端仍走 `POST /aivuda_os/api/apps/upload` 同一流程。
 
 ### 实时操作事件（SSE）
 
-`POST /api/apps/upload`、`POST /api/apps/{app_id}/uninstall`、`POST /api/apps/{app_id}/update_this_version` 现在返回：
+`POST /aivuda_os/api/apps/upload`、`POST /aivuda_os/api/apps/{app_id}/uninstall`、`POST /aivuda_os/api/apps/{app_id}/update_this_version` 现在返回：
 
 ```json
 {
@@ -226,7 +226,7 @@ aivudaOS/
 
 前端随后连接：
 
-`GET /api/apps/operations/{operation_id}/events?token=...`
+`GET /aivuda_os/api/apps/operations/{operation_id}/events?token=...`
 
 典型事件：
 
@@ -244,7 +244,7 @@ aivudaOS/
 
 ## 升级流程
 
-`POST /api/apps/{app_id}/upgrade` 上传新版本包：
+`POST /aivuda_os/api/apps/{app_id}/upgrade` 上传新版本包：
 
 1. 安装新版本（同 install 流程）
 2. 自动激活新版本
@@ -252,7 +252,7 @@ aivudaOS/
 
 ## update_this_version 脚本执行
 
-`POST /api/apps/{app_id}/update_this_version`
+`POST /aivuda_os/api/apps/{app_id}/update_this_version`
 
 请求体：
 

@@ -29,7 +29,7 @@ npm install
 npm run dev
 ```
 
-开发环境后端地址由 `vite.config.js` 的 `/api` 代理决定（当前指向 `http://127.0.0.1:8000`）。
+开发环境后端地址由 `vite.config.js` 的 `/aivuda_os/api` 代理决定（当前指向 `http://127.0.0.1:8000`）。
 
 ## 打包
 

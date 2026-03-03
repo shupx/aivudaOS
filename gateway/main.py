@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from core.db.schema import init_db
@@ -13,6 +12,7 @@ from gateway.routes import apps, auth, config
 
 
 logger = logging.getLogger(__name__)
+API_PREFIX = "/aivuda_os"
 
 
 def create_app() -> FastAPI:
@@ -25,9 +25,9 @@ def create_app() -> FastAPI:
     #     allow_headers=["*"],
     # )
 
-    app.include_router(auth.router)
-    app.include_router(config.router)
-    app.include_router(apps.router)
+    app.include_router(auth.router, prefix=API_PREFIX)
+    app.include_router(config.router, prefix=API_PREFIX)
+    app.include_router(apps.router, prefix=API_PREFIX)
 
     @app.on_event("startup")
     async def startup() -> None:
