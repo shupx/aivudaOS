@@ -121,7 +121,7 @@ export default {
     notFound: 'App not found or not installed',
     logTitle: 'Log',
     loadingLogs: 'Loading...',
-    pullLatest: 'Pull Latest',
+    pullLatest: 'Incremental Pull Latest',
     clearAndReload: 'Clear and Reload',
     noLogOutput: 'No output yet',
     actionsTitle: 'App Actions',

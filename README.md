@@ -22,11 +22,18 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 pip install -r requirements.txt
 ```
 
-2. 启动 gateway（后端api gateway）
+2. 启动 gateway（后端api gateway），这里reload是开发时用的热重载，设置只关注`apps/`和`data/`两个文件夹的变动（后端核心服务和后端REST API server），
 
 ```bash
-PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-exclude "apps/*" --reload-exclude "data/*"
+# 实际uvicorn有bug还是关注了所有文件变化。
+PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload_excludes="apps/*" gateway --reload-dir core
 ```
+
+```bash
+# 推荐用gunicorn
+PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind 0.0.0.0:8000 --reload --reload-extra-file gateway --reload-extra-file core
+```
+
 
 3. 启动前端
 

@@ -879,6 +879,12 @@ class RuntimeService:
 
         reset = safe_offset > file_size
         read_offset = 0 if reset else safe_offset
+        tail_aligned = False
+
+        if read_offset + safe_limit < file_size:
+            read_offset = max(0, file_size - safe_limit)
+            reset = True
+            tail_aligned = True
 
         try:
             with log_path.open("rb") as f:
@@ -896,6 +902,7 @@ class RuntimeService:
             "next_offset": next_offset,
             "eof": eof,
             "reset": reset,
+            "tail_aligned": tail_aligned,
             "chunk": raw.decode("utf-8", errors="replace"),
             "size": file_size,
         }
