@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   cancelAppOperation,
+  fetchAppOperation,
   openAppOperationInteractiveSocket,
   subscribeAppOperationEvents,
   uploadAppPackage,
@@ -84,15 +85,18 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
   function waitForOperation(operationId) {
     return new Promise((resolve, reject) => {
       let settled = false
-      let transportErrorTimer = null
       let interactiveSocket = null
+      let pollTimer = null
+      let pollBusy = false
+      let pollWarned = false
+      let sseWarned = false
 
       const finish = (callback) => {
         if (settled) return
         settled = true
-        if (transportErrorTimer) {
-          clearTimeout(transportErrorTimer)
-          transportErrorTimer = null
+        if (pollTimer) {
+          clearInterval(pollTimer)
+          pollTimer = null
         }
         if (interactiveSocket) {
           interactiveSocket.close()
@@ -124,6 +128,48 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
 
       interactiveSubmitHandler = sendInteractiveInput
 
+      async function pollOperationState() {
+        if (settled || pollBusy) return
+        pollBusy = true
+        try {
+          const info = await fetchAppOperation(operationId)
+          const status = String(info?.status || '')
+          if (status) {
+            uploadStatus.value = status
+          }
+          if (status === 'completed') {
+            finish(() => {
+              uploadStatus.value = t('apps.installed')
+              uploadStatusDone.value = true
+              resolve(info?.result || {})
+            })
+            return
+          }
+          if (status === 'failed' || status === 'canceled') {
+            const message = String(info?.error || t('apps.installFailed'))
+            finish(() => {
+              uploadStatusDone.value = false
+              reject(new Error(message))
+            })
+          }
+        } catch (err) {
+          if (!pollWarned) {
+            pollWarned = true
+            appendUploadLine(`${t('apps.realtimeConnectionError')}: ${String(err?.message || err || '')}\n`)
+          }
+        } finally {
+          pollBusy = false
+        }
+      }
+
+      function ensurePolling() {
+        if (pollTimer || settled) return
+        pollTimer = setInterval(() => {
+          pollOperationState()
+        }, 1000)
+        pollOperationState()
+      }
+
       interactiveSocket = openAppOperationInteractiveSocket(operationId, {
         onOpen() {
           uploadInteractiveReady.value = true
@@ -145,10 +191,6 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
       const subscription = subscribeAppOperationEvents(operationId, {
         onEvent(event) {
           if (!event || typeof event !== 'object') return
-          if (transportErrorTimer) {
-            clearTimeout(transportErrorTimer)
-            transportErrorTimer = null
-          }
 
           if (event.type === 'status') {
             uploadStatus.value = event.message || event.phase || event.status || uploadStatus.value
@@ -182,12 +224,11 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
         },
         onError(err) {
           if (settled) return
-          if (transportErrorTimer) return
-          transportErrorTimer = setTimeout(() => {
-            finish(() => {
-              reject(err)
-            })
-          }, 800)
+          if (!sseWarned) {
+            sseWarned = true
+            appendUploadLine(`${t('apps.realtimeConnectionError')}: ${String(err?.message || err || '')}\n`)
+          }
+          ensurePolling()
         },
       })
 

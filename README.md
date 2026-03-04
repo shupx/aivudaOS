@@ -25,7 +25,7 @@ pip install -r requirements.txt
 2. 启动 gateway（后端api gateway）
 
 ```bash
-PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload
+PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-exclude "apps/*" --reload-exclude "data/*"
 ```
 
 3. 启动前端

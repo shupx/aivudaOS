@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import i18n from '../i18n'
 import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy } from '../state/appState'
 import {
@@ -107,6 +108,9 @@ function stopPolling() {
 }
 
 export function useAppsPanel() {
+  const route = useRoute()
+  const router = useRouter()
+
   const apps = computed(() => appState.apps)
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
@@ -121,6 +125,13 @@ export function useAppsPanel() {
   onMounted(() => {
     refresh()
     startPolling()
+
+    if (String(route.query?.openUpload || '') === '1') {
+      uploadModal.openUploadModal()
+      const nextQuery = { ...route.query }
+      delete nextQuery.openUpload
+      router.replace({ path: route.path, query: nextQuery })
+    }
   })
 
   onUnmounted(() => {

@@ -98,6 +98,12 @@ export async function cancelAppOperation(operationId) {
   })
 }
 
+export async function fetchAppOperation(operationId) {
+  return request(`/api/apps/operations/${encodeURIComponent(operationId)}`, {
+    auth: true,
+  })
+}
+
 export function subscribeAppOperationEvents(
   operationId,
   {

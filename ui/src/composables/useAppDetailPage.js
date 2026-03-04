@@ -9,7 +9,6 @@ import {
   switchAppVersion,
   uninstallApp,
   updateAppThisVersion,
-  upgradeAppPackage,
 } from '../services/core/apps'
 
 export function useAppDetailPage() {
@@ -49,9 +48,6 @@ export function useAppDetailPage() {
   const selectedVersion = ref('')
   const switchWithRestart = ref(true)
 
-  const selectedFile = ref(null)
-  const selectedFileName = ref('')
-
   const uninstallVersionOnly = ref(false)
   const uninstallPurge = ref(false)
 
@@ -64,8 +60,6 @@ export function useAppDetailPage() {
       && selectedVersion.value !== app.value.active_version,
     )
   })
-
-  const canUpgrade = computed(() => Boolean(app.value && selectedFile.value && !actionBusy.value))
 
   const canUninstall = computed(() => Boolean(app.value && !actionBusy.value))
 
@@ -178,30 +172,11 @@ export function useAppDetailPage() {
     loadLogs()
   }
 
-  function onUpgradeFileChange(fileList) {
-    const file = fileList?.[0] || null
-    selectedFile.value = file
-    selectedFileName.value = file?.name || ''
-    clearActionStatus()
-  }
-
-  async function runUpgrade() {
-    if (!app.value || !selectedFile.value) return
-    actionBusy.value = true
-    clearActionStatus()
-    try {
-      await upgradeAppPackage(app.value.app_id, selectedFile.value)
-      selectedFile.value = null
-      selectedFileName.value = ''
-      await refresh()
-      await loadVersions(app.value.app_id)
-      clearAndReloadLogs()
-      actionMessage.value = t('appDetail.upgradeSuccess')
-    } catch (err) {
-      actionError.value = String(err?.message || err || t('appDetail.upgradeFailed'))
-    } finally {
-      actionBusy.value = false
-    }
+  function goToManualUpload() {
+    router.push({
+      path: '/dashboard/apps',
+      query: { openUpload: '1' },
+    })
   }
 
   async function runSwitchVersion() {
@@ -308,8 +283,6 @@ export function useAppDetailPage() {
     () => route.params.appId,
     (appId) => {
       clearActionStatus()
-      selectedFile.value = null
-      selectedFileName.value = ''
       uninstallVersionOnly.value = false
       uninstallPurge.value = false
       clearAndReloadLogs()
@@ -385,10 +358,7 @@ export function useAppDetailPage() {
     selectedVersion,
     switchWithRestart,
     canSwitchVersion,
-    onUpgradeFileChange,
-    selectedFileName,
-    canUpgrade,
-    runUpgrade,
+    goToManualUpload,
     runUpdateThisVersionScript,
     runSwitchVersion,
     uninstallVersionOnly,

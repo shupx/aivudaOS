@@ -32,10 +32,7 @@ const {
   selectedVersion,
   switchWithRestart,
   canSwitchVersion,
-  onUpgradeFileChange,
-  selectedFileName,
-  canUpgrade,
-  runUpgrade,
+  goToManualUpload,
   runUpdateThisVersionScript,
   uninstallVersionOnly,
   uninstallPurge,
@@ -121,19 +118,13 @@ const {
 
       <div class="actions-grid">
         <div class="action-block">
-          <h4>{{ t('appDetail.uploadNewVersion') }}</h4>
+          <h4>{{ t('appDetail.manualUploadVersion') }}</h4>
           <div class="panel-actions wrap">
-            <input
-              class="file-input"
-              type="file"
-              accept=".tar.gz,.zip"
-              @change="onUpgradeFileChange($event.target.files)"
-            >
-            <button class="btn" :disabled="!canUpgrade" @click="runUpgrade">
-              {{ actionBusy ? t('common.processing') : t('appDetail.uploadAndUpgrade') }}
+            <button class="btn" @click="goToManualUpload">
+              {{ t('appDetail.goManualUpload') }}
             </button>
           </div>
-          <p class="muted">{{ selectedFileName || t('apps.noFileSelected') }}</p>
+          <p class="muted">{{ t('appDetail.manualUploadHint') }}</p>
         </div>
 
         <div class="action-block">
