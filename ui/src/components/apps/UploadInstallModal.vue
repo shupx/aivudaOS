@@ -11,9 +11,19 @@ const props = defineProps({
   fileName: { type: String, default: '' },
   hint: { type: String, default: '' },
   showFilePicker: { type: Boolean, default: true },
+  interactiveInput: { type: String, default: '' },
+  interactiveReady: { type: Boolean, default: false },
+  interactiveMaskInput: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['close', 'file-change', 'submit'])
+const emit = defineEmits([
+  'close',
+  'file-change',
+  'submit',
+  'interactive-input',
+  'interactive-submit',
+  'interactive-mask-change',
+])
 
 const {
   t,
@@ -22,6 +32,9 @@ const {
   shouldShowOutput,
   onFileChange,
   closeByOverlay,
+  onInteractiveInput,
+  onInteractiveKeydown,
+  onInteractiveMaskChange,
 } = useUploadInstallModalView(props, emit)
 </script>
 
@@ -58,6 +71,35 @@ const {
         class="log-output small"
         @scroll="onLogScroll"
       ></pre>
+
+      <div v-if="busy" class="field">
+        <label>{{ t('apps.interactiveInputLabel') }}</label>
+        <div class="panel-actions">
+          <input
+            class="input"
+            :type="interactiveMaskInput ? 'password' : 'text'"
+            autocomplete="off"
+            :placeholder="t('apps.interactiveInputPlaceholder')"
+            :value="interactiveInput"
+            @input="onInteractiveInput"
+            @keydown="onInteractiveKeydown"
+          >
+          <button
+            class="btn"
+            type="button"
+            @click="onInteractiveMaskChange(!interactiveMaskInput)"
+          >
+            {{ interactiveMaskInput ? t('apps.interactiveShowInput') : t('apps.interactiveHideInput') }}
+          </button>
+          <button
+            class="btn"
+            :disabled="!interactiveReady || !interactiveInput"
+            @click="$emit('interactive-submit')"
+          >
+            {{ t('apps.interactiveSend') }}
+          </button>
+        </div>
+      </div>
 
       <footer class="panel-actions">
         <button class="btn" :disabled="busy" @click="$emit('close')">{{ t('common.cancel') }}</button>

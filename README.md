@@ -126,9 +126,17 @@ Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-
 - `POST /aivuda_os/api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
 - `GET /aivuda_os/api/apps/operations/{operation_id}` — 查询安装/卸载/更新操作状态
 - `GET /aivuda_os/api/apps/operations/{operation_id}/events` — SSE 实时操作输出流
+- `WS /aivuda_os/api/apps/operations/{operation_id}/interactive/ws` — 安装交互输入通道（query 带 `token`）
 - `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
 - `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置
 - `PUT  /aivuda_os/api/apps/{app_id}/config` — 更新应用配置
+
+## 安装交互输入（pre_install）
+
+- 上传安装返回中会携带 `interactive_enabled` 与 `interactive_ws_path`。
+- 脚本输出继续走 SSE：`/api/apps/operations/{operation_id}/events`。
+- 需要输入时，前端通过 WebSocket 连接 `interactive_ws_path?token=...` 并发送文本输入；后端会自动追加换行写入脚本 stdin。
+- 当前交互链路基于 PTY，支持 `sudo` 密码、`y/n` 等命令行提示输入。
 
 ## 在线应用商店接入
 

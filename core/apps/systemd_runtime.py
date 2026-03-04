@@ -54,6 +54,7 @@ class SystemdRuntimeBackend:
         working_dir: Path,
         log_path: Path,
         description: str,
+        environment: dict[str, str] | None = None,
     ) -> Path:
         unit_path = self.unit_file_path(app_id, scope)
         unit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,28 +68,35 @@ class SystemdRuntimeBackend:
         escaped_workdir = shlex.quote(str(working_dir))
         escaped_log = shlex.quote(str(log_path))
         wanted_by = "multi-user.target" if scope == "system" else "default.target"
+        env_lines = []
+        for key, value in (environment or {}).items():
+            safe_key = str(key).strip()
+            if not safe_key:
+                continue
+            safe_val = str(value).replace('"', '\\"')
+            env_lines.append(f'Environment="{safe_key}={safe_val}"')
 
-        unit_content = "\n".join(
-            [
-                "[Unit]",
-                f"Description={description}",
-                "After=network.target",
-                "",
-                "[Service]",
-                "Type=simple",
-                f"WorkingDirectory={escaped_workdir}",
-                f"ExecStartPre={exec_start_pre}",
-                f"ExecStart={exec_start}",
-                f"StandardOutput=append:{escaped_log}",
-                f"StandardError=append:{escaped_log}",
-                "KillMode=control-group",
-                "Restart=no",
-                "",
-                "[Install]",
-                f"WantedBy={wanted_by}",
-                "",
-            ]
-        )
+        unit_lines = [
+            "[Unit]",
+            f"Description={description}",
+            "After=network.target",
+            "",
+            "[Service]",
+            "Type=simple",
+            f"WorkingDirectory={escaped_workdir}",
+            f"ExecStartPre={exec_start_pre}",
+            *env_lines,
+            f"ExecStart={exec_start}",
+            f"StandardOutput=append:{escaped_log}",
+            f"StandardError=append:{escaped_log}",
+            "KillMode=control-group",
+            "Restart=no",
+            "",
+            "[Install]",
+            f"WantedBy={wanted_by}",
+            "",
+        ]
+        unit_content = "\n".join(unit_lines)
         unit_path.write_text(unit_content, encoding="utf-8")
         return unit_path
 

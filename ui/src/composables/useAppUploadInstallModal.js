@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { subscribeAppOperationEvents, uploadAppPackage } from '../services/core/apps'
+import {
+  openAppOperationInteractiveSocket,
+  subscribeAppOperationEvents,
+  uploadAppPackage,
+} from '../services/core/apps'
 
 export function useAppUploadInstallModal({ onInstalled } = {}) {
   const { t } = useI18n()
@@ -15,6 +19,10 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
   const uploadFileName = ref('')
   const uploadHint = ref('')
   const uploadShowFilePicker = ref(true)
+  const uploadInteractiveInput = ref('')
+  const uploadInteractiveReady = ref(false)
+  const uploadInteractiveMaskInput = ref(true)
+  let interactiveSubmitHandler = null
 
   function openUploadModal({ hint = '', showFilePicker = true } = {}) {
     uploadError.value = ''
@@ -35,6 +43,10 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     uploadFileName.value = ''
     uploadHint.value = ''
     uploadShowFilePicker.value = true
+    uploadInteractiveInput.value = ''
+    uploadInteractiveReady.value = false
+    uploadInteractiveMaskInput.value = true
+    interactiveSubmitHandler = null
   }
 
   function setUploadFile(file) {
@@ -50,7 +62,15 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
 
   function appendUploadLine(line) {
     if (!line) return
-    uploadOutput.value += `${line}\n`
+    uploadOutput.value += line
+    if (uploadOutput.value.length > 200000) {
+      uploadOutput.value = uploadOutput.value.slice(-120000)
+    }
+  }
+
+  function appendUploadChunk(chunk) {
+    if (!chunk) return
+    uploadOutput.value += chunk
     if (uploadOutput.value.length > 200000) {
       uploadOutput.value = uploadOutput.value.slice(-120000)
     }
@@ -60,6 +80,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     return new Promise((resolve, reject) => {
       let settled = false
       let transportErrorTimer = null
+      let interactiveSocket = null
 
       const finish = (callback) => {
         if (settled) return
@@ -68,9 +89,48 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
           clearTimeout(transportErrorTimer)
           transportErrorTimer = null
         }
+        if (interactiveSocket) {
+          interactiveSocket.close()
+          interactiveSocket = null
+        }
+        uploadInteractiveReady.value = false
+        interactiveSubmitHandler = null
         subscription.close()
         callback()
       }
+
+      function sendInteractiveInput() {
+        const value = String(uploadInteractiveInput.value || '')
+        if (!value) return
+        if (!interactiveSocket || !interactiveSocket.isOpen()) {
+          uploadError.value = t('apps.interactiveNotReady')
+          return
+        }
+        try {
+          interactiveSocket.sendInput(value)
+          uploadInteractiveInput.value = ''
+          uploadError.value = ''
+        } catch (err) {
+          uploadError.value = String(err?.message || err || t('apps.interactiveSendFailed'))
+        }
+      }
+
+      interactiveSubmitHandler = sendInteractiveInput
+
+      interactiveSocket = openAppOperationInteractiveSocket(operationId, {
+        onOpen() {
+          uploadInteractiveReady.value = true
+        },
+        onMessage(payload) {
+          if (payload?.type === 'interactive_closed') {
+            uploadInteractiveReady.value = false
+          }
+        },
+        onError(err) {
+          uploadInteractiveReady.value = false
+          appendUploadLine(`${t('apps.interactiveConnectionError')}: ${String(err?.message || err || '')}\n`)
+        },
+      })
 
       const subscription = subscribeAppOperationEvents(operationId, {
         onEvent(event) {
@@ -84,7 +144,11 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
             uploadStatus.value = event.message || event.phase || event.status || uploadStatus.value
           }
           if (event.type === 'log') {
-            appendUploadLine(event.line || '')
+            if (typeof event.chunk === 'string') {
+              appendUploadChunk(event.chunk)
+            } else {
+              appendUploadLine(`${event.line || ''}\n`)
+            }
           }
           if (event.type === 'error') {
             appendUploadLine(event.message || t('apps.operationFailed'))
@@ -116,6 +180,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
           }, 800)
         },
       })
+
     })
   }
 
@@ -128,6 +193,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     uploadOutput.value = ''
     try {
       const operation = await uploadAppPackage(uploadFile.value, { overwrite: false })
+      uploadInteractiveReady.value = false
       await waitForOperation(operation.operation_id)
       if (onInstalled) {
         await onInstalled(operation)
@@ -161,6 +227,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
         uploadStatusDone.value = false
         uploadOutput.value = ''
         const overwriteOperation = await uploadAppPackage(uploadFile.value, { overwrite: true })
+        uploadInteractiveReady.value = false
         await waitForOperation(overwriteOperation.operation_id)
         if (onInstalled) {
           await onInstalled(overwriteOperation)
@@ -188,10 +255,26 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     uploadFileName,
     uploadHint,
     uploadShowFilePicker,
+    uploadInteractiveInput,
+    uploadInteractiveReady,
+    uploadInteractiveMaskInput,
     openUploadModal,
     closeUploadModal,
     setUploadFile,
     onUploadFileChange,
     submitUpload,
+    submitInteractiveInput() {
+      if (typeof interactiveSubmitHandler === 'function') {
+        interactiveSubmitHandler()
+        return
+      }
+      uploadError.value = t('apps.interactiveNotReady')
+    },
+    setInteractiveInput(value) {
+      uploadInteractiveInput.value = String(value || '')
+    },
+    setInteractiveMaskInput(value) {
+      uploadInteractiveMaskInput.value = Boolean(value)
+    },
   }
 }

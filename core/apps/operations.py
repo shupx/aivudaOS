@@ -23,6 +23,10 @@ class OperationRecord:
     done: bool = False
     events: list[dict[str, Any]] = field(default_factory=list)
     condition: threading.Condition = field(default_factory=threading.Condition)
+    interactive_enabled: bool = False
+    interactive_open: bool = False
+    interactive_closed_reason: str | None = None
+    interactive_inputs: list[str] = field(default_factory=list)
 
 
 class AppOperationManager:
@@ -33,7 +37,13 @@ class AppOperationManager:
         self._records: dict[str, OperationRecord] = {}
         self._app_running: dict[str, str] = {}
 
-    def start_operation(self, operation_type: str, app_id: str | None) -> OperationRecord:
+    def start_operation(
+        self,
+        operation_type: str,
+        app_id: str | None,
+        *,
+        interactive_enabled: bool = False,
+    ) -> OperationRecord:
         with self._lock:
             if app_id and app_id in self._app_running:
                 active_op = self._app_running[app_id]
@@ -49,6 +59,8 @@ class AppOperationManager:
                 app_id=app_id,
                 status="queued",
                 started_at=now,
+                interactive_enabled=interactive_enabled,
+                interactive_open=interactive_enabled,
             )
             self._records[operation_id] = record
             if app_id:
@@ -113,6 +125,7 @@ class AppOperationManager:
         record.done = True
         record.ended_at = int(time.time())
         record.result = result or {}
+        self.close_interactive(operation_id, reason="completed")
         self.publish(
             operation_id,
             "completed",
@@ -128,6 +141,7 @@ class AppOperationManager:
         record.error = error
         record.done = True
         record.ended_at = int(time.time())
+        self.close_interactive(operation_id, reason="failed")
         self.publish(
             operation_id,
             "error",
@@ -156,7 +170,46 @@ class AppOperationManager:
             "error": record.error,
             "result": record.result,
             "done": record.done,
+            "interactive_enabled": record.interactive_enabled,
+            "interactive_open": record.interactive_open,
+            "interactive_closed_reason": record.interactive_closed_reason,
         }
+
+    def submit_interactive_input(self, operation_id: str, text: str) -> None:
+        record = self._require_record(operation_id)
+        if not record.interactive_enabled:
+            raise NotFoundError(f"interactive input is not enabled: {operation_id}")
+        if not record.interactive_open:
+            raise AppOperationConflictError(
+                f"interactive session is closed: {operation_id}"
+            )
+
+        payload = text if text.endswith("\n") else f"{text}\n"
+        with record.condition:
+            record.interactive_inputs.append(payload)
+            record.condition.notify_all()
+
+    def wait_interactive_input(
+        self,
+        operation_id: str,
+        timeout: float = 0.2,
+    ) -> str | None:
+        record = self._require_record(operation_id)
+        with record.condition:
+            if not record.interactive_inputs and record.interactive_open:
+                record.condition.wait(timeout=timeout)
+            if record.interactive_inputs:
+                return record.interactive_inputs.pop(0)
+            return None
+
+    def close_interactive(self, operation_id: str, reason: str) -> None:
+        record = self._require_record(operation_id)
+        with record.condition:
+            if not record.interactive_enabled:
+                return
+            record.interactive_open = False
+            record.interactive_closed_reason = reason
+            record.condition.notify_all()
 
     def wait_events(
         self,

@@ -42,6 +42,8 @@ class InstallerService:
         filename: str,
         overwrite: bool = False,
         event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        interactive: bool = False,
+        read_input: Callable[[float], str | None] | None = None,
     ) -> dict[str, Any]:
         """Install an app from an uploaded package file (.tar.gz / .zip).
 
@@ -115,55 +117,78 @@ class InstallerService:
             )
 
             content_root = manifest_path.parent
-            if manifest.pre_install:
-                emit(
-                    "status",
-                    phase="pre_install",
-                    status="running",
-                    message="执行 pre_install",
-                    app_id=app_id,
-                )
-                try:
-                    self._script_hooks.run(
-                        app_id=app_id,
-                        hook_name="pre_install",
-                        script_path=manifest.pre_install,
-                        root_dir=content_root,
-                        on_output=lambda line: emit(
-                            "log",
-                            phase="pre_install",
-                            hook="pre_install",
-                            line=line,
-                            app_id=app_id,
-                        ),
-                    )
-                except ScriptHookError as exc:
-                    raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
 
-            # Prepare version directory
+            # Prepare version directory first; this also handles overwrite case
             emit("status", phase="install", status="running", message="写入版本目录", app_id=app_id)
             install_path = self._versioning.prepare_version_dir(app_id, version)
 
-            # Copy all files from content root to install path
-            for item in content_root.iterdir():
-                dest = install_path / item.name
-                if item.is_dir():
-                    shutil.copytree(str(item), str(dest))
-                else:
-                    shutil.copy2(str(item), str(dest))
+            try:
+                # Copy all files from package content root to final install path
+                for item in content_root.iterdir():
+                    dest = install_path / item.name
+                    if item.is_dir():
+                        shutil.copytree(str(item), str(dest))
+                    else:
+                        shutil.copy2(str(item), str(dest))
 
-            self._ensure_entrypoint_ready(install_path, manifest)
+                # Run pre_install in final install directory so generated artifacts
+                # (e.g. catkin devel/setup.bash) bind to stable absolute paths.
+                if manifest.pre_install:
+                    emit(
+                        "status",
+                        phase="pre_install",
+                        status="running",
+                        message="执行 pre_install",
+                        app_id=app_id,
+                    )
+                    try:
+                        if interactive:
+                            self._script_hooks.run_interactive(
+                                app_id=app_id,
+                                hook_name="pre_install",
+                                script_path=manifest.pre_install,
+                                root_dir=install_path,
+                                on_output=lambda chunk: emit(
+                                    "log",
+                                    phase="pre_install",
+                                    hook="pre_install",
+                                    chunk=chunk,
+                                    app_id=app_id,
+                                ),
+                                read_input=read_input,
+                            )
+                        else:
+                            self._script_hooks.run(
+                                app_id=app_id,
+                                hook_name="pre_install",
+                                script_path=manifest.pre_install,
+                                root_dir=install_path,
+                                on_output=lambda line: emit(
+                                    "log",
+                                    phase="pre_install",
+                                    hook="pre_install",
+                                    line=line,
+                                    app_id=app_id,
+                                ),
+                            )
+                    except ScriptHookError as exc:
+                        raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
 
-            # Record in database
-            self._record_installation(app_id, version, install_path, manifest)
-            emit("status", phase="db", status="running", message="写入数据库", app_id=app_id)
+                self._ensure_entrypoint_ready(install_path, manifest)
 
-            # Initialize per-app config
-            self._config.init_app_config(app_id, manifest.default_config)
+                # Record in database
+                self._record_installation(app_id, version, install_path, manifest)
+                emit("status", phase="db", status="running", message="写入数据库", app_id=app_id)
 
-            # Activate this version
-            self._versioning.activate_version(app_id, version)
-            emit("status", phase="activate", status="running", message="激活版本", app_id=app_id)
+                # Initialize per-app config
+                self._config.init_app_config(app_id, manifest.default_config)
+
+                # Activate this version
+                self._versioning.activate_version(app_id, version)
+                emit("status", phase="activate", status="running", message="激活版本", app_id=app_id)
+            except Exception:
+                shutil.rmtree(install_path, ignore_errors=True)
+                raise
 
         emit("status", phase="completed", status="completed", message="安装完成", app_id=app_id)
 

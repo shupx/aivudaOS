@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
 from core.auth.models import SessionInfo
@@ -86,13 +86,17 @@ async def upload_app(
     The package must contain a ``manifest.yaml`` at the root (or one level
     deep) describing the app metadata, runtime, entrypoint, etc.
     """
-    _require_auth(token)
+    session = _require_auth(token)
     operations = get_app_operation_manager()
     installer = get_installer_service()
     file_data = await file.read()
     filename = file.filename or "package.tar.gz"
 
-    record = operations.start_operation("upload", app_id=None)
+    record = operations.start_operation(
+        "upload",
+        app_id=None,
+        interactive_enabled=True,
+    )
 
     def emit(event_type: str, payload: dict[str, Any]) -> None:
         app_id = payload.get("app_id")
@@ -107,6 +111,11 @@ async def upload_app(
                 filename,
                 overwrite=overwrite,
                 event_cb=emit,
+                interactive=True,
+                read_input=lambda timeout: operations.wait_interactive_input(
+                    record.operation_id,
+                    timeout=timeout,
+                ),
             )
         except PackageFormatError as exc:
             raise AppRuntimeError(str(exc)) from exc
@@ -117,6 +126,9 @@ async def upload_app(
         "operation_id": record.operation_id,
         "status": "queued",
         "operation_type": "upload",
+        "interactive_enabled": True,
+        "interactive_ws_path": f"/api/apps/operations/{record.operation_id}/interactive/ws",
+        "operator": session.username,
     }
 
 
@@ -379,6 +391,83 @@ async def get_operation(operation_id: str, token: str) -> dict[str, Any]:
         return operations.get_operation(operation_id)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.websocket("/operations/{operation_id}/interactive/ws")
+async def operation_interactive_ws(
+    websocket: WebSocket,
+    operation_id: str,
+) -> None:
+    token = str(websocket.query_params.get("token") or "")
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+
+    try:
+        _require_auth(token)
+    except HTTPException:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+
+    operations = get_app_operation_manager()
+    try:
+        info = operations.get_operation(operation_id)
+    except NotFoundError:
+        await websocket.close(code=1008, reason="Operation not found")
+        return
+
+    if not bool(info.get("interactive_enabled")):
+        await websocket.close(code=1008, reason="Interactive mode disabled")
+        return
+
+    await websocket.accept()
+    await websocket.send_json(
+        {
+            "type": "interactive_ready",
+            "operation_id": operation_id,
+            "interactive_open": bool(info.get("interactive_open")),
+        }
+    )
+
+    try:
+        while True:
+            message = await websocket.receive_text()
+            payload = message
+            try:
+                data = json.loads(message)
+                if isinstance(data, dict):
+                    payload = str(data.get("data", ""))
+            except json.JSONDecodeError:
+                payload = message
+
+            if payload is None:
+                continue
+
+            text = str(payload)
+            if not text.strip():
+                continue
+
+            try:
+                operations.submit_interactive_input(operation_id, text)
+            except (AppOperationConflictError, NotFoundError) as exc:
+                await websocket.send_json(
+                    {
+                        "type": "interactive_closed",
+                        "operation_id": operation_id,
+                        "message": str(exc),
+                    }
+                )
+                await websocket.close(code=1000)
+                return
+
+            await websocket.send_json(
+                {
+                    "type": "interactive_input_accepted",
+                    "operation_id": operation_id,
+                }
+            )
+    except WebSocketDisconnect:
+        return
 
 
 @router.get("/operations/{operation_id}/events")

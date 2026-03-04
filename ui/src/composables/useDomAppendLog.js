@@ -1,4 +1,5 @@
 import { nextTick, ref, watch } from 'vue'
+import { createAnsiRenderer } from '../utils/ansiRender'
 
 function nearBottom(el, threshold = 24) {
   const distance = el.scrollHeight - (el.scrollTop + el.clientHeight)
@@ -16,6 +17,7 @@ export function useDomAppendLog(contentRef, options = {}) {
   let renderedText = ''
   let placeholderNode = null
   let contentNode = null
+  let ansiRenderer = null
 
   function clearElement() {
     const el = logRef.value
@@ -23,6 +25,7 @@ export function useDomAppendLog(contentRef, options = {}) {
     el.textContent = ''
     placeholderNode = null
     contentNode = null
+    ansiRenderer = null
   }
 
   function ensureContentNode() {
@@ -33,8 +36,9 @@ export function useDomAppendLog(contentRef, options = {}) {
       placeholderNode = null
     }
     if (!contentNode) {
-      contentNode = document.createTextNode('')
+      contentNode = document.createElement('span')
       el.appendChild(contentNode)
+      ansiRenderer = createAnsiRenderer(contentNode)
     }
     return contentNode
   }
@@ -53,18 +57,20 @@ export function useDomAppendLog(contentRef, options = {}) {
 
   function renderFromScratch(text) {
     const node = ensureContentNode()
-    if (!node) return
+    if (!node || !ansiRenderer) return
 
-    node.data = text
+    node.textContent = ''
+    ansiRenderer.reset()
+    ansiRenderer.append(text)
     renderedText = text
   }
 
   function appendChunk(chunk) {
     if (!chunk) return
     const node = ensureContentNode()
-    if (!node) return
+    if (!node || !ansiRenderer) return
 
-    node.appendData(chunk)
+    ansiRenderer.append(chunk)
     renderedText += chunk
   }
 

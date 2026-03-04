@@ -29,9 +29,15 @@ const {
   uploadFileName,
   uploadHint,
   uploadShowFilePicker,
+  uploadInteractiveInput,
+  uploadInteractiveReady,
+  uploadInteractiveMaskInput,
   closeUploadModal,
+  setInteractiveInput,
+  setInteractiveMaskInput,
   onUploadFileChange,
   submitUpload,
+  submitInteractiveInput,
 } = useOnlineStoreDetailPage()
 </script>
 
@@ -109,9 +115,15 @@ const {
       :file-name="uploadFileName"
       :hint="uploadHint"
       :show-file-picker="uploadShowFilePicker"
+      :interactive-input="uploadInteractiveInput"
+      :interactive-ready="uploadInteractiveReady"
+      :interactive-mask-input="uploadInteractiveMaskInput"
       @close="closeUploadModal"
       @file-change="onUploadFileChange"
       @submit="submitUpload"
+      @interactive-input="setInteractiveInput"
+      @interactive-mask-change="setInteractiveMaskInput"
+      @interactive-submit="submitInteractiveInput"
     />
   </section>
 </template>

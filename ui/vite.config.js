@@ -10,6 +10,7 @@ export default defineConfig({
       '/aivuda_os/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+        ws: true,
       },
     },
   },

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import shutil
 import subprocess
 import threading
 import time
@@ -226,6 +227,8 @@ class RuntimeService:
         runtime_state = self.get_runtime_state(app_id)
 
         command = self._build_exec_command(manifest, install_path)
+        command = self._decorate_command_for_realtime_logs(command)
+        runtime_env = self._runtime_log_env()
         log_path = self._app_log_path(app_id)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -239,6 +242,7 @@ class RuntimeService:
                     working_dir=install_path,
                     log_path=log_path,
                     description=f"AivudaOS app {manifest.name} ({app_id})",
+                    environment=runtime_env,
                 )
                 self._systemd.daemon_reload(scope)
                 self._systemd.start(app_id, scope)
@@ -262,6 +266,7 @@ class RuntimeService:
                     cwd=str(install_path),
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
+                    env={**os.environ, **runtime_env},
                     start_new_session=True,
                 )
         except OSError as exc:
@@ -649,6 +654,32 @@ class RuntimeService:
         )
         args = manifest.run.get("args", [])
         return [str(resolved), *[str(x) for x in args]]
+
+    @staticmethod
+    def _runtime_log_env() -> dict[str, str]:
+        return {
+            "PYTHONUNBUFFERED": "1",
+            "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
+            "TERM": "xterm-256color",
+            "CLICOLOR_FORCE": "1",
+            "FORCE_COLOR": "1",
+            "PY_COLORS": "1",
+        }
+
+    @staticmethod
+    def _decorate_command_for_realtime_logs(command: list[str]) -> list[str]:
+        if not command:
+            return command
+
+        decorated = list(command)
+        executable = os.path.basename(decorated[0])
+        if executable == "roslaunch" and "--screen" not in decorated:
+            decorated = [decorated[0], "--screen", *decorated[1:]]
+
+        stdbuf = shutil.which("stdbuf")
+        if not stdbuf:
+            return decorated
+        return [stdbuf, "-oL", "-eL", *decorated]
 
     def _app_log_path(self, app_id: str) -> Path:
         return APP_LOG_DIR / app_id / "current.log"

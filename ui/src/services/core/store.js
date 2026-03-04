@@ -24,6 +24,17 @@ function normalizeStorePath(path) {
   return `/${text}`
 }
 
+function withCacheBuster(url) {
+  try {
+    const resolved = new URL(url, window.location.origin)
+    resolved.searchParams.set('_ts', `${Date.now()}`)
+    return resolved.toString()
+  } catch {
+    const separator = String(url).includes('?') ? '&' : '?'
+    return `${url}${separator}_ts=${Date.now()}`
+  }
+}
+
 async function requestStoreJson(baseUrl, path) {
   const resp = await fetch(buildStoreUrl(baseUrl, path))
   const text = await resp.text()
@@ -84,7 +95,7 @@ export async function downloadStorePackageByBrowser(baseUrl, appId, version) {
     throw new Error('Download URL missing')
   }
 
-  const fileUrl = buildStoreResourceUrl(baseUrl, downloadPath)
+  const fileUrl = withCacheBuster(buildStoreResourceUrl(baseUrl, downloadPath))
   const filename = `${appId}-${version}.zip`
   triggerBrowserFileDownload(fileUrl, filename)
 
@@ -100,7 +111,7 @@ export async function downloadStorePackageForInstall(baseUrl, appId, version, { 
     throw new Error('Download URL missing')
   }
 
-  const fileUrl = buildStoreResourceUrl(baseUrl, downloadPath)
+  const fileUrl = withCacheBuster(buildStoreResourceUrl(baseUrl, downloadPath))
   const filename = `${appId}-${version}.zip`
   const size = Number(info?.size || 0)
 
@@ -115,7 +126,9 @@ export async function downloadStorePackageForInstall(baseUrl, appId, version, { 
   }
 
   // For smaller files, download as blob and trigger download, so that the file can be directly passed to the installer without user needing to find it in local storage
-  const resp = await fetch(fileUrl)
+  const resp = await fetch(fileUrl, {
+    cache: 'no-store',
+  })
   if (!resp.ok) {
     throw new Error(`Download failed: ${resp.status}`)
   }

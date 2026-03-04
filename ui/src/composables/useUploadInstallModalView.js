@@ -26,6 +26,20 @@ export function useUploadInstallModalView(props, emit) {
     emit('close')
   }
 
+  function onInteractiveInput(event) {
+    emit('interactive-input', event?.target?.value || '')
+  }
+
+  function onInteractiveKeydown(event) {
+    if (event?.key !== 'Enter') return
+    event.preventDefault()
+    emit('interactive-submit')
+  }
+
+  function onInteractiveMaskChange(value) {
+    emit('interactive-mask-change', Boolean(value))
+  }
+
   return {
     t,
     logRef,
@@ -33,5 +47,8 @@ export function useUploadInstallModalView(props, emit) {
     shouldShowOutput,
     onFileChange,
     closeByOverlay,
+    onInteractiveInput,
+    onInteractiveKeydown,
+    onInteractiveMaskChange,
   }
 }

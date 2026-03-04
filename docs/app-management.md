@@ -63,10 +63,14 @@ config_schema: null            # 配置校验 schema（可选）
 脚本执行规则：
 
 - 脚本字段为安装包内相对路径
+- pre_install 在最终版本目录中执行（不是上传临时目录）
 - 执行前会自动补齐可执行权限（`chmod +x`）
 - 不设置超时，允许用户手动终止
 - 输出写入 `data/logs/os/install.log`
 - 同时通过操作事件流实时回传到前端
+- `pre_install` 支持 PTY 交互模式（可接收 sudo 密码、`y/n` 等输入）
+
+覆盖安装（同版本 `overwrite=true`）时，会先重建该版本目录，再执行 pre_install。
 
 
 ## 文件系统布局
@@ -158,6 +162,7 @@ aivudaOS/
 ### popen 回退模式
 
 - **启动**：根据 `manifest.run.entrypoint` 构建命令，`subprocess.Popen` 启动（`start_new_session=True`）
+- 运行时会统一注入日志实时输出环境（例如 `PYTHONUNBUFFERED=1`、`ROSCONSOLE_STDOUT_LINE_BUFFERED=1`），并在可用时自动使用 `stdbuf -oL -eL` 包装启动命令，减少日志缓冲延迟
 - **停止**：`os.kill(pid, SIGTERM)`
 - PID 记录在 `app_runtime` 表
 - 进程自然退出时会自动回写 `app_runtime`：`running=0`、`pid=NULL`、更新 `last_stopped_at`
@@ -183,6 +188,7 @@ aivudaOS/
 | POST | `/aivuda_os/api/apps/{app_id}/update_this_version` | 执行指定已安装版本的 `update_this_version` 脚本 |
 | GET | `/aivuda_os/api/apps/operations/{operation_id}` | 查询操作状态 |
 | GET | `/aivuda_os/api/apps/operations/{operation_id}/events` | SSE 实时事件流 |
+| WS | `/aivuda_os/api/apps/operations/{operation_id}/interactive/ws?token=...` | 交互输入通道（写入脚本 stdin） |
 | GET | `/aivuda_os/api/apps/installed` | 已安装应用列表 |
 | GET | `/aivuda_os/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
 | POST | `/aivuda_os/api/apps/{app_id}/start` | 启动 |
@@ -234,6 +240,24 @@ aivudaOS/
 - `log`：脚本输出逐行内容（stdout/stderr）
 - `error`：失败信息
 - `completed`：操作结束（成功或失败）
+
+### 交互安装输入（WS）
+
+`POST /aivuda_os/api/apps/upload` 的响应包含：
+
+- `interactive_enabled`: 是否支持交互
+- `interactive_ws_path`: WebSocket 路径
+
+前端建议并行建立两条链路：
+
+1. SSE 接收状态与日志输出（只读）
+2. WS 发送交互输入（可写）
+
+输入协议：
+
+- 客户端可发送纯文本，或 JSON `{ "type": "input", "data": "..." }`
+- 后端会自动补 `\n` 后写入脚本 stdin
+- 任务结束后交互会话自动关闭
 
 ## 版本管理
 

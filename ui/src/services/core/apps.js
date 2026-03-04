@@ -140,3 +140,52 @@ export function subscribeAppOperationEvents(
     },
   }
 }
+
+export function openAppOperationInteractiveSocket(
+  operationId,
+  {
+    onMessage,
+    onOpen,
+    onError,
+  } = {},
+) {
+  const authPath = buildAuthUrl(`/api/apps/operations/${encodeURIComponent(operationId)}/interactive/ws`)
+  const absolute = authPath.startsWith('http') ? authPath : `${window.location.origin}${authPath}`
+  const wsUrl = absolute.replace(/^http/i, 'ws')
+  const socket = new WebSocket(wsUrl)
+
+  socket.onopen = () => {
+    if (onOpen) {
+      onOpen()
+    }
+  }
+
+  socket.onmessage = (event) => {
+    if (!onMessage) return
+    try {
+      const payload = event?.data ? JSON.parse(event.data) : {}
+      onMessage(payload)
+    } catch (err) {
+      onError?.(err)
+    }
+  }
+
+  socket.onerror = () => {
+    onError?.(new Error(i18n.global.t('apps.interactiveConnectionError')))
+  }
+
+  return {
+    sendInput(inputText) {
+      if (socket.readyState !== WebSocket.OPEN) {
+        throw new Error(i18n.global.t('apps.interactiveNotReady'))
+      }
+      socket.send(JSON.stringify({ type: 'input', data: String(inputText || '') }))
+    },
+    close() {
+      socket.close()
+    },
+    isOpen() {
+      return socket.readyState === WebSocket.OPEN
+    },
+  }
+}
