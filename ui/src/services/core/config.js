@@ -1,6 +1,7 @@
 import { request } from './api'
 
 export const DEFAULT_APPSTORE_BASE_URL = 'http://127.0.0.1:9001'
+export const APPSTORE_BASE_URL_STORAGE_KEY = 'aivuda_ui_appstore_base_url'
 
 export async function fetchOsConfig() {
   return request('/api/config', { auth: true })
@@ -15,18 +16,18 @@ export async function updateOsConfig(data, version) {
 }
 
 export function resolveAppStoreBaseUrl(configData) {
-  const value = String(configData?.appstore_base_url || '').trim()
+  const fromConfig = String(configData?.appstore_base_url || '').trim()
+  if (fromConfig) {
+    return fromConfig.replace(/\/+$/, '')
+  }
+
+  const fromStorage = String(localStorage.getItem(APPSTORE_BASE_URL_STORAGE_KEY) || '').trim()
+  const value = fromStorage.replace(/\/+$/, '')
   return value || DEFAULT_APPSTORE_BASE_URL
 }
 
 export async function saveAppStoreBaseUrl(nextBaseUrl) {
-  const cfg = await fetchOsConfig()
   const cleanBaseUrl = String(nextBaseUrl || '').trim().replace(/\/+$/, '')
-  const nextData = {
-    ...(cfg?.data || {}),
-    appstore_base_url: cleanBaseUrl,
-  }
-
-  await updateOsConfig(nextData, Number(cfg?.version || 0))
-  return nextData.appstore_base_url
+  localStorage.setItem(APPSTORE_BASE_URL_STORAGE_KEY, cleanBaseUrl)
+  return cleanBaseUrl
 }

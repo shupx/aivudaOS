@@ -1,7 +1,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { resolveAppStoreBaseUrl, fetchOsConfig } from '../services/core/config'
+import { resolveAppStoreBaseUrl } from '../services/core/config'
 import {
   MAX_IN_MEMORY_INSTALL_BYTES,
   downloadStorePackageByBrowser,
@@ -64,8 +64,7 @@ export function useOnlineStoreDetailPage() {
     actionError.value = ''
     actionMessage.value = ''
     try {
-      const cfg = await fetchOsConfig()
-      const baseUrl = resolveAppStoreBaseUrl(cfg?.data)
+      const baseUrl = resolveAppStoreBaseUrl()
       storeBaseUrl.value = baseUrl
 
       const detail = await fetchStoreAppDetail(baseUrl, appId.value)

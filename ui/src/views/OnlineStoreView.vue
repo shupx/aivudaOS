@@ -6,7 +6,6 @@ import { useOnlineStorePage } from '../composables/useOnlineStorePage'
 const { t } = useI18n()
 const {
   loading,
-  savingAddress,
   error,
   addressError,
   storeAddress,
@@ -37,11 +36,10 @@ const {
           class="select-input store-address-input"
           type="text"
           :placeholder="t('store.addressPlaceholder')"
+          @keydown.enter.prevent="saveAddress"
         >
-        <button class="btn" :disabled="savingAddress" @click="saveAddress">
-          {{ savingAddress ? t('common.processing') : t('store.saveAddress') }}
-        </button>
       </div>
+      <p class="muted">{{ t('store.addressConnectionHint') }}</p>
       <p v-if="addressError" class="error-text">{{ addressError }}</p>
     </article>
 

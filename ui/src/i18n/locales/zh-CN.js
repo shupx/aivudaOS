@@ -83,6 +83,7 @@ export default {
     loadFailed: '加载商店失败',
     addressLabel: '商店后端地址',
     addressPlaceholder: '例如：http://127.0.0.1:9001',
+    addressConnectionHint: '该地址是由浏览器所在主机直接连接，不是 aivudaOS 所在机器去连接。',
     saveAddress: '保存地址',
     saveAddressFailed: '保存商店地址失败',
     invalidAddress: '请输入有效的 http/https 地址',

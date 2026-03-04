@@ -83,6 +83,7 @@ export default {
     loadFailed: 'Failed to load store',
     addressLabel: 'App Store backend address',
     addressPlaceholder: 'Example: http://127.0.0.1:9001',
+    addressConnectionHint: 'This address is connected directly by the browser host, not by the machine running aivudaOS.',
     saveAddress: 'Save Address',
     saveAddressFailed: 'Failed to save store address',
     invalidAddress: 'Please input a valid http/https URL',

@@ -284,7 +284,11 @@ async def update_this_version(
     runtime = get_runtime_service()
 
     try:
-        record = operations.start_operation("update_this_version", app_id=app_id)
+        record = operations.start_operation(
+            "update_this_version",
+            app_id=app_id,
+            interactive_enabled=True,
+        )
     except AppOperationConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -296,6 +300,14 @@ async def update_this_version(
             app_id,
             payload.version,
             event_cb=emit,
+            interactive=True,
+            read_input=lambda timeout: operations.wait_interactive_input(
+                record.operation_id,
+                timeout=timeout,
+            ),
+            cancel_requested=lambda: operations.is_cancel_requested(
+                record.operation_id,
+            ),
         )
 
     _spawn_operation(record.operation_id, task)
@@ -305,6 +317,8 @@ async def update_this_version(
         "status": "queued",
         "operation_type": "update_this_version",
         "app_id": app_id,
+        "interactive_enabled": True,
+        "interactive_ws_path": f"/api/apps/operations/{record.operation_id}/interactive/ws",
     }
 
 
@@ -364,7 +378,11 @@ async def uninstall_app(
     runtime = get_runtime_service()
 
     try:
-        record = operations.start_operation("uninstall", app_id=app_id)
+        record = operations.start_operation(
+            "uninstall",
+            app_id=app_id,
+            interactive_enabled=True,
+        )
     except AppOperationConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -377,6 +395,14 @@ async def uninstall_app(
             version=payload.version,
             purge=payload.purge,
             event_cb=emit,
+            interactive=True,
+            read_input=lambda timeout: operations.wait_interactive_input(
+                record.operation_id,
+                timeout=timeout,
+            ),
+            cancel_requested=lambda: operations.is_cancel_requested(
+                record.operation_id,
+            ),
         )
 
     _spawn_operation(record.operation_id, task)
@@ -386,6 +412,8 @@ async def uninstall_app(
         "status": "queued",
         "operation_type": "uninstall",
         "app_id": app_id,
+        "interactive_enabled": True,
+        "interactive_ws_path": f"/api/apps/operations/{record.operation_id}/interactive/ws",
     }
 
 

@@ -3,8 +3,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppsPanel } from './useAppsPanel'
 import {
+  cancelAppOperation,
   fetchAppLogs,
   fetchAppVersions,
+  openAppOperationInteractiveSocket,
   subscribeAppOperationEvents,
   switchAppVersion,
   uninstallApp,
@@ -43,12 +45,18 @@ export function useAppDetailPage() {
   const actionLiveStatusDone = ref(false)
   const actionLiveOutput = ref('')
   const showActionOutputModal = ref(false)
+  const actionCancelBusy = ref(false)
+  const currentActionOperationId = ref('')
+  const actionInteractiveInput = ref('')
+  const actionInteractiveReady = ref(false)
+  const actionInteractiveMaskInput = ref(true)
+  let actionInteractiveSubmitHandler = null
 
   const versions = ref([])
   const selectedVersion = ref('')
   const switchWithRestart = ref(true)
 
-  const uninstallVersionOnly = ref(false)
+  const uninstallVersionOnly = ref(true)
   const uninstallPurge = ref(false)
 
   let logTimer = null
@@ -72,7 +80,24 @@ export function useAppDetailPage() {
   }
 
   function closeActionOutputModal() {
+    if (actionBusy.value) return
     showActionOutputModal.value = false
+  }
+
+  function setActionInteractiveInput(value) {
+    actionInteractiveInput.value = String(value || '')
+  }
+
+  function setActionInteractiveMaskInput(value) {
+    actionInteractiveMaskInput.value = Boolean(value)
+  }
+
+  function submitActionInteractiveInput() {
+    if (typeof actionInteractiveSubmitHandler === 'function') {
+      actionInteractiveSubmitHandler()
+      return
+    }
+    actionError.value = t('apps.interactiveNotReady')
   }
 
   function appendActionLine(line) {
@@ -83,9 +108,70 @@ export function useAppDetailPage() {
     }
   }
 
+  function appendActionChunk(chunk) {
+    if (!chunk) return
+    actionLiveOutput.value += String(chunk)
+    if (actionLiveOutput.value.length > 250000) {
+      actionLiveOutput.value = actionLiveOutput.value.slice(-150000)
+    }
+  }
+
   function waitForOperation(operationId) {
     return new Promise((resolve, reject) => {
       let settled = false
+      let interactiveSocket = null
+
+      function finish(callback) {
+        if (settled) return
+        settled = true
+        if (interactiveSocket) {
+          interactiveSocket.close()
+          interactiveSocket = null
+        }
+        actionInteractiveReady.value = false
+        actionCancelBusy.value = false
+        currentActionOperationId.value = ''
+        actionInteractiveSubmitHandler = null
+        subscription.close()
+        callback()
+      }
+
+      function sendInteractiveInput() {
+        const value = String(actionInteractiveInput.value || '')
+        if (!value) return
+        if (!interactiveSocket || !interactiveSocket.isOpen()) {
+          actionError.value = t('apps.interactiveNotReady')
+          return
+        }
+        try {
+          interactiveSocket.sendInput(value)
+          actionInteractiveInput.value = ''
+          actionError.value = ''
+        } catch (err) {
+          actionError.value = String(err?.message || err || t('apps.interactiveSendFailed'))
+        }
+      }
+
+      actionInteractiveSubmitHandler = sendInteractiveInput
+
+      interactiveSocket = openAppOperationInteractiveSocket(operationId, {
+        onOpen() {
+          actionInteractiveReady.value = true
+        },
+        onClose() {
+          actionInteractiveReady.value = false
+        },
+        onMessage(payload) {
+          if (payload?.type === 'interactive_closed') {
+            actionInteractiveReady.value = false
+          }
+        },
+        onError(err) {
+          actionInteractiveReady.value = false
+          appendActionLine(`${t('apps.interactiveConnectionError')}: ${String(err?.message || err || '')}`)
+        },
+      })
+
       const subscription = subscribeAppOperationEvents(operationId, {
         onEvent(event) {
           if (!event || typeof event !== 'object') return
@@ -94,7 +180,11 @@ export function useAppDetailPage() {
             actionLiveStatus.value = event.message || event.phase || event.status || actionLiveStatus.value
           }
           if (event.type === 'log') {
-            appendActionLine(event.line || '')
+            if (typeof event.chunk === 'string') {
+              appendActionChunk(event.chunk)
+            } else {
+              appendActionLine(event.line || '')
+            }
           }
           if (event.type === 'error') {
             appendActionLine(event.message || t('apps.operationFailed'))
@@ -102,23 +192,23 @@ export function useAppDetailPage() {
             actionLiveStatusDone.value = false
           }
           if (event.type === 'completed') {
-            if (settled) return
-            settled = true
-            subscription.close()
             if (event.status === 'completed') {
-              actionLiveStatusDone.value = true
-              resolve(event.result || {})
+              finish(() => {
+                actionLiveStatusDone.value = true
+                resolve(event.result || {})
+              })
             } else {
-              actionLiveStatusDone.value = false
-              reject(new Error(event.error || event.message || t('appDetail.operationFailed')))
+              finish(() => {
+                actionLiveStatusDone.value = false
+                reject(new Error(event.error || event.message || t('appDetail.operationFailed')))
+              })
             }
           }
         },
         onError(err) {
-          if (settled) return
-          settled = true
-          subscription.close()
-          reject(err)
+          finish(() => {
+            reject(err)
+          })
         },
       })
     })
@@ -224,11 +314,17 @@ export function useAppDetailPage() {
     clearActionStatus()
     actionLiveStatus.value = t('appDetail.queued')
     showActionOutputModal.value = true
+    currentActionOperationId.value = ''
+    actionCancelBusy.value = false
+    actionInteractiveInput.value = ''
+    actionInteractiveReady.value = false
+    actionInteractiveMaskInput.value = true
     try {
       const operation = await uninstallApp(app.value.app_id, {
         version: uninstallVersion,
         purge: uninstallPurge.value,
       })
+      currentActionOperationId.value = String(operation?.operation_id || '')
       await waitForOperation(operation.operation_id)
       await refresh()
       if (uninstallVersion) {
@@ -255,8 +351,14 @@ export function useAppDetailPage() {
     clearActionStatus()
     actionLiveStatus.value = t('appDetail.queued')
     showActionOutputModal.value = true
+    currentActionOperationId.value = ''
+    actionCancelBusy.value = false
+    actionInteractiveInput.value = ''
+    actionInteractiveReady.value = false
+    actionInteractiveMaskInput.value = true
     try {
       const operation = await updateAppThisVersion(app.value.app_id, selectedVersion.value)
+      currentActionOperationId.value = String(operation?.operation_id || '')
       await waitForOperation(operation.operation_id)
       actionMessage.value = t('appDetail.updateScriptSuccess')
     } catch (err) {
@@ -283,7 +385,7 @@ export function useAppDetailPage() {
     () => route.params.appId,
     (appId) => {
       clearActionStatus()
-      uninstallVersionOnly.value = false
+      uninstallVersionOnly.value = true
       uninstallPurge.value = false
       clearAndReloadLogs()
       loadVersions(String(appId || ''))
@@ -305,10 +407,33 @@ export function useAppDetailPage() {
 
   onUnmounted(() => {
     stopLogPolling()
+    actionInteractiveSubmitHandler = null
   })
 
   function backToList() {
     router.push('/dashboard/apps')
+  }
+
+  async function cancelCurrentAction() {
+    if (!actionBusy.value) return
+    if (actionCancelBusy.value) return
+
+    const operationId = String(currentActionOperationId.value || '')
+    if (!operationId) {
+      actionError.value = t('apps.interactiveNotReady')
+      return
+    }
+
+    actionCancelBusy.value = true
+    try {
+      await cancelAppOperation(operationId)
+      actionLiveStatus.value = t('apps.cancelling')
+      actionError.value = ''
+    } catch (err) {
+      actionError.value = String(err?.message || err || t('apps.cancelFailed'))
+    } finally {
+      actionCancelBusy.value = false
+    }
   }
 
   function confirmWholeAppUninstall(appId) {
@@ -353,7 +478,15 @@ export function useAppDetailPage() {
     actionLiveStatusDone,
     actionLiveOutput,
     showActionOutputModal,
+    actionCancelBusy,
     closeActionOutputModal,
+    cancelCurrentAction,
+    actionInteractiveInput,
+    actionInteractiveReady,
+    actionInteractiveMaskInput,
+    setActionInteractiveInput,
+    setActionInteractiveMaskInput,
+    submitActionInteractiveInput,
     versions,
     selectedVersion,
     switchWithRestart,

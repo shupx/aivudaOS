@@ -27,7 +27,15 @@ const {
   actionLiveStatusDone,
   actionLiveOutput,
   showActionOutputModal,
+  actionCancelBusy,
   closeActionOutputModal,
+  cancelCurrentAction,
+  actionInteractiveInput,
+  actionInteractiveReady,
+  actionInteractiveMaskInput,
+  setActionInteractiveInput,
+  setActionInteractiveMaskInput,
+  submitActionInteractiveInput,
   versions,
   selectedVersion,
   switchWithRestart,
@@ -167,7 +175,7 @@ const {
       </div>
     </article>
 
-    <div v-if="showActionOutputModal" class="modal-overlay" @click.self="closeActionOutputModal">
+    <div v-if="showActionOutputModal" class="modal-overlay" @click.self="actionBusy ? null : closeActionOutputModal">
       <section class="modal-card modal-wide">
         <header class="modal-header">
           <h3>{{ t('appDetail.actionOutputTitle') }}</h3>
@@ -180,10 +188,43 @@ const {
           {{ t('appDetail.statusPrefix', { status: actionLiveStatus }) }}
         </p>
         <p v-if="actionError" class="error-text">{{ actionError }}</p>
+
+        <div class="field">
+          <label>{{ t('apps.interactiveInputLabel') }}</label>
+          <div class="panel-actions">
+            <input
+              class="input"
+              :type="actionInteractiveMaskInput ? 'password' : 'text'"
+              autocomplete="off"
+              :placeholder="t('apps.interactiveInputPlaceholder')"
+              :value="actionInteractiveInput"
+              @input="setActionInteractiveInput($event?.target?.value || '')"
+              @keydown.enter.prevent="submitActionInteractiveInput"
+            >
+            <button
+              class="btn"
+              type="button"
+              @click="setActionInteractiveMaskInput(!actionInteractiveMaskInput)"
+            >
+              {{ actionInteractiveMaskInput ? t('apps.interactiveShowInput') : t('apps.interactiveHideInput') }}
+            </button>
+            <button
+              class="btn"
+              :disabled="!actionInteractiveInput || !actionInteractiveReady"
+              @click="submitActionInteractiveInput"
+            >
+              {{ t('apps.interactiveSend') }}
+            </button>
+          </div>
+        </div>
+
         <pre ref="actionLogRef" class="log-output" @scroll="onActionLogScroll"></pre>
 
         <footer class="panel-actions">
-          <button class="btn" @click="closeActionOutputModal">{{ t('common.close') }}</button>
+          <button class="btn" :disabled="actionBusy" @click="closeActionOutputModal">{{ t('common.close') }}</button>
+          <button v-if="actionBusy" class="btn danger" @click="cancelCurrentAction">
+            {{ actionCancelBusy ? t('common.processing') : t('apps.exitInstall') }}
+          </button>
         </footer>
       </section>
     </div>

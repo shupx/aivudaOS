@@ -20,6 +20,7 @@ from core.errors import (
     AppNotInstalledError,
     AppRuntimeError,
     NotFoundError,
+    OperationCanceledError,
 )
 from core.paths import APP_LOG_DIR
 from core.paths import PROJECT_ROOT
@@ -427,6 +428,9 @@ class RuntimeService:
         app_id: str,
         version: str,
         event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        interactive: bool = False,
+        read_input: Callable[[float], str | None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:
@@ -456,6 +460,9 @@ class RuntimeService:
             hook_name="update_this_version",
             root_dir=install_path,
             event_cb=event_cb,
+            interactive=interactive,
+            read_input=read_input,
+            cancel_requested=cancel_requested,
         )
 
         emit(
@@ -486,6 +493,9 @@ class RuntimeService:
         version: str | None = None,
         purge: bool = False,
         event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        interactive: bool = False,
+        read_input: Callable[[float], str | None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         """Uninstall a specific version or the entire app."""
         def emit(event_type: str, **payload: Any) -> None:
@@ -512,6 +522,9 @@ class RuntimeService:
                     hook_name="pre_uninstall",
                     root_dir=self._versioning.version_dir(app_id, hook_version),
                     event_cb=event_cb,
+                    interactive=interactive,
+                    read_input=read_input,
+                    cancel_requested=cancel_requested,
                 )
 
             emit("status", phase="remove", status="running", message="删除应用目录", app_id=app_id)
@@ -532,6 +545,9 @@ class RuntimeService:
                 hook_name="pre_uninstall",
                 root_dir=self._versioning.version_dir(app_id, version),
                 event_cb=event_cb,
+                interactive=interactive,
+                read_input=read_input,
+                cancel_requested=cancel_requested,
             )
 
             active = self._versioning.active_version(app_id)
@@ -892,6 +908,9 @@ class RuntimeService:
         hook_name: str,
         root_dir: Path,
         event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        interactive: bool = False,
+        read_input: Callable[[float], str | None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> bool:
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:
@@ -901,6 +920,9 @@ class RuntimeService:
         if not script_path:
             return False
 
+        if cancel_requested and cancel_requested():
+            raise OperationCanceledError("Operation canceled by user")
+
         emit(
             "status",
             phase=hook_name,
@@ -909,19 +931,41 @@ class RuntimeService:
             app_id=app_id,
         )
         try:
-            self._script_hooks.run(
-                app_id=app_id,
-                hook_name=hook_name,
-                script_path=str(script_path),
-                root_dir=root_dir,
-                on_output=lambda line: emit(
-                    "log",
-                    phase=hook_name,
-                    hook=hook_name,
-                    line=line,
+            if interactive:
+                self._script_hooks.run_interactive(
                     app_id=app_id,
-                ),
-            )
+                    hook_name=hook_name,
+                    script_path=str(script_path),
+                    root_dir=root_dir,
+                    on_output=lambda chunk: emit(
+                        "log",
+                        phase=hook_name,
+                        hook=hook_name,
+                        chunk=chunk,
+                        app_id=app_id,
+                    ),
+                    read_input=read_input,
+                    cancel_requested=cancel_requested,
+                )
+            else:
+                self._script_hooks.run(
+                    app_id=app_id,
+                    hook_name=hook_name,
+                    script_path=str(script_path),
+                    root_dir=root_dir,
+                    on_output=lambda line: emit(
+                        "log",
+                        phase=hook_name,
+                        hook=hook_name,
+                        line=line,
+                        app_id=app_id,
+                    ),
+                )
         except ScriptHookError as exc:
+            if cancel_requested and cancel_requested():
+                raise OperationCanceledError("Operation canceled by user") from exc
             raise AppRuntimeError(f"{hook_name} 执行失败: {exc}") from exc
+
+        if cancel_requested and cancel_requested():
+            raise OperationCanceledError("Operation canceled by user")
         return True

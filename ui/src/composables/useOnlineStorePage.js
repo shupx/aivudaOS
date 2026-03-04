@@ -1,7 +1,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  fetchOsConfig,
   resolveAppStoreBaseUrl,
   saveAppStoreBaseUrl,
 } from '../services/core/config'
@@ -31,8 +30,7 @@ export function useOnlineStorePage() {
     loading.value = true
     error.value = ''
     try {
-      const cfg = await fetchOsConfig()
-      const baseUrl = resolveAppStoreBaseUrl(cfg?.data)
+      const baseUrl = resolveAppStoreBaseUrl()
       storeAddress.value = baseUrl
       const data = await fetchStoreIndex(baseUrl)
       items.value = Array.isArray(data?.items) ? data.items : []
