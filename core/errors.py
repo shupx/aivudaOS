@@ -39,3 +39,7 @@ class InvalidConfigError(AivudaError):
 
 class PackageFormatError(AivudaError):
     """App package format is invalid or missing manifest."""
+
+
+class OperationCanceledError(AivudaError):
+    """Long-running operation was canceled by user."""

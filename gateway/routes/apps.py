@@ -18,6 +18,7 @@ from core.errors import (
     AuthenticationError,
     ConfigVersionConflictError,
     NotFoundError,
+    OperationCanceledError,
     PackageFormatError,
 )
 from gateway.deps import (
@@ -63,6 +64,8 @@ def _spawn_operation(
         try:
             result = task()
             operations.mark_completed(operation_id, result)
+        except OperationCanceledError as exc:
+            operations.mark_canceled(operation_id, str(exc))
         except Exception as exc:
             operations.mark_failed(operation_id, str(exc))
 
@@ -115,6 +118,9 @@ async def upload_app(
                 read_input=lambda timeout: operations.wait_interactive_input(
                     record.operation_id,
                     timeout=timeout,
+                ),
+                cancel_requested=lambda: operations.is_cancel_requested(
+                    record.operation_id,
                 ),
             )
         except PackageFormatError as exc:
@@ -391,6 +397,23 @@ async def get_operation(operation_id: str, token: str) -> dict[str, Any]:
         return operations.get_operation(operation_id)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/operations/{operation_id}/cancel")
+async def cancel_operation(operation_id: str, token: str) -> dict[str, Any]:
+    _require_auth(token)
+    operations = get_app_operation_manager()
+    try:
+        operations.request_cancel(operation_id, reason="Canceled by user")
+        return {
+            "ok": True,
+            "operation_id": operation_id,
+            "status": "cancelling",
+        }
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except AppOperationConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.websocket("/operations/{operation_id}/interactive/ws")

@@ -15,6 +15,7 @@ from core.apps.versioning import VersioningService
 from core.config.service import ConfigService
 from core.db.connection import db_conn
 from core.errors import (
+    OperationCanceledError,
     PackageFormatError,
 )
 from core.paths import UPLOAD_TEMP_DIR
@@ -44,6 +45,7 @@ class InstallerService:
         event_cb: Callable[[str, dict[str, Any]], None] | None = None,
         interactive: bool = False,
         read_input: Callable[[float], str | None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         """Install an app from an uploaded package file (.tar.gz / .zip).
 
@@ -67,10 +69,15 @@ class InstallerService:
             if event_cb:
                 event_cb(event_type, payload)
 
+        def ensure_not_canceled() -> None:
+            if cancel_requested and cancel_requested():
+                raise OperationCanceledError("Installation canceled by user")
+
         UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
         emit("status", phase="prepare", status="running", message="准备安装")
 
         with tempfile.TemporaryDirectory(dir=str(UPLOAD_TEMP_DIR)) as tmpdir_str:
+            ensure_not_canceled()
             tmpdir = Path(tmpdir_str)
             pkg_file = tmpdir / filename
             pkg_file.write_bytes(file_data)
@@ -85,6 +92,7 @@ class InstallerService:
                 raise PackageFormatError(
                     f"无法解压安装包 ({filename}): {exc}"
                 ) from exc
+            ensure_not_canceled()
 
             # Locate manifest.yaml
             manifest_path = self._find_manifest(extract_dir)
@@ -123,8 +131,10 @@ class InstallerService:
             install_path = self._versioning.prepare_version_dir(app_id, version)
 
             try:
+                ensure_not_canceled()
                 # Copy all files from package content root to final install path
                 for item in content_root.iterdir():
+                    ensure_not_canceled()
                     dest = install_path / item.name
                     if item.is_dir():
                         shutil.copytree(str(item), str(dest))
@@ -156,6 +166,7 @@ class InstallerService:
                                     app_id=app_id,
                                 ),
                                 read_input=read_input,
+                                cancel_requested=cancel_requested,
                             )
                         else:
                             self._script_hooks.run(
@@ -172,9 +183,12 @@ class InstallerService:
                                 ),
                             )
                     except ScriptHookError as exc:
+                        if "已取消" in str(exc):
+                            raise OperationCanceledError("Installation canceled by user") from exc
                         raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
 
                 self._ensure_entrypoint_ready(install_path, manifest)
+                ensure_not_canceled()
 
                 # Record in database
                 self._record_installation(app_id, version, install_path, manifest)
@@ -182,6 +196,7 @@ class InstallerService:
 
                 # Initialize per-app config
                 self._config.init_app_config(app_id, manifest.default_config)
+                ensure_not_canceled()
 
                 # Activate this version
                 self._versioning.activate_version(app_id, version)

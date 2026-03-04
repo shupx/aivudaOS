@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from core.errors import AppOperationConflictError, NotFoundError
 
@@ -27,6 +27,9 @@ class OperationRecord:
     interactive_open: bool = False
     interactive_closed_reason: str | None = None
     interactive_inputs: list[str] = field(default_factory=list)
+    cancel_requested: bool = False
+    cancel_reason: str | None = None
+    cancel_handlers: list[Callable[[], None]] = field(default_factory=list)
 
 
 class AppOperationManager:
@@ -158,6 +161,30 @@ class AppOperationManager:
         )
         self._release_app(record)
 
+    def mark_canceled(self, operation_id: str, reason: str) -> None:
+        record = self._require_record(operation_id)
+        record.status = "canceled"
+        record.error = reason
+        record.done = True
+        record.ended_at = int(time.time())
+        self.close_interactive(operation_id, reason="canceled")
+        self.publish(
+            operation_id,
+            "status",
+            status="canceled",
+            done=True,
+            message=reason,
+        )
+        self.publish(
+            operation_id,
+            "completed",
+            status="canceled",
+            done=True,
+            error=reason,
+            canceled=True,
+        )
+        self._release_app(record)
+
     def get_operation(self, operation_id: str) -> dict[str, Any]:
         record = self._require_record(operation_id)
         return {
@@ -173,7 +200,63 @@ class AppOperationManager:
             "interactive_enabled": record.interactive_enabled,
             "interactive_open": record.interactive_open,
             "interactive_closed_reason": record.interactive_closed_reason,
+            "cancel_requested": record.cancel_requested,
+            "cancel_reason": record.cancel_reason,
         }
+
+    def request_cancel(self, operation_id: str, reason: str = "Canceled by user") -> None:
+        record = self._require_record(operation_id)
+        handlers: list[Callable[[], None]] = []
+        with record.condition:
+            if record.done:
+                raise AppOperationConflictError(
+                    f"operation already finished: {operation_id}"
+                )
+            if record.cancel_requested:
+                return
+
+            record.cancel_requested = True
+            record.cancel_reason = reason
+            record.status = "cancelling"
+            handlers = list(record.cancel_handlers)
+            record.condition.notify_all()
+
+        self.close_interactive(operation_id, reason="canceled")
+        self.publish(
+            operation_id,
+            "status",
+            status="cancelling",
+            phase="cancelling",
+            message=reason,
+        )
+
+        for handler in handlers:
+            try:
+                handler()
+            except Exception:
+                continue
+
+    def is_cancel_requested(self, operation_id: str) -> bool:
+        record = self._require_record(operation_id)
+        with record.condition:
+            return record.cancel_requested
+
+    def register_cancel_handler(
+        self,
+        operation_id: str,
+        handler: Callable[[], None],
+    ) -> None:
+        record = self._require_record(operation_id)
+        should_call = False
+        with record.condition:
+            record.cancel_handlers.append(handler)
+            should_call = record.cancel_requested
+
+        if should_call:
+            try:
+                handler()
+            except Exception:
+                pass
 
     def submit_interactive_input(self, operation_id: str, text: str) -> None:
         record = self._require_record(operation_id)

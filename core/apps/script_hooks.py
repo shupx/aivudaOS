@@ -4,6 +4,7 @@ import errno
 import os
 import pty
 import select
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -107,6 +108,7 @@ class ScriptHookRunner:
         root_dir: Path,
         on_output: Callable[[str], None] | None = None,
         read_input: Callable[[float], str | None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> ScriptHookRunResult:
         script = self._resolve_script(script_path, root_dir)
         self._ensure_executable(script)
@@ -140,7 +142,13 @@ class ScriptHookRunner:
                 os.close(slave_fd)
 
             try:
+                canceled = False
                 while True:
+                    if cancel_requested and cancel_requested():
+                        canceled = True
+                        if proc.poll() is None:
+                            self._terminate_process_tree(proc)
+
                     try:
                         ready, _, _ = select.select([master_fd], [], [], 0.2)
                     except OSError:
@@ -183,6 +191,12 @@ class ScriptHookRunner:
             log_file.write(footer.encode("utf-8", errors="replace"))
             log_file.flush()
 
+        if canceled:
+            raise ScriptHookError(
+                f"脚本执行已取消: hook={hook_name}, script={script_path}",
+                output=output,
+            )
+
         if code != 0:
             raise ScriptHookError(
                 f"脚本执行失败: hook={hook_name}, script={script_path}, exit_code={code}",
@@ -195,6 +209,34 @@ class ScriptHookRunner:
             exit_code=code,
             output=output,
         )
+
+    @staticmethod
+    def _terminate_process_tree(proc: subprocess.Popen[str], grace_seconds: float = 2.0) -> None:
+        if proc.poll() is not None:
+            return
+
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except OSError:
+            try:
+                proc.terminate()
+            except OSError:
+                return
+
+        deadline = time.time() + max(0.0, grace_seconds)
+        while proc.poll() is None and time.time() < deadline:
+            time.sleep(0.05)
+
+        if proc.poll() is not None:
+            return
+
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            try:
+                proc.kill()
+            except OSError:
+                pass
 
     @staticmethod
     def _resolve_script(script_path: str, root_dir: Path) -> Path:

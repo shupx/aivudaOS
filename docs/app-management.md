@@ -188,6 +188,7 @@ aivudaOS/
 | POST | `/aivuda_os/api/apps/{app_id}/update_this_version` | 执行指定已安装版本的 `update_this_version` 脚本 |
 | GET | `/aivuda_os/api/apps/operations/{operation_id}` | 查询操作状态 |
 | GET | `/aivuda_os/api/apps/operations/{operation_id}/events` | SSE 实时事件流 |
+| POST | `/aivuda_os/api/apps/operations/{operation_id}/cancel` | 取消运行中的操作 |
 | WS | `/aivuda_os/api/apps/operations/{operation_id}/interactive/ws?token=...` | 交互输入通道（写入脚本 stdin） |
 | GET | `/aivuda_os/api/apps/installed` | 已安装应用列表 |
 | GET | `/aivuda_os/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
@@ -258,6 +259,11 @@ aivudaOS/
 - 客户端可发送纯文本，或 JSON `{ "type": "input", "data": "..." }`
 - 后端会自动补 `\n` 后写入脚本 stdin
 - 任务结束后交互会话自动关闭
+
+取消操作：
+
+- 前端可调用 `POST /operations/{operation_id}/cancel` 请求取消
+- 服务端会将状态置为 `cancelling`，并在脚本退出后结束为 `canceled`
 
 ## 版本管理
 

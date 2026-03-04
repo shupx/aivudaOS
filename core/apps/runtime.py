@@ -368,6 +368,8 @@ class RuntimeService:
         if self._should_use_systemd(scope):
             manifest = self._get_manifest(app_id)
             command = self._build_exec_command(manifest, install_path)
+            command = self._decorate_command_for_realtime_logs(command)
+            runtime_env = self._runtime_log_env()
             log_path = self._app_log_path(app_id)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -378,6 +380,7 @@ class RuntimeService:
                     working_dir=install_path,
                     log_path=log_path,
                     description=f"AivudaOS app {manifest.name} ({app_id})",
+                    environment=runtime_env,
                 )
                 self._systemd.daemon_reload(scope)
                 self._systemd.set_enabled(app_id, scope, enabled)
@@ -577,6 +580,7 @@ class RuntimeService:
         # only for popen mode, systemd will manage autostart itself and we skip replay to avoid conflicts
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
+            self._reconcile_systemd_units(scope)
             return {
                 "started": [],
                 "skipped": [],
@@ -611,6 +615,44 @@ class RuntimeService:
             "failed": failed,
             "mode": "popen",
         }
+
+    def _reconcile_systemd_units(self, scope: str) -> None:
+        """Refresh systemd unit files for installed apps to keep runtime wrappers/env in sync."""
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT app_id, autostart FROM app_runtime ORDER BY app_id"
+            ).fetchall()
+
+        for row in rows:
+            app_id = str(row["app_id"])
+            enabled = bool(row["autostart"])
+            install_path = self._versioning.active_install_path(app_id)
+            if install_path is None:
+                continue
+            try:
+                manifest = self._get_manifest(app_id)
+                command = self._build_exec_command(manifest, install_path)
+                command = self._decorate_command_for_realtime_logs(command)
+                runtime_env = self._runtime_log_env()
+                log_path = self._app_log_path(app_id)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                self._systemd.write_unit(
+                    app_id=app_id,
+                    scope=scope,
+                    command=command,
+                    working_dir=install_path,
+                    log_path=log_path,
+                    description=f"AivudaOS app {manifest.name} ({app_id})",
+                    environment=runtime_env,
+                )
+                self._systemd.set_enabled(app_id, scope, enabled)
+            except (AppNotInstalledError, OSError, subprocess.SubprocessError, ValueError):
+                continue
+
+        try:
+            self._systemd.daemon_reload(scope)
+        except (OSError, subprocess.SubprocessError):
+            pass
 
     def _runtime_mode(self) -> str:
         raw = str(self._config.get_os_setting("runtime_process_manager", "auto"))

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+  cancelAppOperation,
   openAppOperationInteractiveSocket,
   subscribeAppOperationEvents,
   uploadAppPackage,
@@ -22,6 +23,8 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
   const uploadInteractiveInput = ref('')
   const uploadInteractiveReady = ref(false)
   const uploadInteractiveMaskInput = ref(true)
+  const uploadCancelBusy = ref(false)
+  const currentOperationId = ref('')
   let interactiveSubmitHandler = null
 
   function openUploadModal({ hint = '', showFilePicker = true } = {}) {
@@ -46,6 +49,8 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     uploadInteractiveInput.value = ''
     uploadInteractiveReady.value = false
     uploadInteractiveMaskInput.value = true
+    uploadCancelBusy.value = false
+    currentOperationId.value = ''
     interactiveSubmitHandler = null
   }
 
@@ -94,6 +99,8 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
           interactiveSocket = null
         }
         uploadInteractiveReady.value = false
+        uploadCancelBusy.value = false
+        currentOperationId.value = ''
         interactiveSubmitHandler = null
         subscription.close()
         callback()
@@ -120,6 +127,9 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
       interactiveSocket = openAppOperationInteractiveSocket(operationId, {
         onOpen() {
           uploadInteractiveReady.value = true
+        },
+        onClose() {
+          uploadInteractiveReady.value = false
         },
         onMessage(payload) {
           if (payload?.type === 'interactive_closed') {
@@ -193,6 +203,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     uploadOutput.value = ''
     try {
       const operation = await uploadAppPackage(uploadFile.value, { overwrite: false })
+      currentOperationId.value = String(operation?.operation_id || '')
       uploadInteractiveReady.value = false
       await waitForOperation(operation.operation_id)
       if (onInstalled) {
@@ -227,6 +238,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
         uploadStatusDone.value = false
         uploadOutput.value = ''
         const overwriteOperation = await uploadAppPackage(uploadFile.value, { overwrite: true })
+        currentOperationId.value = String(overwriteOperation?.operation_id || '')
         uploadInteractiveReady.value = false
         await waitForOperation(overwriteOperation.operation_id)
         if (onInstalled) {
@@ -258,11 +270,30 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     uploadInteractiveInput,
     uploadInteractiveReady,
     uploadInteractiveMaskInput,
+    uploadCancelBusy,
     openUploadModal,
     closeUploadModal,
     setUploadFile,
     onUploadFileChange,
     submitUpload,
+    async cancelCurrentUpload() {
+      if (!uploadBusy.value) return
+      if (uploadCancelBusy.value) return
+      const operationId = String(currentOperationId.value || '')
+      if (!operationId) {
+        uploadError.value = t('apps.interactiveNotReady')
+        return
+      }
+      uploadCancelBusy.value = true
+      try {
+        await cancelAppOperation(operationId)
+        uploadStatus.value = t('apps.cancelling')
+      } catch (err) {
+        uploadError.value = String(err?.message || err || t('apps.cancelFailed'))
+      } finally {
+        uploadCancelBusy.value = false
+      }
+    },
     submitInteractiveInput() {
       if (typeof interactiveSubmitHandler === 'function') {
         interactiveSubmitHandler()

@@ -64,6 +64,9 @@ export default {
     interactiveHideInput: '隐藏输入',
     interactiveShowInput: '显示输入',
     interactiveSend: '发送',
+    exitInstall: '退出安装',
+    cancelling: '正在退出安装...',
+    cancelFailed: '退出安装失败',
     waitingOutput: '等待输出...',
   },
   store: {

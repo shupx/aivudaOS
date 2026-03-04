@@ -11,6 +11,7 @@ const props = defineProps({
   fileName: { type: String, default: '' },
   hint: { type: String, default: '' },
   showFilePicker: { type: Boolean, default: true },
+  cancelBusy: { type: Boolean, default: false },
   interactiveInput: { type: String, default: '' },
   interactiveReady: { type: Boolean, default: false },
   interactiveMaskInput: { type: Boolean, default: true },
@@ -23,6 +24,7 @@ const emit = defineEmits([
   'interactive-input',
   'interactive-submit',
   'interactive-mask-change',
+  'cancel-operation',
 ])
 
 const {
@@ -93,7 +95,7 @@ const {
           </button>
           <button
             class="btn"
-            :disabled="!interactiveReady || !interactiveInput"
+            :disabled="!interactiveInput"
             @click="$emit('interactive-submit')"
           >
             {{ t('apps.interactiveSend') }}
@@ -103,6 +105,9 @@ const {
 
       <footer class="panel-actions">
         <button class="btn" :disabled="busy" @click="$emit('close')">{{ t('common.cancel') }}</button>
+        <button v-if="busy" class="btn danger" @click="$emit('cancel-operation')">
+          {{ cancelBusy ? t('common.processing') : t('apps.exitInstall') }}
+        </button>
         <button class="btn primary" :disabled="busy || !fileName" @click="$emit('submit')">
           {{ busy ? t('apps.uploading') : t('apps.uploadAndInstall') }}
         </button>

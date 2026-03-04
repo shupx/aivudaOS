@@ -126,6 +126,7 @@ Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-
 - `POST /aivuda_os/api/apps/{app_id}/uninstall` — 卸载（支持指定版本或全部）
 - `GET /aivuda_os/api/apps/operations/{operation_id}` — 查询安装/卸载/更新操作状态
 - `GET /aivuda_os/api/apps/operations/{operation_id}/events` — SSE 实时操作输出流
+- `POST /aivuda_os/api/apps/operations/{operation_id}/cancel` — 请求取消运行中的操作（如上传安装）
 - `WS /aivuda_os/api/apps/operations/{operation_id}/interactive/ws` — 安装交互输入通道（query 带 `token`）
 - `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
 - `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置

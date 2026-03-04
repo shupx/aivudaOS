@@ -64,6 +64,9 @@ export default {
     interactiveHideInput: 'Hide Input',
     interactiveShowInput: 'Show Input',
     interactiveSend: 'Send',
+    exitInstall: 'Exit Install',
+    cancelling: 'Canceling install...',
+    cancelFailed: 'Failed to cancel install',
     waitingOutput: 'Waiting for output...',
   },
   store: {

@@ -91,6 +91,13 @@ export async function uninstallApp(appId, { version = null, purge = false } = {}
   })
 }
 
+export async function cancelAppOperation(operationId) {
+  return request(`/api/apps/operations/${encodeURIComponent(operationId)}/cancel`, {
+    method: 'POST',
+    auth: true,
+  })
+}
+
 export function subscribeAppOperationEvents(
   operationId,
   {
@@ -146,6 +153,7 @@ export function openAppOperationInteractiveSocket(
   {
     onMessage,
     onOpen,
+    onClose,
     onError,
   } = {},
 ) {
@@ -172,6 +180,10 @@ export function openAppOperationInteractiveSocket(
 
   socket.onerror = () => {
     onError?.(new Error(i18n.global.t('apps.interactiveConnectionError')))
+  }
+
+  socket.onclose = () => {
+    onClose?.()
   }
 
   return {

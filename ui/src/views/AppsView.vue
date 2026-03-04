@@ -26,12 +26,14 @@ const {
   uploadInteractiveInput,
   uploadInteractiveReady,
   uploadInteractiveMaskInput,
+  uploadCancelBusy,
   openUploadModal,
   closeUploadModal,
   setInteractiveInput,
   setInteractiveMaskInput,
   onUploadFileChange,
   submitUpload,
+  cancelCurrentUpload,
   submitInteractiveInput,
 } = useAppsPanel()
 </script>
@@ -77,12 +79,14 @@ const {
       :file-name="uploadFileName"
       :hint="uploadHint"
       :show-file-picker="uploadShowFilePicker"
+      :cancel-busy="uploadCancelBusy"
       :interactive-input="uploadInteractiveInput"
       :interactive-ready="uploadInteractiveReady"
       :interactive-mask-input="uploadInteractiveMaskInput"
       @close="closeUploadModal"
       @file-change="onUploadFileChange"
       @submit="submitUpload"
+      @cancel-operation="cancelCurrentUpload"
       @interactive-input="setInteractiveInput"
       @interactive-mask-change="setInteractiveMaskInput"
       @interactive-submit="submitInteractiveInput"
