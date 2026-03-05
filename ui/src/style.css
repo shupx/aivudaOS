@@ -176,8 +176,7 @@ input {
 
 .main-panel {
   padding: 18px;
-  display: grid;
-  gap: 12px;
+  display: block;
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
@@ -618,6 +617,8 @@ input {
     height: auto;
     min-height: 100vh;
     overflow: visible;
+    align-content: start;
+    align-items: start;
   }
 
   .left-sidebar {
@@ -625,6 +626,7 @@ input {
     align-items: center;
     flex-wrap: wrap;
     height: auto;
+    align-self: start;
     gap: 8px;
     padding: 10px;
   }
@@ -632,6 +634,7 @@ input {
   .main-panel {
     height: auto;
     overflow: visible;
+    align-self: start;
   }
 
   .sidebar-top {
