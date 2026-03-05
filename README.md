@@ -31,7 +31,7 @@ PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --re
 
 ```bash
 # 推荐用gunicorn
-PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind 0.0.0.0:8000 --reload --reload-extra-file gateway --reload-extra-file core
+PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind 0.0.0.0:8000 --reload
 ```
 
 
@@ -85,6 +85,14 @@ Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-
 
 日志接口保持不变：`GET /aivuda_os/api/apps/{app_id}/logs` 继续读取 `data/logs/apps/{app_id}/current.log`。
 
+App 启动时会注入配置路径相关环境变量：
+
+- `AIVUDA_APP_CONFIG_PATH`：当前 app 当前版本配置文件路径
+- `AIVUDA_APP_ID` / `AIVUDA_APP_VERSION`
+- `AIVUDA_APP_HELPERS_ENTRY_PATH`：统一 helper 入口（`core/shell_helpers/aivuda_app_helpers.sh`）
+
+推荐在 app `start.sh` 先 `source "$AIVUDA_APP_HELPERS_ENTRY_PATH"`，再用 `aivuda_yaml_get` 按 dotted path 读取配置。
+
 ## 默认账号
 
 - 用户名: `admin`
@@ -105,6 +113,7 @@ Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-
 | `/status` | 会话状态 |
 | `/config` | OS 配置管理 |
 | `/apps` | 应用安装 / 版本管理 |
+| `/dashboard/apps/:appId/config` | 应用参数配置（按版本） |
 | `/dashboard/store` | 在线应用商店（查看与下载/安装） |
 
 ## API 接口
@@ -136,8 +145,8 @@ Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-
 - `POST /aivuda_os/api/apps/operations/{operation_id}/cancel` — 请求取消运行中的操作（如上传安装）
 - `WS /aivuda_os/api/apps/operations/{operation_id}/interactive/ws` — 安装交互输入通道（query 带 `token`）
 - `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
-- `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置
-- `PUT  /aivuda_os/api/apps/{app_id}/config` — 更新应用配置
+- `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置（可选 query: `app_version`）
+- `PUT  /aivuda_os/api/apps/{app_id}/config` — 更新应用配置（body 可带 `app_version`）
 
 ## 安装交互输入（pre_install）
 

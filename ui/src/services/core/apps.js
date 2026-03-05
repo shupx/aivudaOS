@@ -54,6 +54,19 @@ export async function fetchAppVersions(appId) {
   return request(`/api/apps/${encodeURIComponent(appId)}/versions`, { auth: true })
 }
 
+export async function fetchAppConfig(appId, appVersion = '') {
+  const query = appVersion ? `?app_version=${encodeURIComponent(appVersion)}` : ''
+  return request(`/api/apps/${encodeURIComponent(appId)}/config${query}`, { auth: true })
+}
+
+export async function updateAppConfig(appId, payload) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/config`, {
+    method: 'PUT',
+    body: payload,
+    auth: true,
+  })
+}
+
 export async function switchAppVersion(appId, version, restart = false) {
   return request(`/api/apps/${encodeURIComponent(appId)}/switch-version`, {
     method: 'POST',

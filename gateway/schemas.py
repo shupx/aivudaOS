@@ -24,6 +24,7 @@ class ConfigUpdateRequest(BaseModel):
 class AppConfigUpdateRequest(BaseModel):
     version: int
     data: dict[str, Any]
+    app_version: str | None = None
 
 
 class AppAutostartUpdateRequest(BaseModel):

@@ -41,6 +41,7 @@ const {
   switchWithRestart,
   canSwitchVersion,
   goToManualUpload,
+  goToConfigPage,
   runUpdateThisVersionScript,
   uninstallVersionOnly,
   uninstallPurge,
@@ -133,6 +134,16 @@ const {
             </button>
           </div>
           <p class="muted">{{ t('appDetail.manualUploadHint') }}</p>
+        </div>
+
+        <div class="action-block">
+          <h4>{{ t('appDetail.configTitle') }}</h4>
+          <div class="panel-actions wrap">
+            <button class="btn" @click="goToConfigPage">
+              {{ t('appDetail.goConfigPage') }}
+            </button>
+          </div>
+          <p class="muted">{{ t('appDetail.configHint') }}</p>
         </div>
 
         <div class="action-block">

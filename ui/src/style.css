@@ -412,6 +412,30 @@ input {
   word-break: break-word;
 }
 
+.text-area {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 260px;
+  width: 100%;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.config-schema-output {
+  height: 220px;
+}
+
+.constraint-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  display: grid;
+  gap: 6px;
+}
+
 .apps-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

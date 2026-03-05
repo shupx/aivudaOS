@@ -9,12 +9,14 @@ from typing import Any, Callable
 
 import yaml
 
+from core.apps.config_validation import validate_config_data
 from core.apps.models import AppManifest
 from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from core.apps.versioning import VersioningService
 from core.config.service import ConfigService
 from core.db.connection import db_conn
 from core.errors import (
+    InvalidConfigError,
     OperationCanceledError,
     PackageFormatError,
 )
@@ -61,8 +63,8 @@ class InstallerService:
             run:
               entrypoint: ./start.sh
               args: []
-            default_config: {}
-            config_schema: null
+                        default_config_path: ./config/default_config.yaml
+                        config_schema_path: ./config/config_schema.yaml
         """
 
         def emit(event_type: str, **payload: Any) -> None:
@@ -125,6 +127,25 @@ class InstallerService:
             )
 
             content_root = manifest_path.parent
+
+            manifest.default_config = self._load_manifest_yaml_mapping(
+                content_root,
+                manifest.default_config_path,
+                field_name="default_config_path",
+            )
+            manifest.config_schema = self._load_manifest_yaml_mapping(
+                content_root,
+                manifest.config_schema_path,
+                field_name="config_schema_path",
+            )
+            try:
+                validate_config_data(
+                    manifest.default_config,
+                    manifest.config_schema,
+                    context=f"manifest {app_id}@{version} default_config",
+                )
+            except InvalidConfigError as exc:
+                raise PackageFormatError(str(exc)) from exc
 
             # Prepare version directory first; this also handles overwrite case
             emit("status", phase="install", status="running", message="写入版本目录", app_id=app_id)
@@ -195,7 +216,7 @@ class InstallerService:
                 emit("status", phase="db", status="running", message="写入数据库", app_id=app_id)
 
                 # Initialize per-app config
-                self._config.init_app_config(app_id, manifest.default_config)
+                self._config.init_app_config(app_id, version, manifest.default_config)
                 ensure_not_canceled()
 
                 # Activate this version
@@ -286,5 +307,38 @@ class InstallerService:
             raise PackageFormatError(
                 f"设置 entrypoint 可执行权限失败: {exc}"
             ) from exc
+
+    @staticmethod
+    def _load_manifest_yaml_mapping(
+        content_root: Path,
+        relative_path: str,
+        *,
+        field_name: str,
+    ) -> dict[str, Any]:
+        raw = str(relative_path or "").strip()
+        if not raw:
+            raise PackageFormatError(f"manifest 缺少 {field_name}")
+
+        rel = Path(raw)
+        if rel.is_absolute():
+            raise PackageFormatError(f"{field_name} 必须是包内相对路径")
+
+        resolved_root = content_root.resolve()
+        resolved = (resolved_root / rel).resolve()
+        if resolved_root != resolved and resolved_root not in resolved.parents:
+            raise PackageFormatError(f"{field_name} 指向了安装包外部路径")
+        if not resolved.exists() or not resolved.is_file():
+            raise PackageFormatError(f"{field_name} 文件不存在: {raw}")
+
+        try:
+            parsed = yaml.safe_load(resolved.read_text("utf-8"))
+        except Exception as exc:
+            raise PackageFormatError(f"读取 {field_name} 失败: {exc}") from exc
+
+        if parsed is None:
+            return {}
+        if not isinstance(parsed, dict):
+            raise PackageFormatError(f"{field_name} 必须解析为 YAML object")
+        return parsed
 
 

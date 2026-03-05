@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -31,33 +32,54 @@ class ConfigService:
 
     # --- Per-App Config ---
 
-    def app_config_path(self, app_id: str) -> Path:
-        return APP_CONFIG_DIR / f"{app_id}.yaml"
+    def app_config_path(self, app_id: str, app_version: str) -> Path:
+        return APP_CONFIG_DIR / app_id / f"{app_version}.yaml"
 
-    def get_app_config(self, app_id: str) -> VersionedConfig:
-        path = self.app_config_path(app_id)
+    def get_app_config(self, app_id: str, app_version: str) -> VersionedConfig:
+        path = self.app_config_path(app_id, app_version)
         if not path.exists():
             return VersionedConfig(data={}, version=0)
         return self._read_versioned(path)
 
     def update_app_config(
-        self, app_id: str, data: dict[str, Any], expected_version: int
+        self,
+        app_id: str,
+        app_version: str,
+        data: dict[str, Any],
+        expected_version: int,
+        updated_by: str = "system",
     ) -> VersionedConfig:
+        path = self.app_config_path(app_id, app_version)
+        path.parent.mkdir(parents=True, exist_ok=True)
         return self._write_versioned(
-            self.app_config_path(app_id), data, expected_version, updated_by="system"
+            path, data, expected_version, updated_by=updated_by
         )
 
-    def init_app_config(self, app_id: str, default_data: dict[str, Any]) -> None:
+    def init_app_config(self, app_id: str, app_version: str, default_data: dict[str, Any]) -> None:
         """Create app config if it does not exist yet."""
-        path = self.app_config_path(app_id)
+        path = self.app_config_path(app_id, app_version)
         if path.exists():
             return
+        path.parent.mkdir(parents=True, exist_ok=True)
         self._write_versioned(path, default_data, expected_version=0, updated_by="system")
 
-    def delete_app_config(self, app_id: str) -> None:
-        path = self.app_config_path(app_id)
+    def delete_app_config(self, app_id: str, app_version: str | None = None) -> None:
+        if app_version is None:
+            app_dir = APP_CONFIG_DIR / app_id
+            if app_dir.exists() and app_dir.is_dir():
+                shutil.rmtree(app_dir)
+            legacy_path = APP_CONFIG_DIR / f"{app_id}.yaml"
+            if legacy_path.exists():
+                legacy_path.unlink()
+            return
+
+        path = self.app_config_path(app_id, app_version)
         if path.exists():
             path.unlink()
+
+        app_dir = APP_CONFIG_DIR / app_id
+        if app_dir.exists() and app_dir.is_dir() and not any(app_dir.iterdir()):
+            app_dir.rmdir()
 
     # --- Users ---
 

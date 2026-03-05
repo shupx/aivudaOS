@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
+from core.apps.config_validation import validate_config_data
 from core.auth.models import SessionInfo
 from core.auth.service import AuthService
 from core.db.connection import db_conn
@@ -17,6 +18,7 @@ from core.errors import (
     AppRuntimeError,
     AuthenticationError,
     ConfigVersionConflictError,
+    InvalidConfigError,
     NotFoundError,
     OperationCanceledError,
     PackageFormatError,
@@ -573,29 +575,31 @@ async def stream_operation_events(
 
 
 @router.get("/{app_id}/config")
-async def get_app_config(app_id: str, token: str) -> dict[str, Any]:
+async def get_app_config(app_id: str, token: str, app_version: str | None = None) -> dict[str, Any]:
     """Get config for an installed app.
 
     Reads default_config from the manifest stored in DB.
     """
     _require_auth(token)
     config = get_config_service()
-    cfg = config.get_app_config(app_id)
+    versioning = get_versioning_service()
+    target_version = app_version or versioning.active_version(app_id)
+    if not target_version:
+        raise HTTPException(status_code=404, detail=f"{app_id} not installed")
 
-    if cfg.version == 0:
-        # No custom config yet — return default from manifest
-        default_config = _get_default_config_from_db(app_id)
-        return {
-            "app_id": app_id,
-            "data": default_config,
-            "version": 0,
-            "updated_at": None,
-        }
+    cfg = config.get_app_config(app_id, target_version)
+    manifest = _get_manifest_from_db(app_id, target_version)
+    data = dict(cfg.data) if cfg.version > 0 else dict(manifest.get("default_config") or {})
+
+    constraints = _get_constraints_for_app(app_id)
     return {
         "app_id": app_id,
-        "data": cfg.data,
+        "app_version": target_version,
+        "data": data,
         "version": cfg.version,
         "updated_at": cfg.updated_at,
+        "schema": manifest.get("config_schema") or {},
+        "constraints": constraints,
     }
 
 
@@ -603,23 +607,55 @@ async def get_app_config(app_id: str, token: str) -> dict[str, Any]:
 async def put_app_config(
     app_id: str, payload: AppConfigUpdateRequest, token: str
 ) -> dict[str, Any]:
-    _require_auth(token)
+    session = _require_auth(token)
     config = get_config_service()
 
     # Verify the app is installed
     versioning = get_versioning_service()
-    if not versioning.list_versions(app_id):
+    versions = versioning.list_versions(app_id)
+    if not versions:
         raise HTTPException(status_code=404, detail=f"{app_id} 未安装")
+
+    target_version = payload.app_version or versioning.active_version(app_id)
+    if not target_version:
+        raise HTTPException(status_code=404, detail=f"{app_id} 没有激活版本")
+    if target_version not in versions:
+        raise HTTPException(status_code=404, detail=f"{app_id}@{target_version} 未安装")
+
+    manifest = _get_manifest_from_db(app_id, target_version)
+    schema = manifest.get("config_schema") or {}
+    try:
+        validate_config_data(payload.data, schema, context=f"api {app_id}@{target_version}")
+    except InvalidConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    violations = _validate_equal_constraints(
+        editing_app_id=app_id,
+        editing_app_version=target_version,
+        editing_data=payload.data,
+    )
+    if violations:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "App config equal constraints violated",
+                "violations": violations,
+            },
+        )
 
     try:
         result = config.update_app_config(
-            app_id, payload.data, payload.version
+            app_id,
+            target_version,
+            payload.data,
+            payload.version,
+            updated_by=session.username,
         )
     except ConfigVersionConflictError:
         raise HTTPException(
             status_code=409, detail="App config version conflict"
         )
-    return {"ok": True, "version": result.version}
+    return {"ok": True, "version": result.version, "app_version": target_version}
 
 
 # ================================================================== #
@@ -627,15 +663,125 @@ async def put_app_config(
 # ================================================================== #
 
 
-def _get_default_config_from_db(app_id: str) -> dict[str, Any]:
-    """Read default_config from the manifest stored in app_installation."""
+def _get_manifest_from_db(app_id: str, app_version: str) -> dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute(
-            "SELECT manifest FROM app_installation WHERE app_id = ? "
-            "ORDER BY installed_at DESC LIMIT 1",
-            (app_id,),
+            "SELECT manifest FROM app_installation WHERE app_id = ? AND version = ? LIMIT 1",
+            (app_id, app_version),
         ).fetchone()
     if row and row["manifest"]:
-        manifest_data = json.loads(row["manifest"])
-        return manifest_data.get("default_config", {})
+        return json.loads(row["manifest"])
+    return {}
+
+
+def _get_constraints_for_app(app_id: str) -> list[dict[str, Any]]:
+    config = get_config_service()
+    os_data = config.get_os_config().data
+    constraints = os_data.get("app_config_equal_constraints")
+    if not isinstance(constraints, list):
+        return []
+
+    selected: list[dict[str, Any]] = []
+    for item in constraints:
+        if not isinstance(item, dict):
+            continue
+        left = item.get("left")
+        right = item.get("right")
+        if not (isinstance(left, dict) and isinstance(right, dict)):
+            continue
+        if left.get("app_id") == app_id or right.get("app_id") == app_id:
+            selected.append(item)
+    return selected
+
+
+def _validate_equal_constraints(
+    editing_app_id: str,
+    editing_app_version: str,
+    editing_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    constraints = _get_constraints_for_app(editing_app_id)
+    if not constraints:
+        return []
+
+    config = get_config_service()
+    versioning = get_versioning_service()
+    violations: list[dict[str, Any]] = []
+
+    for item in constraints:
+        left = item.get("left") if isinstance(item, dict) else None
+        right = item.get("right") if isinstance(item, dict) else None
+        if not (isinstance(left, dict) and isinstance(right, dict)):
+            continue
+
+        left_value = _resolve_endpoint_value(
+            left,
+            editing_app_id,
+            editing_app_version,
+            editing_data,
+            config,
+            versioning,
+        )
+        right_value = _resolve_endpoint_value(
+            right,
+            editing_app_id,
+            editing_app_version,
+            editing_data,
+            config,
+            versioning,
+        )
+
+        if left_value is None or right_value is None:
+            continue
+        if left_value != right_value:
+            violations.append(
+                {
+                    "left": left,
+                    "right": right,
+                    "left_value": left_value,
+                    "right_value": right_value,
+                }
+            )
+
+    return violations
+
+
+def _resolve_endpoint_value(
+    endpoint: dict[str, Any],
+    editing_app_id: str,
+    editing_app_version: str,
+    editing_data: dict[str, Any],
+    config: Any,
+    versioning: Any,
+) -> Any:
+    app_id = str(endpoint.get("app_id") or "")
+    path = str(endpoint.get("path") or "")
+    if not app_id or not path:
+        return None
+
+    if app_id == editing_app_id:
+        return _nested_get(editing_data, path)
+
+    active_version = versioning.active_version(app_id)
+    if not active_version:
+        return None
+
+    cfg = config.get_app_config(app_id, active_version)
+    if cfg.version > 0:
+        source = cfg.data
+    else:
+        manifest = _get_manifest_from_db(app_id, active_version)
+        source = manifest.get("default_config") or {}
+    return _nested_get(source, path)
+
+
+def _nested_get(data: Any, dotted_path: str) -> Any:
+    current = data
+    for part in dotted_path.split("."):
+        key = part.strip()
+        if not key:
+            return None
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
     return {}

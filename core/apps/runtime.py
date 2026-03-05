@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from core.apps.config_validation import validate_config_data
 from core.apps.models import AppManifest, AppRuntimeState
 from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from core.apps.systemd_runtime import SystemdRuntimeBackend
@@ -18,6 +19,7 @@ from core.config.service import ConfigService
 from core.db.connection import db_conn
 from core.errors import (
     AppNotInstalledError,
+    InvalidConfigError,
     AppRuntimeError,
     NotFoundError,
     OperationCanceledError,
@@ -138,7 +140,7 @@ class RuntimeService:
             raise AppNotInstalledError(f"{app_id} is not installed")
 
         active_ver = self._versioning.active_version(app_id)
-        cfg = self._config.get_app_config(app_id)
+        cfg = self._config.get_app_config(app_id, active_ver) if active_ver else None
 
         # Include manifest for the active version
         manifest_info: dict[str, Any] | None = None
@@ -163,7 +165,11 @@ class RuntimeService:
                 "last_started_at": runtime_state.last_started_at,
                 "last_stopped_at": runtime_state.last_stopped_at,
             },
-            "config": {"version": cfg.version, "updated_at": cfg.updated_at},
+            "config": {
+                "version": cfg.version if cfg else 0,
+                "updated_at": cfg.updated_at if cfg else None,
+                "app_version": active_ver,
+            },
             "manifest": manifest_info,
         }
 
@@ -218,7 +224,11 @@ class RuntimeService:
     # ------------------------------------------------------------------ #
 
     def start(self, app_id: str) -> dict[str, Any]:
-        manifest = self._get_manifest(app_id)
+        active_version = self._versioning.active_version(app_id)
+        if active_version is None:
+            raise AppNotInstalledError(f"{app_id} has no active version")
+
+        manifest = self._get_manifest(app_id, active_version)
         now = int(time.time())
 
         install_path = self._versioning.active_install_path(app_id)
@@ -229,7 +239,8 @@ class RuntimeService:
 
         command = self._build_exec_command(manifest, install_path)
         command = self._decorate_command_for_realtime_logs(command)
-        runtime_env = self._runtime_log_env()
+        config_env = self._build_config_env(app_id, active_version, manifest)
+        runtime_env = {**self._runtime_log_env(), **config_env}
         log_path = self._app_log_path(app_id)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -370,7 +381,13 @@ class RuntimeService:
             manifest = self._get_manifest(app_id)
             command = self._build_exec_command(manifest, install_path)
             command = self._decorate_command_for_realtime_logs(command)
-            runtime_env = self._runtime_log_env()
+            active_version = self._versioning.active_version(app_id)
+            if active_version is None:
+                raise AppNotInstalledError(f"{app_id} has no active version")
+            runtime_env = {
+                **self._runtime_log_env(),
+                **self._build_config_env(app_id, active_version, manifest),
+            }
             log_path = self._app_log_path(app_id)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -407,6 +424,13 @@ class RuntimeService:
         """Switch active version. Optionally stop old and start new."""
         current_active = self._versioning.active_version(app_id)
         runtime_state = self.get_runtime_state(app_id)
+
+        try:
+            manifest = self._get_manifest(app_id, version)
+        except AppNotInstalledError as exc:
+            raise NotFoundError(str(exc)) from exc
+
+        self._ensure_version_config_ready(app_id, version, manifest)
 
         if runtime_state.running and restart:
             self.stop(app_id)
@@ -562,6 +586,7 @@ class RuntimeService:
                 version=version,
             )
             self._versioning.remove_version(app_id, version)
+            self._config.delete_app_config(app_id, version)
             # If we removed the active version, try to activate another
             remaining = self._versioning.list_versions(app_id)
             if active == version and remaining:
@@ -650,6 +675,13 @@ class RuntimeService:
                 command = self._build_exec_command(manifest, install_path)
                 command = self._decorate_command_for_realtime_logs(command)
                 runtime_env = self._runtime_log_env()
+                active_version = self._versioning.active_version(app_id)
+                if active_version is None:
+                    continue
+                runtime_env = {
+                    **runtime_env,
+                    **self._build_config_env(app_id, active_version, manifest),
+                }
                 log_path = self._app_log_path(app_id)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
                 self._systemd.write_unit(
@@ -712,6 +744,57 @@ class RuntimeService:
         )
         args = manifest.run.get("args", [])
         return [str(resolved), *[str(x) for x in args]]
+
+    def _build_config_env(
+        self,
+        app_id: str,
+        app_version: str,
+        manifest: AppManifest,
+    ) -> dict[str, str]:
+        self._ensure_version_config_ready(app_id, app_version, manifest)
+        cfg = self._config.get_app_config(app_id, app_version)
+        data = dict(cfg.data) if cfg.version > 0 else dict(manifest.default_config)
+        try:
+            validate_config_data(
+                data,
+                manifest.config_schema,
+                context=f"runtime config {app_id}@{app_version}",
+            )
+        except InvalidConfigError as exc:
+            raise AppRuntimeError(str(exc)) from exc
+
+        config_path = self._config.app_config_path(app_id, app_version)
+        helpers_entry_path = (
+            PROJECT_ROOT / "core" / "shell_helpers" / "aivuda_app_helpers.sh"
+        ).resolve()
+        env: dict[str, str] = {
+            "AIVUDA_APP_ID": app_id,
+            "AIVUDA_APP_VERSION": app_version,
+            "AIVUDA_APP_CONFIG_PATH": str(config_path.resolve()),
+            "AIVUDA_APP_HELPERS_ENTRY_PATH": str(helpers_entry_path),
+        }
+        return env
+
+    def _ensure_version_config_ready(
+        self,
+        app_id: str,
+        app_version: str,
+        manifest: AppManifest,
+    ) -> None:
+        cfg = self._config.get_app_config(app_id, app_version)
+        if cfg.version == 0:
+            self._config.init_app_config(app_id, app_version, manifest.default_config)
+            cfg = self._config.get_app_config(app_id, app_version)
+
+        data = dict(cfg.data) if cfg.version > 0 else dict(manifest.default_config)
+        try:
+            validate_config_data(
+                data,
+                manifest.config_schema,
+                context=f"switch config {app_id}@{app_version}",
+            )
+        except InvalidConfigError as exc:
+            raise AppRuntimeError(str(exc)) from exc
 
     @staticmethod
     def _runtime_log_env() -> dict[str, str]:

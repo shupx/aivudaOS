@@ -4,6 +4,7 @@ import DashboardView from './views/DashboardView.vue'
 import StatusView from './views/StatusView.vue'
 import AppsView from './views/AppsView.vue'
 import AppDetailView from './views/AppDetailView.vue'
+import AppConfigView from './views/AppConfigView.vue'
 import OnlineStoreView from './views/OnlineStoreView.vue'
 import OnlineStoreDetailView from './views/OnlineStoreDetailView.vue'
 import { appState } from './state/appState'
@@ -19,6 +20,7 @@ const routes = [
       { path: 'status', component: StatusView },
       { path: 'apps', component: AppsView },
       { path: 'apps/:appId', component: AppDetailView },
+      { path: 'apps/:appId/config', component: AppConfigView },
       { path: 'store', component: OnlineStoreView },
       { path: 'store/:appId', component: OnlineStoreDetailView },
     ],

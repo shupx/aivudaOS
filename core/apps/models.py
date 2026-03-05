@@ -15,8 +15,10 @@ class AppManifest:
     pre_install: str | None = None
     pre_uninstall: str | None = None
     update_this_version: str | None = None
+    default_config_path: str = ""
+    config_schema_path: str = ""
     default_config: dict[str, Any] = field(default_factory=dict)
-    config_schema: dict[str, Any] | None = None
+    config_schema: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, app_id: str, raw: dict[str, Any]) -> AppManifest:
@@ -30,8 +32,10 @@ class AppManifest:
             pre_install=raw.get("pre_install"),
             pre_uninstall=raw.get("pre_uninstall"),
             update_this_version=raw.get("update_this_version"),
-            default_config=raw.get("default_config", {}),
-            config_schema=raw.get("config_schema"),
+            default_config_path=str(raw.get("default_config_path") or ""),
+            config_schema_path=str(raw.get("config_schema_path") or ""),
+            default_config=raw.get("default_config") or {},
+            config_schema=raw.get("config_schema") or {},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -41,7 +45,10 @@ class AppManifest:
             "description": self.description,
             "version": self.version,
             "run": self.run,
+            "default_config_path": self.default_config_path,
+            "config_schema_path": self.config_schema_path,
             "default_config": self.default_config,
+            "config_schema": self.config_schema,
         }
         if self.pre_install is not None:
             d["pre_install"] = self.pre_install
@@ -51,8 +58,6 @@ class AppManifest:
             d["pre_uninstall"] = self.pre_uninstall
         if self.update_this_version is not None:
             d["update_this_version"] = self.update_this_version
-        if self.config_schema is not None:
-            d["config_schema"] = self.config_schema
         return d
 
 

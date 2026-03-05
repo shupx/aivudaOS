@@ -19,6 +19,14 @@ class SystemdRuntimeBackend:
     """Manage app process lifecycle via systemd units."""
 
     UNIT_PREFIX = "aivuda-app"
+    COMMON_RUNTIME_ENV: dict[str, str] = {
+        "PYTHONUNBUFFERED": "1",
+        "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
+        "TERM": "xterm-256color",
+        "CLICOLOR_FORCE": "1",
+        "FORCE_COLOR": "1",
+        "PY_COLORS": "1",
+    }
 
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
@@ -58,6 +66,7 @@ class SystemdRuntimeBackend:
     ) -> Path:
         unit_path = self.unit_file_path(app_id, scope)
         unit_path.parent.mkdir(parents=True, exist_ok=True)
+        common_env_path = self._ensure_common_runtime_env_file()
 
         exec_start = " ".join(shlex.quote(part) for part in command)
         truncate_bin = shutil.which("truncate") or "/usr/bin/truncate"
@@ -73,6 +82,8 @@ class SystemdRuntimeBackend:
             safe_key = str(key).strip()
             if not safe_key:
                 continue
+            if safe_key in self.COMMON_RUNTIME_ENV:
+                continue
             safe_val = str(value).replace('"', '\\"')
             env_lines.append(f'Environment="{safe_key}={safe_val}"')
 
@@ -85,6 +96,7 @@ class SystemdRuntimeBackend:
             "Type=simple",
             f"WorkingDirectory={escaped_workdir}",
             f"ExecStartPre={exec_start_pre}",
+            f"EnvironmentFile={common_env_path}",
             *env_lines,
             f"ExecStart={exec_start}",
             f"StandardOutput=append:{escaped_log}",
@@ -99,6 +111,19 @@ class SystemdRuntimeBackend:
         unit_content = "\n".join(unit_lines)
         unit_path.write_text(unit_content, encoding="utf-8")
         return unit_path
+
+    def _ensure_common_runtime_env_file(self) -> Path:
+        env_path = (
+            self._project_root
+            / "core"
+            / "shell_helpers"
+            / "env"
+            / "runtime_common.env"
+        )
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [f"{k}={v}" for k, v in self.COMMON_RUNTIME_ENV.items()]
+        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return env_path
 
     def daemon_reload(self, scope: str) -> None:
         self._run_systemctl(scope, ["daemon-reload"], check=True)

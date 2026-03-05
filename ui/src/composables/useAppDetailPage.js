@@ -57,7 +57,7 @@ export function useAppDetailPage() {
   const switchWithRestart = ref(true)
 
   const uninstallVersionOnly = ref(true)
-  const uninstallPurge = ref(false)
+  const uninstallPurge = ref(true)
 
   let logTimer = null
 
@@ -269,6 +269,11 @@ export function useAppDetailPage() {
     })
   }
 
+  function goToConfigPage() {
+    if (!app.value) return
+    router.push(`/dashboard/apps/${encodeURIComponent(app.value.app_id)}/config`)
+  }
+
   async function runSwitchVersion() {
     if (!app.value || !canSwitchVersion.value) return
     actionBusy.value = true
@@ -386,7 +391,7 @@ export function useAppDetailPage() {
     (appId) => {
       clearActionStatus()
       uninstallVersionOnly.value = true
-      uninstallPurge.value = false
+      uninstallPurge.value = true
       clearAndReloadLogs()
       loadVersions(String(appId || ''))
     },
@@ -492,6 +497,7 @@ export function useAppDetailPage() {
     switchWithRestart,
     canSwitchVersion,
     goToManualUpload,
+    goToConfigPage,
     runUpdateThisVersionScript,
     runSwitchVersion,
     uninstallVersionOnly,
