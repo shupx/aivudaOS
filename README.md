@@ -26,7 +26,7 @@ pip install -r requirements.txt
 
 ```bash
 # 实际uvicorn有bug还是关注了所有文件变化。
-PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload_excludes="apps/*" gateway --reload-dir core
+PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir gateway --reload-dir core
 ```
 
 ```bash
