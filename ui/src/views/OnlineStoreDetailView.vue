@@ -46,9 +46,11 @@ const {
 <template>
   <section class="apps-panel">
     <header class="panel-header">
-      <h2>{{ t('store.detailTitle') }}</h2>
-      <div class="panel-actions">
+      <div class="panel-actions panel-title-actions">
+        <h2>{{ t('store.detailTitle') }}</h2>
         <button class="btn" @click="backToStore">{{ t('store.backToStore') }}</button>
+      </div>
+      <div class="panel-actions">
         <button class="btn btn-stable-refresh" :disabled="loading" @click="load">
           {{ loading ? t('common.loadingShort') : t('common.refresh') }}
         </button>
