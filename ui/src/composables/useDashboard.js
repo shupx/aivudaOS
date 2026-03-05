@@ -11,7 +11,10 @@ export function useDashboard() {
 
   const sidebarCollapsed = computed(() => appState.sidebarCollapsed)
   const isStatusRoute = computed(() => route.path === '/dashboard/status')
-  const isAppsRoute = computed(() => route.path.startsWith('/dashboard/apps'))
+  const isAppsRoute = computed(() => {
+    return route.path.startsWith('/dashboard/apps') && !route.path.startsWith('/dashboard/apps/configs')
+  })
+  const isConfigRoute = computed(() => route.path.startsWith('/dashboard/apps/configs'))
   const isStoreRoute = computed(() => route.path.startsWith('/dashboard/store'))
   const locale = computed(() => appState.locale)
   const user = computed(() => appState.user)
@@ -41,6 +44,10 @@ export function useDashboard() {
     router.push('/dashboard/apps')
   }
 
+  function goConfigs() {
+    router.push('/dashboard/apps/configs')
+  }
+
   function goStore() {
     router.push('/dashboard/store')
   }
@@ -58,12 +65,14 @@ export function useDashboard() {
     sidebarCollapsed,
     isStatusRoute,
     isAppsRoute,
+    isConfigRoute,
     isStoreRoute,
     locale,
     user,
     role,
     goStatus,
     goApps,
+    goConfigs,
     goStore,
     toggleSidebar,
     doLogout,

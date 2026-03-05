@@ -6,6 +6,11 @@ export async function fetchInstalledApps() {
   return data?.items || []
 }
 
+export async function fetchActiveAppConfigs() {
+  const data = await request('/api/apps/configs/active', { auth: true })
+  return { items: Array.isArray(data?.items) ? data.items : [] }
+}
+
 export async function uploadAppPackage(file, { overwrite = false } = {}) {
   const form = new FormData()
   form.append('file', file)

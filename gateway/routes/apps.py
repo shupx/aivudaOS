@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
-from core.apps.config_validation import validate_config_data
+from core.apps.config_validation import normalize_config_schema, validate_config_data
 from core.auth.models import SessionInfo
 from core.auth.service import AuthService
 from core.db.connection import db_conn
@@ -150,6 +150,43 @@ async def get_installed(token: str) -> dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     return {"items": runtime.get_installed_list()}
+
+
+@router.get("/configs/active")
+async def get_active_configs(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    config = get_config_service()
+    items: list[dict[str, Any]] = []
+
+    for app in runtime.get_installed_list():
+        app_id = str(app.get("app_id") or "")
+        app_version = str(app.get("active_version") or "")
+        if not app_id or not app_version:
+            continue
+
+        cfg = config.get_app_config(app_id, app_version)
+        manifest = _get_manifest_from_db(app_id, app_version)
+        schema = manifest.get("config_schema") if isinstance(manifest, dict) else {}
+        default_config = manifest.get("default_config") if isinstance(manifest, dict) else {}
+        normalized_schema = normalize_config_schema(schema)
+        data = dict(cfg.data) if cfg.version > 0 else dict(default_config or {})
+
+        items.append(
+            {
+                "app_id": app_id,
+                "name": str(app.get("name") or app_id),
+                "app_version": app_version,
+                "data": data,
+                "version": cfg.version,
+                "updated_at": cfg.updated_at,
+                "schema": schema or {},
+                "normalized_schema": normalized_schema,
+                "constraints": _get_constraints_for_app(app_id),
+            }
+        )
+
+    return {"items": items}
 
 
 @router.get("/{app_id}/status")
@@ -592,6 +629,7 @@ async def get_app_config(app_id: str, token: str, app_version: str | None = None
     data = dict(cfg.data) if cfg.version > 0 else dict(manifest.get("default_config") or {})
 
     constraints = _get_constraints_for_app(app_id)
+    normalized_schema = normalize_config_schema(manifest.get("config_schema") or {})
     return {
         "app_id": app_id,
         "app_version": target_version,
@@ -599,6 +637,7 @@ async def get_app_config(app_id: str, token: str, app_version: str | None = None
         "version": cfg.version,
         "updated_at": cfg.updated_at,
         "schema": manifest.get("config_schema") or {},
+        "normalized_schema": normalized_schema,
         "constraints": constraints,
     }
 
@@ -614,13 +653,13 @@ async def put_app_config(
     versioning = get_versioning_service()
     versions = versioning.list_versions(app_id)
     if not versions:
-        raise HTTPException(status_code=404, detail=f"{app_id} 未安装")
+        raise HTTPException(status_code=404, detail=f"{app_id} is not installed")
 
     target_version = payload.app_version or versioning.active_version(app_id)
     if not target_version:
-        raise HTTPException(status_code=404, detail=f"{app_id} 没有激活版本")
+        raise HTTPException(status_code=404, detail=f"{app_id} has no active version")
     if target_version not in versions:
-        raise HTTPException(status_code=404, detail=f"{app_id}@{target_version} 未安装")
+        raise HTTPException(status_code=404, detail=f"{app_id}@{target_version} is not installed")
 
     manifest = _get_manifest_from_db(app_id, target_version)
     schema = manifest.get("config_schema") or {}

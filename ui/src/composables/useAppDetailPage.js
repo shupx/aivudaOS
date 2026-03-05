@@ -271,7 +271,10 @@ export function useAppDetailPage() {
 
   function goToConfigPage() {
     if (!app.value) return
-    router.push(`/dashboard/apps/${encodeURIComponent(app.value.app_id)}/config`)
+    router.push({
+      path: '/dashboard/apps/configs',
+      query: { app_id: app.value.app_id },
+    })
   }
 
   async function runSwitchVersion() {

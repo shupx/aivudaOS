@@ -9,10 +9,12 @@ const {
   sidebarCollapsed,
   isStatusRoute,
   isAppsRoute,
+  isConfigRoute,
   isStoreRoute,
   locale,
   goStatus,
   goApps,
+  goConfigs,
   goStore,
   toggleSidebar,
   doLogout,
@@ -47,6 +49,15 @@ const {
         >
           <span v-if="!sidebarCollapsed">{{ t('dashboard.appsMenu') }}</span>
           <span v-else>A</span>
+        </button>
+
+        <button
+          class="menu-btn"
+          :class="{ active: isConfigRoute }"
+          @click="goConfigs"
+        >
+          <span v-if="!sidebarCollapsed">{{ t('dashboard.configCenter') }}</span>
+          <span v-else>C</span>
         </button>
 
         <button

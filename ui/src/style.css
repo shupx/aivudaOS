@@ -364,6 +364,15 @@ input {
   flex: 1 1 140px;
 }
 
+.input {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: #ffffff;
+  width: 100%;
+  min-width: 140px;
+}
+
 .left-sidebar .select-input {
   border-color: #334155;
   background: #111827;
@@ -433,6 +442,47 @@ input {
   color: #334155;
   display: grid;
   gap: 6px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.config-table th,
+.config-table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.config-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.config-table.compact th,
+.config-table.compact td {
+  padding: 6px;
+}
+
+.mono-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  word-break: break-word;
+}
+
+.config-edit-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
 }
 
 .apps-grid {
