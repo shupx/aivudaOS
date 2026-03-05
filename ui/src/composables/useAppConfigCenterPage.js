@@ -33,6 +33,17 @@ export function useAppConfigCenterPage() {
     }))
   })
 
+  const appThemeById = computed(() => {
+    const classes = ['config-row-app-0', 'config-row-app-1', 'config-row-app-2', 'config-row-app-3']
+    const mapping = {}
+    appItems.value.forEach((item, index) => {
+      const appId = String(item?.app_id || '')
+      if (!appId) return
+      mapping[appId] = classes[index % classes.length]
+    })
+    return mapping
+  })
+
   const rows = computed(() => {
     const selected = selectedAppId.value
     const result = []
@@ -279,6 +290,10 @@ export function useAppConfigCenterPage() {
     router.push('/dashboard/apps')
   }
 
+  function getRowThemeClass(appId) {
+    return appThemeById.value[String(appId || '')] || 'config-row-app-0'
+  }
+
   watch(
     () => route.query.app_id,
     (next) => {
@@ -330,6 +345,7 @@ export function useAppConfigCenterPage() {
     getDefaultText,
     getRangeText,
     getDescriptionText,
+    getRowThemeClass,
     onBooleanChange,
     onEnumChange,
     onTextChange,

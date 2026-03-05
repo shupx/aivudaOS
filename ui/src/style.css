@@ -485,6 +485,13 @@ input {
   min-width: 220px;
 }
 
+.config-app-title-row td {
+  font-weight: 600;
+  border-top-width: 2px;
+  border-top-color: #64748b;
+  background: #f8fafc;
+}
+
 .apps-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

@@ -26,6 +26,7 @@ const {
   getDefaultText,
   getRangeText,
   getDescriptionText,
+  getRowThemeClass,
   onBooleanChange,
   onEnumChange,
   onTextChange,
@@ -77,7 +78,6 @@ const {
         <table class="config-table">
           <thead>
             <tr>
-              <th>{{ t('appConfigCenter.colApp') }}</th>
               <th>{{ t('appConfigCenter.colPath') }}</th>
               <th>{{ t('appConfigCenter.colCurrent') }}</th>
               <th>{{ t('appConfigCenter.colDefault') }}</th>
@@ -87,9 +87,19 @@ const {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="`${row.appId}:${row.path}`">
-              <td>{{ row.appName }} ({{ row.appId }})</td>
-              <td class="mono-cell">{{ row.path }}</td>
+            <template v-for="(row, index) in rows" :key="`${row.appId}:${row.path}`">
+              <tr
+                v-if="index === 0 || rows[index - 1]?.appId !== row.appId"
+                class="config-app-title-row"
+                :class="getRowThemeClass(row.appId)"
+              >
+                <td colspan="6">
+                  {{ row.appName }} ({{ row.appId }} @ {{ row.appVersion || '-' }})
+                </td>
+              </tr>
+
+              <tr :class="getRowThemeClass(row.appId)">
+                <td class="mono-cell">{{ row.path }}</td>
               <td>
                 <div class="config-edit-cell">
                   <label v-if="row.type === 'boolean'" class="check-item">
@@ -126,7 +136,8 @@ const {
               <td>{{ row.type || '-' }}</td>
               <td>{{ getRangeText(row) }}</td>
               <td>{{ getDescriptionText(row) }}</td>
-            </tr>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
