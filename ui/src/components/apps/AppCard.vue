@@ -83,7 +83,7 @@ function onIconError() {
         <SwitchToggle :model-value="Boolean(app.running)" :disabled="busy" @update:model-value="onRunningChange" />
       </div>
 
-      <div class="switch-item" @click.stop>
+      <div class="switch-item switch-item-autostart" @click.stop>
         <span>{{ t('appCard.autostart') }}</span>
         <SwitchToggle :model-value="Boolean(app.autostart)" :disabled="busy" @update:model-value="onAutostartChange" />
       </div>
