@@ -65,6 +65,10 @@ PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --b
 
 Nginx 托管前端静态文件并反代 `/aivuda_os/api`，详见 [`docs/deploy-nginx.md`](docs/deploy-nginx.md)。
 
+## Caddy 生产部署（可选）
+
+Caddy 托管前端静态文件并反代 `/aivuda_os/api`，支持 HTTP 80 + `tls internal` 的 HTTPS 8443 部署，详见 [`docs/deploy-caddy.md`](docs/deploy-caddy.md)。
+
 ## App 运行模式（systemd / popen）
 
 应用生命周期支持两种后端：
