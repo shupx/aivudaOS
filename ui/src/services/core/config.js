@@ -1,7 +1,7 @@
 import { request } from './api'
 
 // export const DEFAULT_APPSTORE_BASE_URL = 'http://127.0.0.1:9001'
-export const DEFAULT_APPSTORE_BASE_URL = 'https://123.56.143.44'
+export const DEFAULT_APPSTORE_BASE_URL = 'https://39.102.60.150'
 export const APPSTORE_BASE_URL_STORAGE_KEY = 'aivuda_ui_appstore_base_url'
 
 export async function fetchOsConfig() {
