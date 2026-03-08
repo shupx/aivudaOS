@@ -182,8 +182,16 @@ export function openAppOperationInteractiveSocket(
   } = {},
 ) {
   const authPath = buildAuthUrl(`/api/apps/operations/${encodeURIComponent(operationId)}/interactive/ws`)
-  const absolute = authPath.startsWith('http') ? authPath : `${window.location.origin}${authPath}`
-  const wsUrl = absolute.replace(/^http/i, 'ws')
+  const parsedUrl = new URL(authPath, window.location.origin)
+  const pageIsHttps = window.location.protocol === 'https:'
+
+  if (pageIsHttps || parsedUrl.protocol === 'https:') {
+    parsedUrl.protocol = 'wss:'
+  } else {
+    parsedUrl.protocol = 'ws:'
+  }
+
+  const wsUrl = parsedUrl.toString()
   const socket = new WebSocket(wsUrl)
 
   socket.onopen = () => {
