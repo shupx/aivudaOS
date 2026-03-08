@@ -9,6 +9,8 @@ const {
   error,
   addressError,
   storeAddress,
+  normalizedStoreAddress,
+  showAddressManualCheckHint,
   displayItems,
   hasItems,
   load,
@@ -41,6 +43,16 @@ const {
       </div>
       <p class="muted">{{ t('store.addressConnectionHint') }}</p>
       <p v-if="addressError" class="error-text">{{ addressError }}</p>
+      <p v-if="showAddressManualCheckHint" class="muted">
+        {{ t('store.addressManualCheckHint') }}
+        <a
+          :href="normalizedStoreAddress"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ normalizedStoreAddress }}
+        </a>
+      </p>
     </article>
 
     <p v-if="error" class="error-text">{{ error }}</p>

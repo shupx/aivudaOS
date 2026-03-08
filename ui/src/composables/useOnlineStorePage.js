@@ -19,6 +19,11 @@ export function useOnlineStorePage() {
   const items = ref([])
 
   const hasItems = computed(() => items.value.length > 0)
+  const normalizedStoreAddress = computed(() => normalizeStoreBaseUrl(storeAddress.value))
+  const canOpenStoreAddress = computed(() => /^https?:\/\//.test(normalizedStoreAddress.value))
+  const showAddressManualCheckHint = computed(() => (
+    Boolean(addressError.value || error.value) && canOpenStoreAddress.value
+  ))
   const displayItems = computed(() => (
     items.value.map((item) => ({
       ...item,
@@ -72,6 +77,9 @@ export function useOnlineStorePage() {
     error,
     addressError,
     storeAddress,
+    normalizedStoreAddress,
+    canOpenStoreAddress,
+    showAddressManualCheckHint,
     items,
     displayItems,
     hasItems,

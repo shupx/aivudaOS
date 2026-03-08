@@ -114,7 +114,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
         const value = String(uploadInteractiveInput.value || '')
         if (!value) return
         if (!interactiveSocket || !interactiveSocket.isOpen()) {
-          uploadError.value = t('apps.interactiveNotReady')
+          uploadError.value = t('apps.interactiveNotReadyWithProxyHint')
           return
         }
         try {
@@ -340,7 +340,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
         interactiveSubmitHandler()
         return
       }
-      uploadError.value = t('apps.interactiveNotReady')
+      uploadError.value = t('apps.interactiveNotReadyWithProxyHint')
     },
     setInteractiveInput(value) {
       uploadInteractiveInput.value = String(value || '')
