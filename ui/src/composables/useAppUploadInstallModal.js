@@ -322,7 +322,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
       if (uploadCancelBusy.value) return
       const operationId = String(currentOperationId.value || '')
       if (!operationId) {
-        uploadError.value = t('apps.interactiveNotReady')
+        uploadError.value = t('apps.interactiveNotReadyWithProxyHint')
         return
       }
       uploadCancelBusy.value = true

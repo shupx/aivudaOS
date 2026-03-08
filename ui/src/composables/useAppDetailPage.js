@@ -97,7 +97,7 @@ export function useAppDetailPage() {
       actionInteractiveSubmitHandler()
       return
     }
-    actionError.value = t('apps.interactiveNotReady')
+    actionError.value = t('apps.interactiveNotReadyWithProxyHint')
   }
 
   function appendActionLine(line) {
@@ -140,7 +140,7 @@ export function useAppDetailPage() {
         const value = String(actionInteractiveInput.value || '')
         if (!value) return
         if (!interactiveSocket || !interactiveSocket.isOpen()) {
-          actionError.value = t('apps.interactiveNotReady')
+          actionError.value = t('apps.interactiveNotReadyWithProxyHint')
           return
         }
         try {
@@ -428,7 +428,7 @@ export function useAppDetailPage() {
 
     const operationId = String(currentActionOperationId.value || '')
     if (!operationId) {
-      actionError.value = t('apps.interactiveNotReady')
+      actionError.value = t('apps.interactiveNotReadyWithProxyHint')
       return
     }
 

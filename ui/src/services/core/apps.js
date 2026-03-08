@@ -221,7 +221,7 @@ export function openAppOperationInteractiveSocket(
   return {
     sendInput(inputText) {
       if (socket.readyState !== WebSocket.OPEN) {
-        throw new Error(i18n.global.t('apps.interactiveNotReady'))
+        throw new Error(i18n.global.t('apps.interactiveNotReadyWithProxyHint'))
       }
       socket.send(JSON.stringify({ type: 'input', data: String(inputText || '') }))
     },
