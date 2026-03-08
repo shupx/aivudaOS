@@ -8,7 +8,24 @@ export async function fetchInstalledApps() {
 
 export async function fetchActiveAppConfigs() {
   const data = await request('/api/apps/configs/active', { auth: true })
-  return { items: Array.isArray(data?.items) ? data.items : [] }
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    magnets: Array.isArray(data?.magnets) ? data.magnets : [],
+    magnetConflicts: Array.isArray(data?.magnet_conflicts) ? data.magnet_conflicts : [],
+    magnetVersion: Number(data?.magnet_version || 0),
+  }
+}
+
+export async function fetchMagnets() {
+  return request('/api/config/magnets', { auth: true })
+}
+
+export async function updateMagnetGroup(groupId, payload) {
+  return request(`/api/config/magnets/${encodeURIComponent(groupId)}`, {
+    method: 'PUT',
+    body: payload,
+    auth: true,
+  })
 }
 
 export async function uploadAppPackage(file, { overwrite = false } = {}) {

@@ -12,7 +12,12 @@ const {
   appOptions,
   selectedAppId,
   rows,
+  systemRows,
+  magnets,
+  magnetConflicts,
+  magnetSaving,
   hasChanges,
+  hasMagnetChanges,
   showConfirmModal,
   pendingChanges,
   loadAllConfigs,
@@ -27,9 +32,14 @@ const {
   getRangeText,
   getDescriptionText,
   getRowThemeClass,
+  getMagnetValue,
+  getMagnetDisplayValue,
   onBooleanChange,
   onEnumChange,
   onTextChange,
+  onMagnetBooleanChange,
+  onMagnetTextChange,
+  saveMagnetChanges,
   valueToInlineText,
 } = useAppConfigCenterPage()
 </script>
@@ -64,6 +74,105 @@ const {
             {{ item.name }} ({{ item.appId }} @ {{ item.version }})
           </option>
         </select>
+      </div>
+    </article>
+
+    <article class="actions-panel">
+      <header class="log-header">
+        <h3>{{ t('appConfigCenter.magnetTitle') }}</h3>
+      </header>
+
+      <div v-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
+      <div v-else class="table-wrap">
+        <table class="config-table compact">
+          <thead>
+            <tr>
+              <th>{{ t('appConfigCenter.colPath') }}</th>
+              <th>{{ t('appConfigCenter.colCurrent') }}</th>
+              <th>{{ t('appConfigCenter.colType') }}</th>
+              <th>{{ t('appConfigCenter.magnetBindings') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="group in magnets" :key="group.group_id">
+              <td class="mono-cell">{{ group.path }}</td>
+              <td>
+                <label v-if="group.value_type === 'boolean'" class="check-item">
+                  <input
+                    :checked="Boolean(getMagnetValue(group))"
+                    type="checkbox"
+                    @change="onMagnetBooleanChange(group, $event?.target?.checked)"
+                  >
+                  {{ Boolean(getMagnetValue(group)) ? 'true' : 'false' }}
+                </label>
+                <input
+                  v-else
+                  class="input"
+                  :value="getMagnetDisplayValue(group)"
+                  @change="onMagnetTextChange(group, $event?.target?.value || '')"
+                >
+              </td>
+              <td>{{ group.value_type || '-' }}</td>
+              <td class="mono-cell">{{ valueToInlineText(group.bindings || []) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel-actions wrap" style="margin-top: 10px;">
+        <button class="btn primary" :disabled="magnetSaving || !hasMagnetChanges" @click="saveMagnetChanges">
+          {{ magnetSaving ? t('common.processing') : t('appConfigCenter.magnetSave') }}
+        </button>
+      </div>
+
+      <p v-if="magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
+    </article>
+
+    <article class="actions-panel">
+      <header class="log-header">
+        <h3>{{ t('appConfigCenter.systemTitle') }}</h3>
+      </header>
+
+      <div v-if="!systemRows.length" class="empty-box">{{ t('appConfigCenter.systemEmpty') }}</div>
+      <div v-else class="table-wrap">
+        <table class="config-table compact">
+          <thead>
+            <tr>
+              <th>{{ t('appConfigCenter.colPath') }}</th>
+              <th>{{ t('appConfigCenter.colCurrent') }}</th>
+              <th>{{ t('appConfigCenter.colType') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in systemRows" :key="`os:${row.path}`">
+              <td class="mono-cell">{{ row.path }}</td>
+              <td>
+                <div class="config-edit-cell">
+                  <label v-if="row.type === 'boolean'" class="check-item">
+                    <input
+                      :checked="Boolean(getCellValue(row))"
+                      :disabled="row.readonly"
+                      type="checkbox"
+                      @change="onBooleanChange(row, $event?.target?.checked)"
+                    >
+                    {{ Boolean(getCellValue(row)) ? 'true' : 'false' }}
+                  </label>
+                  <input
+                    v-else
+                    class="input"
+                    :disabled="row.readonly"
+                    :value="displayValue(row)"
+                    @change="onTextChange(row, $event?.target?.value || '')"
+                  >
+
+                  <p v-if="row.readonly" class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
+                  <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
+                </div>
+              </td>
+              <td>{{ row.type || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </article>
 
@@ -105,6 +214,7 @@ const {
                   <label v-if="row.type === 'boolean'" class="check-item">
                     <input
                       :checked="Boolean(getCellValue(row))"
+                      :disabled="row.readonly"
                       type="checkbox"
                       @change="onBooleanChange(row, $event?.target?.checked)"
                     >
@@ -114,6 +224,7 @@ const {
                   <select
                     v-else-if="Array.isArray(row.enumValues) && row.enumValues.length"
                     class="select-input"
+                    :disabled="row.readonly"
                     :value="row.enumValues.findIndex((item) => JSON.stringify(item) === JSON.stringify(getCellValue(row)))"
                     @change="onEnumChange(row, $event?.target?.value)"
                   >
@@ -125,10 +236,12 @@ const {
                   <input
                     v-else
                     class="input"
+                    :disabled="row.readonly"
                     :value="displayValue(row)"
                     @change="onTextChange(row, $event?.target?.value || '')"
                   >
 
+                  <p v-if="row.readonly" class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
                   <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
                 </div>
               </td>

@@ -1,7 +1,8 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { fetchActiveAppConfigs, updateAppConfig } from '../services/core/apps'
+import { fetchActiveAppConfigs, updateAppConfig, updateMagnetGroup } from '../services/core/apps'
+import { fetchOsConfig, updateOsConfig } from '../services/core/config'
 
 export function useAppConfigCenterPage() {
   const { t } = useI18n()
@@ -19,7 +20,28 @@ export function useAppConfigCenterPage() {
   const revisionByApp = ref({})
   const appVersionByApp = ref({})
   const schemaByApp = ref({})
+  const readonlyPathsByApp = ref({})
   const selectedAppId = ref('')
+  const magnets = ref([])
+  const magnetOriginalById = ref({})
+  const magnetDraftById = ref({})
+  const magnetVersion = ref(0)
+  const magnetConflicts = ref([])
+  const magnetSaving = ref(false)
+  const osDraftData = ref({})
+  const osOriginalData = ref({})
+  const osVersion = ref(0)
+  const osReadonlyPaths = ref([])
+
+  const systemRows = computed(() => {
+    return flattenDataLeaves(osDraftData.value || {}, new Set(osReadonlyPaths.value || [])).map((item) => ({
+      ...item,
+      appId: '__system__',
+      appName: t('appConfigCenter.systemTitle'),
+      appVersion: '-',
+      scope: 'os',
+    }))
+  })
 
   const showConfirmModal = ref(false)
   const pendingChanges = ref([])
@@ -53,11 +75,12 @@ export function useAppConfigCenterPage() {
 
       const schema = schemaByApp.value[app.app_id] || {}
       const appData = draftByApp.value[app.app_id] || {}
+      const readonlyPaths = new Set(readonlyPathsByApp.value[app.app_id] || [])
       const appRows = flattenSchema(schema, appData, {
         appId: app.app_id,
         appName: app.name || app.app_id,
         appVersion: app.app_version || '',
-      })
+      }, readonlyPaths)
       result.push(...appRows)
     }
 
@@ -65,6 +88,16 @@ export function useAppConfigCenterPage() {
   })
 
   const hasChanges = computed(() => collectChanges().length > 0)
+  const hasMagnetChanges = computed(() => {
+    for (const group of magnets.value) {
+      const groupId = String(group?.group_id || '')
+      if (!groupId) continue
+      if (!isValueEqual(magnetOriginalById.value[groupId], magnetDraftById.value[groupId])) {
+        return true
+      }
+    }
+    return false
+  })
 
   async function loadAllConfigs() {
     loading.value = true
@@ -72,7 +105,7 @@ export function useAppConfigCenterPage() {
     success.value = ''
 
     try {
-      const data = await fetchActiveAppConfigs()
+      const [data, osData] = await Promise.all([fetchActiveAppConfigs(), fetchOsConfig()])
       const items = Array.isArray(data?.items) ? data.items : []
       appItems.value = items
 
@@ -81,6 +114,7 @@ export function useAppConfigCenterPage() {
       const nextRevision = {}
       const nextVersion = {}
       const nextSchema = {}
+      const nextReadonly = {}
 
       for (const item of items) {
         const appId = String(item?.app_id || '')
@@ -92,6 +126,7 @@ export function useAppConfigCenterPage() {
         nextRevision[appId] = Number(item?.version || 0)
         nextVersion[appId] = String(item?.app_version || '')
         nextSchema[appId] = item?.normalized_schema || item?.schema || {}
+        nextReadonly[appId] = Array.isArray(item?.readonly_paths) ? item.readonly_paths : []
       }
 
       draftByApp.value = nextDraft
@@ -99,6 +134,27 @@ export function useAppConfigCenterPage() {
       revisionByApp.value = nextRevision
       appVersionByApp.value = nextVersion
       schemaByApp.value = nextSchema
+      readonlyPathsByApp.value = nextReadonly
+
+      const nextMagnets = Array.isArray(data?.magnets) ? data.magnets : []
+      const nextMagnetOriginal = {}
+      const nextMagnetDraft = {}
+      for (const item of nextMagnets) {
+        const groupId = String(item?.group_id || '')
+        if (!groupId) continue
+        nextMagnetOriginal[groupId] = deepClone(item?.value)
+        nextMagnetDraft[groupId] = deepClone(item?.value)
+      }
+      magnets.value = nextMagnets
+      magnetOriginalById.value = nextMagnetOriginal
+      magnetDraftById.value = nextMagnetDraft
+      magnetVersion.value = Number(data?.magnetVersion || 0)
+      magnetConflicts.value = Array.isArray(data?.magnetConflicts) ? data.magnetConflicts : []
+
+      osDraftData.value = deepClone(osData?.data || {})
+      osOriginalData.value = deepClone(osData?.data || {})
+      osVersion.value = Number(osData?.version || 0)
+      osReadonlyPaths.value = Array.isArray(osData?.readonly_paths) ? osData.readonly_paths : []
 
       const queryAppId = String(route.query.app_id || '')
       if (queryAppId && nextDraft[queryAppId]) {
@@ -118,6 +174,9 @@ export function useAppConfigCenterPage() {
   }
 
   function getCellValue(row) {
+    if (row?.scope === 'os') {
+      return nestedGet(osDraftData.value || {}, row.path)
+    }
     const appData = draftByApp.value[row.appId] || {}
     return nestedGet(appData, row.path)
   }
@@ -168,6 +227,28 @@ export function useAppConfigCenterPage() {
   }
 
   function applyValue(row, nextValue) {
+    if (row.readonly) {
+      error.value = t('appConfigCenter.readonlyInMagnetZone')
+      return
+    }
+
+    if (row?.scope === 'os') {
+      const osData = deepClone(osDraftData.value || {})
+      nestedSet(osData, row.path, nextValue)
+      osDraftData.value = osData
+
+      const key = cellErrorKey(row)
+      if (cellErrors.value[key]) {
+        const nextErrors = { ...cellErrors.value }
+        delete nextErrors[key]
+        cellErrors.value = nextErrors
+      }
+
+      error.value = ''
+      success.value = ''
+      return
+    }
+
     const appData = deepClone(draftByApp.value[row.appId] || {})
     nestedSet(appData, row.path, nextValue)
     draftByApp.value = {
@@ -224,7 +305,7 @@ export function useAppConfigCenterPage() {
     error.value = ''
     success.value = ''
 
-    const changedAppIds = [...new Set(changes.map((item) => item.appId))]
+    const changedAppIds = [...new Set(changes.filter((item) => item.scope === 'app').map((item) => item.appId))]
     const failed = []
 
     for (const appId of changedAppIds) {
@@ -252,6 +333,20 @@ export function useAppConfigCenterPage() {
       }
     }
 
+    const hasOsChange = changes.some((item) => item.scope === 'os')
+    if (hasOsChange) {
+      try {
+        const resp = await updateOsConfig(deepClone(osDraftData.value || {}), Number(osVersion.value || 0))
+        osVersion.value = Number(resp?.version || osVersion.value || 0)
+        osOriginalData.value = deepClone(osDraftData.value || {})
+      } catch (err) {
+        failed.push({
+          appId: '__system__',
+          message: String(err?.message || err || t('appConfigCenter.saveFailed')),
+        })
+      }
+    }
+
     saving.value = false
     showConfirmModal.value = false
 
@@ -262,6 +357,78 @@ export function useAppConfigCenterPage() {
     }
 
     success.value = t('appConfigCenter.saveSuccess')
+  }
+
+  function getMagnetValue(group) {
+    const groupId = String(group?.group_id || '')
+    return magnetDraftById.value[groupId]
+  }
+
+  function getMagnetDisplayValue(group) {
+    return valueToInlineText(getMagnetValue(group))
+  }
+
+  function onMagnetBooleanChange(group, checked) {
+    setMagnetValue(group, Boolean(checked))
+  }
+
+  function onMagnetTextChange(group, rawText) {
+    try {
+      const nextValue = parseValueByType(rawText, String(group?.value_type || ''))
+      setMagnetValue(group, nextValue)
+    } catch (err) {
+      error.value = String(err?.message || err || t('appConfigCenter.invalidValue'))
+    }
+  }
+
+  function setMagnetValue(group, nextValue) {
+    const groupId = String(group?.group_id || '')
+    if (!groupId) return
+    magnetDraftById.value = {
+      ...magnetDraftById.value,
+      [groupId]: deepClone(nextValue),
+    }
+    error.value = ''
+    success.value = ''
+  }
+
+  async function saveMagnetChanges() {
+    if (magnetSaving.value) return
+
+    const changedGroups = magnets.value.filter((group) => {
+      const groupId = String(group?.group_id || '')
+      if (!groupId) return false
+      return !isValueEqual(magnetOriginalById.value[groupId], magnetDraftById.value[groupId])
+    })
+
+    if (!changedGroups.length) {
+      error.value = t('appConfigCenter.noChanges')
+      return
+    }
+
+    magnetSaving.value = true
+    error.value = ''
+    success.value = ''
+
+    let currentVersion = Number(magnetVersion.value || 0)
+    for (const group of changedGroups) {
+      const groupId = String(group?.group_id || '')
+      try {
+        const resp = await updateMagnetGroup(groupId, {
+          version: currentVersion,
+          value: deepClone(magnetDraftById.value[groupId]),
+        })
+        currentVersion = Number(resp?.version || currentVersion)
+      } catch (err) {
+        magnetSaving.value = false
+        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+        return
+      }
+    }
+
+    magnetSaving.value = false
+    await loadAllConfigs()
+    success.value = t('appConfigCenter.magnetSaveSuccess')
   }
 
   function collectChanges() {
@@ -275,6 +442,23 @@ export function useAppConfigCenterPage() {
         continue
       }
       output.push({
+        scope: 'app',
+        appId: row.appId,
+        appName: row.appName,
+        path: row.path,
+        before,
+        after,
+      })
+    }
+
+    for (const row of systemRows.value) {
+      const before = nestedGet(osOriginalData.value || {}, row.path)
+      const after = nestedGet(osDraftData.value || {}, row.path)
+      if (isValueEqual(before, after)) {
+        continue
+      }
+      output.push({
+        scope: 'os',
         appId: row.appId,
         appName: row.appName,
         path: row.path,
@@ -331,7 +515,12 @@ export function useAppConfigCenterPage() {
     appOptions,
     selectedAppId,
     rows,
+    systemRows,
+    magnets,
+    magnetConflicts,
+    magnetSaving,
     hasChanges,
+    hasMagnetChanges,
     showConfirmModal,
     pendingChanges,
     loadAllConfigs,
@@ -346,14 +535,19 @@ export function useAppConfigCenterPage() {
     getRangeText,
     getDescriptionText,
     getRowThemeClass,
+    getMagnetValue,
+    getMagnetDisplayValue,
     onBooleanChange,
     onEnumChange,
     onTextChange,
+    onMagnetBooleanChange,
+    onMagnetTextChange,
+    saveMagnetChanges,
     valueToInlineText,
   }
 }
 
-function flattenSchema(schema, data, appInfo, parentPath = '') {
+function flattenSchema(schema, data, appInfo, readonlyPaths, parentPath = '') {
   if (!schema || typeof schema !== 'object') {
     return []
   }
@@ -368,7 +562,7 @@ function flattenSchema(schema, data, appInfo, parentPath = '') {
         continue
       }
       const childPath = parentPath ? `${parentPath}.${key}` : key
-      rows.push(...flattenSchema(childSchema, data, appInfo, childPath))
+      rows.push(...flattenSchema(childSchema, data, appInfo, readonlyPaths, childPath))
     }
     return rows
   }
@@ -392,8 +586,44 @@ function flattenSchema(schema, data, appInfo, parentPath = '') {
     defaultValue: schema.default,
     hasDefault: Object.prototype.hasOwnProperty.call(schema, 'default'),
     currentValue: nestedGet(data, parentPath),
+    readonly: readonlyPaths.has(parentPath),
   })
 
+  return rows
+}
+
+function flattenDataLeaves(data, readonlyPaths, parentPath = '') {
+  if (!isRecord(data)) {
+    if (!parentPath || String(parentPath).startsWith('_')) {
+      return []
+    }
+    return [
+      {
+        path: parentPath,
+        value: data,
+        type: inferValueType(data),
+        readonly: readonlyPaths.has(parentPath),
+      },
+    ]
+  }
+
+  const rows = []
+  for (const [key, child] of Object.entries(data)) {
+    if (String(key).startsWith('_')) {
+      continue
+    }
+    const childPath = parentPath ? `${parentPath}.${key}` : key
+    if (isRecord(child)) {
+      rows.push(...flattenDataLeaves(child, readonlyPaths, childPath))
+      continue
+    }
+    rows.push({
+      path: childPath,
+      value: child,
+      type: inferValueType(child),
+      readonly: readonlyPaths.has(childPath),
+    })
+  }
   return rows
 }
 
@@ -575,4 +805,14 @@ function isNumber(value) {
 
 function isInteger(value) {
   return Number.isInteger(value)
+}
+
+function inferValueType(value) {
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return 'array'
+  if (typeof value === 'boolean') return 'boolean'
+  if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'number'
+  if (typeof value === 'string') return 'string'
+  if (isRecord(value)) return 'object'
+  return 'unknown'
 }

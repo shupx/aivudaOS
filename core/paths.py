@@ -11,6 +11,7 @@ CONFIG_DIR = PROJECT_ROOT / "config"
 OS_CONFIG_PATH = CONFIG_DIR / "os.yaml"
 USERS_CONFIG_PATH = CONFIG_DIR / "users.yaml"
 APP_CONFIG_DIR = CONFIG_DIR / "apps"
+MAGNET_CONFIG_PATH = CONFIG_DIR / "magnets.yaml"
 
 # App installations (multi-version with symlinks)
 APPS_DIR = PROJECT_ROOT / "apps"

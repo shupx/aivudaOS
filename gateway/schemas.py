@@ -21,6 +21,11 @@ class ConfigUpdateRequest(BaseModel):
     data: dict[str, Any]
 
 
+class MagnetUpdateRequest(BaseModel):
+    version: int
+    value: Any
+
+
 class AppConfigUpdateRequest(BaseModel):
     version: int
     data: dict[str, Any]

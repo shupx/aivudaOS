@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.db.schema import init_db
 from core.paths import UI_DIST_DIR, ensure_dirs
-from gateway.deps import get_runtime_service
+from gateway.deps import get_magnet_service, get_runtime_service
 from gateway.routes import apps, auth, config
 
 
@@ -33,6 +33,7 @@ def create_app() -> FastAPI:
     async def startup() -> None:
         ensure_dirs()
         init_db()
+        get_magnet_service().recompute(updated_by="system")
         runtime = get_runtime_service()
         summary = runtime.start_autostart_apps() # only for popen mode, systemd will manage autostart itself and we skip replay to avoid conflicts
         mode = summary.get("mode", "popen")

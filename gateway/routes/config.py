@@ -8,8 +8,9 @@ from core.auth.models import SessionInfo
 from core.auth.service import AuthService
 from core.config.service import ConfigService
 from core.errors import AuthenticationError, ConfigVersionConflictError
-from gateway.deps import get_auth_service, get_config_service
-from gateway.schemas import ConfigUpdateRequest
+from core.errors import InvalidConfigError, NotFoundError
+from gateway.deps import get_auth_service, get_config_service, get_magnet_service
+from gateway.schemas import ConfigUpdateRequest, MagnetUpdateRequest
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -26,12 +27,18 @@ def _require_auth(token: str) -> SessionInfo:
 async def get_config(token: str) -> dict[str, Any]:
     _require_auth(token)
     config: ConfigService = get_config_service()
+    magnet = get_magnet_service()
     cfg = config.get_os_config()
+    magnets = magnet.list_groups()
     return {
         "data": cfg.data,
         "version": cfg.version,
         "updated_at": cfg.updated_at,
         "updated_by": cfg.updated_by,
+        "readonly_paths": sorted(magnet.readonly_paths_for_os()),
+        "magnets": magnets.get("items") or [],
+        "magnet_conflicts": magnets.get("conflicts") or [],
+        "magnet_version": magnets.get("version", 0),
     }
 
 
@@ -39,10 +46,57 @@ async def get_config(token: str) -> dict[str, Any]:
 async def put_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]:
     user = _require_auth(token)
     config: ConfigService = get_config_service()
+    magnet = get_magnet_service()
+
+    current = config.get_os_config()
+    blocked_paths = magnet.blocked_paths_for_os_update(
+        before_data=current.data,
+        after_data=payload.data,
+    )
+    if blocked_paths:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Magnet-bound parameters are read-only here",
+                "blocked_paths": blocked_paths,
+            },
+        )
+
     try:
         result = config.update_os_config(
             payload.data, payload.version, user.username
         )
     except ConfigVersionConflictError:
         raise HTTPException(status_code=409, detail="Config version conflict")
+
+    magnet.recompute(updated_by=user.username)
     return {"ok": True, "version": result.version}
+
+
+@router.get("/magnets")
+async def list_magnets(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    magnet = get_magnet_service()
+    return magnet.list_groups()
+
+
+@router.put("/magnets/{group_id}")
+async def update_magnet(group_id: str, payload: MagnetUpdateRequest, token: str) -> dict[str, Any]:
+    user = _require_auth(token)
+    magnet = get_magnet_service()
+
+    try:
+        result = magnet.update_group_value(
+            group_id=group_id,
+            value=payload.value,
+            expected_version=payload.version,
+            updated_by=user.username,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ConfigVersionConflictError:
+        raise HTTPException(status_code=409, detail="Magnet config version conflict")
+    except InvalidConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return result

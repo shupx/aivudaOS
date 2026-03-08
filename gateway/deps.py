@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from core.apps.installer import InstallerService
+from core.apps.magnet import MagnetService
 from core.apps.operations import AppOperationManager
 from core.apps.runtime import RuntimeService
 from core.apps.versioning import VersioningService
@@ -30,6 +31,7 @@ def get_installer_service() -> InstallerService:
     return InstallerService(
         versioning=get_versioning_service(),
         config_service=get_config_service(),
+        magnet_service=get_magnet_service(),
     )
 
 
@@ -38,6 +40,15 @@ def get_runtime_service() -> RuntimeService:
     return RuntimeService(
         versioning=get_versioning_service(),
         config_service=get_config_service(),
+        magnet_service=get_magnet_service(),
+    )
+
+
+@lru_cache
+def get_magnet_service() -> MagnetService:
+    return MagnetService(
+        config_service=get_config_service(),
+        versioning_service=get_versioning_service(),
     )
 
 

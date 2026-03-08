@@ -10,6 +10,7 @@ from typing import Any, Callable
 import yaml
 
 from core.apps.config_validation import validate_config_data
+from core.apps.magnet import MagnetService
 from core.apps.models import AppManifest
 from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from core.apps.versioning import VersioningService
@@ -30,9 +31,11 @@ class InstallerService:
         self,
         versioning: VersioningService,
         config_service: ConfigService,
+        magnet_service: MagnetService,
     ) -> None:
         self._versioning = versioning
         self._config = config_service
+        self._magnet = magnet_service
         self._script_hooks = ScriptHookRunner()
 
     # ------------------------------------------------------------------ #
@@ -221,6 +224,7 @@ class InstallerService:
 
                 # Activate this version
                 self._versioning.activate_version(app_id, version)
+                self._magnet.recompute(updated_by="system")
                 emit("status", phase="activate", status="running", message="激活版本", app_id=app_id)
             except Exception:
                 shutil.rmtree(install_path, ignore_errors=True)

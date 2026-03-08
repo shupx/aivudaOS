@@ -28,6 +28,7 @@ from gateway.deps import (
     get_auth_service,
     get_config_service,
     get_installer_service,
+    get_magnet_service,
     get_runtime_service,
     get_versioning_service,
 )
@@ -157,6 +158,7 @@ async def get_active_configs(token: str) -> dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     config = get_config_service()
+    magnet = get_magnet_service()
     items: list[dict[str, Any]] = []
 
     for app in runtime.get_installed_list():
@@ -183,10 +185,19 @@ async def get_active_configs(token: str) -> dict[str, Any]:
                 "schema": schema or {},
                 "normalized_schema": normalized_schema,
                 "constraints": _get_constraints_for_app(app_id),
+                "readonly_paths": sorted(
+                    magnet.readonly_paths_for_app(app_id, app_version)
+                ),
             }
         )
 
-    return {"items": items}
+    magnets = magnet.list_groups()
+    return {
+        "items": items,
+        "magnets": magnets.get("items") or [],
+        "magnet_conflicts": magnets.get("conflicts") or [],
+        "magnet_version": magnets.get("version", 0),
+    }
 
 
 @router.get("/{app_id}/status")
@@ -619,6 +630,7 @@ async def get_app_config(app_id: str, token: str, app_version: str | None = None
     """
     _require_auth(token)
     config = get_config_service()
+    magnet = get_magnet_service()
     versioning = get_versioning_service()
     target_version = app_version or versioning.active_version(app_id)
     if not target_version:
@@ -630,6 +642,7 @@ async def get_app_config(app_id: str, token: str, app_version: str | None = None
 
     constraints = _get_constraints_for_app(app_id)
     normalized_schema = normalize_config_schema(manifest.get("config_schema") or {})
+    readonly_paths = sorted(magnet.readonly_paths_for_app(app_id, target_version))
     return {
         "app_id": app_id,
         "app_version": target_version,
@@ -639,6 +652,7 @@ async def get_app_config(app_id: str, token: str, app_version: str | None = None
         "schema": manifest.get("config_schema") or {},
         "normalized_schema": normalized_schema,
         "constraints": constraints,
+        "readonly_paths": readonly_paths,
     }
 
 
@@ -648,6 +662,7 @@ async def put_app_config(
 ) -> dict[str, Any]:
     session = _require_auth(token)
     config = get_config_service()
+    magnet = get_magnet_service()
 
     # Verify the app is installed
     versioning = get_versioning_service()
@@ -682,6 +697,23 @@ async def put_app_config(
             },
         )
 
+    current_cfg = config.get_app_config(app_id, target_version)
+    current_data = current_cfg.data if current_cfg.version > 0 else dict(manifest.get("default_config") or {})
+    blocked_paths = magnet.blocked_paths_for_app_update(
+        app_id=app_id,
+        app_version=target_version,
+        before_data=current_data,
+        after_data=payload.data,
+    )
+    if blocked_paths:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Magnet-bound parameters are read-only here",
+                "blocked_paths": blocked_paths,
+            },
+        )
+
     try:
         result = config.update_app_config(
             app_id,
@@ -694,6 +726,8 @@ async def put_app_config(
         raise HTTPException(
             status_code=409, detail="App config version conflict"
         )
+
+    magnet.recompute(updated_by=session.username)
     return {"ok": True, "version": result.version, "app_version": target_version}
 
 

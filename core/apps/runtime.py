@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.apps.config_validation import validate_config_data
+from core.apps.magnet import MagnetService
 from core.apps.models import AppManifest, AppRuntimeState
 from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from core.apps.systemd_runtime import SystemdRuntimeBackend
@@ -38,9 +39,11 @@ class RuntimeService:
         self,
         versioning: VersioningService,
         config_service: ConfigService,
+        magnet_service: MagnetService,
     ) -> None:
         self._versioning = versioning
         self._config = config_service
+        self._magnet = magnet_service
         self._systemd = SystemdRuntimeBackend(PROJECT_ROOT)
         self._script_hooks = ScriptHookRunner()
 
@@ -436,6 +439,7 @@ class RuntimeService:
             self.stop(app_id)
 
         self._versioning.activate_version(app_id, version)
+        self._magnet.recompute(updated_by="system")
 
         if runtime_state.running and restart:
             self.start(app_id)
@@ -498,6 +502,8 @@ class RuntimeService:
             version=version,
             executed=executed,
         )
+
+        self._magnet.recompute(updated_by="system")
 
         return {
             "ok": True,
@@ -614,6 +620,7 @@ class RuntimeService:
                 pass
 
         emit("status", phase="completed", status="completed", message="卸载完成", app_id=app_id)
+        self._magnet.recompute(updated_by="system")
 
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
