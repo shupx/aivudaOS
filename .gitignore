@@ -24,3 +24,8 @@ build/
 *.swo
 .idea/
 .vscode/
+
+# Runtime workspace folders are externalized to $HOME/aivudaOS_ws
+/apps/
+/config/
+/data/

@@ -9,10 +9,23 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 - `core/`: 核心业务逻辑（纯 Python，不依赖 HTTP）
 - `gateway/`: FastAPI 服务层，提供core service的统一的REST 接口，作为后端http server
 - `ui/`: 操作界面（Vue 3 + Vite）
-- `apps/`: 应用安装目录（多版本，symlink 切换）
-- `config/`: YAML 配置文件（OS 全局配置 + 各应用配置）
-- `data/`: 运行时数据（数据库、日志、会话、制品缓存）
 - `nginx/`: Nginx 配置模板
+
+## 运行时工作目录（默认）
+
+运行时目录不再使用仓库内的 `apps/`、`config/`、`data/`，而是默认放在：
+
+- `$HOME/aivudaOS_ws/apps`
+- `$HOME/aivudaOS_ws/config`
+- `$HOME/aivudaOS_ws/data`
+
+可通过环境变量覆盖：
+
+```bash
+export AIVUDAOS_WS_ROOT=/your/custom/path
+```
+
+首次启动会自动创建所需目录和默认配置文件（`os.yaml`、`users.yaml`、`magnets.yaml`）。
 
 ## 快速启动
 
@@ -78,7 +91,7 @@ Caddy 托管前端静态文件并反代 `/aivuda_os/api`，支持 HTTP 80 + `tls
 - `systemd`：由 `.service` 管理 `start/stop/restart/autostart`
 - `popen`：使用 Python `subprocess.Popen`（兼容回退）
 
-通过 `config/os.yaml` 的 OS 配置项控制：
+通过 `$HOME/aivudaOS_ws/config/os.yaml`（或 `$AIVUDAOS_WS_ROOT/config/os.yaml`）的 OS 配置项控制：
 
 - `runtime_process_manager`: `auto` | `systemd` | `popen`（默认 `auto`）
 - `runtime_systemd_scope`: `user` | `system`（默认 `user`）
@@ -89,7 +102,7 @@ Caddy 托管前端静态文件并反代 `/aivuda_os/api`，支持 HTTP 80 + `tls
 - `systemd`：优先尝试 systemd；若当前环境不可用会回退到 `popen`
 - `popen`：始终使用旧进程模型
 
-日志接口保持不变：`GET /aivuda_os/api/apps/{app_id}/logs` 继续读取 `data/logs/apps/{app_id}/current.log`。
+日志接口保持不变：`GET /aivuda_os/api/apps/{app_id}/logs` 继续读取 `$HOME/aivudaOS_ws/data/logs/apps/{app_id}/current.log`（或 `$AIVUDAOS_WS_ROOT/data/...`）。
 
 App 启动时会注入配置路径相关环境变量：
 

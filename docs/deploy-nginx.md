@@ -128,7 +128,7 @@ sudo systemctl status aivudaos-backend
 
 ## 9. App 生命周期由 systemd 管理（可选）
 
-如果希望应用 `start/stop/restart/autostart` 统一由 systemd 管理，请在 `config/os.yaml` 配置：
+如果希望应用 `start/stop/restart/autostart` 统一由 systemd 管理，请在 `$HOME/aivudaOS_ws/config/os.yaml`（或 `$AIVUDAOS_WS_ROOT/config/os.yaml`）配置：
 
 ```yaml
 runtime_process_manager: auto      # auto | systemd | popen
@@ -143,4 +143,4 @@ runtime_systemd_scope: user        # user | system
 说明：
 
 - `auto` 会优先使用 systemd，不可用时自动回退 `popen`
-- 日志接口仍读取 `data/logs/apps/{app_id}/current.log`
+- 日志接口仍读取 `$HOME/aivudaOS_ws/data/logs/apps/{app_id}/current.log`（或 `$AIVUDAOS_WS_ROOT/data/...`）

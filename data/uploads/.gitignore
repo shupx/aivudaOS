@@ -1,4 +1,0 @@
-# Ignore downloaded artifact files
-*
-!.gitignore
-!.keep

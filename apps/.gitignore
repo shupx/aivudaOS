@@ -1,4 +1,0 @@
-# Ignore all dynamically installed app directories
-*
-!.gitignore
-!.keep
