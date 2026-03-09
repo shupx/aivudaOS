@@ -4,6 +4,9 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 defineProps({
+  appOptions: { type: Array, default: () => [] },
+  selectedAppId: { type: String, default: '' },
+  setSelectedAppId: { type: Function, required: true },
   rows: { type: Array, default: () => [] },
   getCellValue: { type: Function, required: true },
   getCellError: { type: Function, required: true },
@@ -15,6 +18,7 @@ defineProps({
   onBooleanChange: { type: Function, required: true },
   onEnumChange: { type: Function, required: true },
   onTextChange: { type: Function, required: true },
+  jumpToMagnetByPath: { type: Function, required: true },
   valueToInlineText: { type: Function, required: true },
 })
 </script>
@@ -24,6 +28,21 @@ defineProps({
     <header class="log-header">
       <h3>{{ t('appConfigCenter.tableTitle') }}</h3>
     </header>
+
+    <div class="panel-actions wrap">
+      <label class="muted" for="config-center-app-select-inline">{{ t('appConfigCenter.filterApp') }}</label>
+      <select
+        id="config-center-app-select-inline"
+        class="select-input"
+        :value="selectedAppId"
+        @change="setSelectedAppId($event?.target?.value || '')"
+      >
+        <option value="">{{ t('appConfigCenter.filterAll') }}</option>
+        <option v-for="item in appOptions" :key="item.appId" :value="item.appId">
+          {{ item.name }} ({{ item.appId }} @ {{ item.version }})
+        </option>
+      </select>
+    </div>
 
     <div v-if="!rows.length" class="empty-box">{{ t('appConfigCenter.empty') }}</div>
 
@@ -85,7 +104,12 @@ defineProps({
                     @change="onTextChange(row, $event?.target?.value || '')"
                   >
 
-                  <p v-if="row.readonly" class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
+                  <template v-if="row.readonly">
+                    <p class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
+                    <button class="link-btn" @click="jumpToMagnetByPath(row.path)">
+                      {{ t('appConfigCenter.jumpToMagnet') }}
+                    </button>
+                  </template>
                   <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
                 </div>
               </td>

@@ -252,6 +252,8 @@ input {
   padding: 0;
   cursor: pointer;
   text-decoration: underline;
+  text-align: left;
+  justify-self: start;
 }
 
 .link-btn:hover {

@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { fetchActiveAppConfigs, updateAppConfig, updateMagnetGroup } from '../services/core/apps'
@@ -28,6 +28,7 @@ export function useAppConfigCenterPage() {
   const magnetVersion = ref(0)
   const magnetConflicts = ref([])
   const magnetSaving = ref(false)
+  const magnetCollapsed = ref(true)
   const sysDraftData = ref({})
   const sysOriginalData = ref({})
   const sysVersion = ref(0)
@@ -180,20 +181,7 @@ export function useAppConfigCenterPage() {
       schemaByApp.value = nextSchema
       readonlyPathsByApp.value = nextReadonly
 
-      const nextMagnets = Array.isArray(data?.magnets) ? data.magnets : []
-      const nextMagnetOriginal = {}
-      const nextMagnetDraft = {}
-      for (const item of nextMagnets) {
-        const groupId = String(item?.group_id || '')
-        if (!groupId) continue
-        nextMagnetOriginal[groupId] = deepClone(item?.value)
-        nextMagnetDraft[groupId] = deepClone(item?.value)
-      }
-      magnets.value = nextMagnets
-      magnetOriginalById.value = nextMagnetOriginal
-      magnetDraftById.value = nextMagnetDraft
-      magnetVersion.value = Number(data?.magnetVersion || 0)
-      magnetConflicts.value = Array.isArray(data?.magnetConflicts) ? data.magnetConflicts : []
+      applyMagnetSnapshot(data || {})
 
       sysDraftData.value = deepClone(sysData?.data || {})
       sysOriginalData.value = deepClone(sysData?.data || {})
@@ -238,13 +226,29 @@ export function useAppConfigCenterPage() {
     magnetConflicts.value = Array.isArray(snapshot?.magnet_conflicts)
       ? snapshot.magnet_conflicts
       : (Array.isArray(snapshot?.magnetConflicts) ? snapshot.magnetConflicts : [])
-    sysReadonlyPaths.value = Array.isArray(snapshot?.readonly_paths) ? snapshot.readonly_paths : []
+    if (Array.isArray(snapshot?.readonly_paths)) {
+      sysReadonlyPaths.value = snapshot.readonly_paths
+    }
   }
 
   async function refreshMagnetsAfterSysChange() {
     const latest = await fetchSysConfig()
     applyMagnetSnapshot(latest || {})
     return latest
+  }
+
+  async function refreshAfterAppChange() {
+    const latest = await fetchActiveAppConfigs()
+    applyMagnetSnapshot(latest || {})
+
+    const items = Array.isArray(latest?.items) ? latest.items : []
+    const nextReadonly = { ...readonlyPathsByApp.value }
+    for (const item of items) {
+      const appId = String(item?.app_id || '')
+      if (!appId) continue
+      nextReadonly[appId] = Array.isArray(item?.readonly_paths) ? item.readonly_paths : []
+    }
+    readonlyPathsByApp.value = nextReadonly
   }
 
   function getCellValue(row) {
@@ -407,6 +411,7 @@ export function useAppConfigCenterPage() {
         ...originalByApp.value,
         [row.appId]: deepClone(appData),
       }
+      await refreshAfterAppChange()
       success.value = t('appConfigCenter.autoSyncSuccess')
     } catch (err) {
       draftByApp.value = {
@@ -634,6 +639,34 @@ export function useAppConfigCenterPage() {
 
   function goBackApps() {
     router.push('/dashboard/apps')
+  }
+
+  function setSelectedAppId(value) {
+    selectedAppId.value = String(value || '')
+  }
+
+  function toggleMagnetCollapsed() {
+    magnetCollapsed.value = !magnetCollapsed.value
+  }
+
+  function openMagnetPanel() {
+    magnetCollapsed.value = false
+  }
+
+  function getMagnetRowId(path) {
+    const raw = String(path || '').trim()
+    const safe = raw.replace(/[^a-zA-Z0-9_-]+/g, '-')
+    return `magnet-row-${safe}`
+  }
+
+  async function jumpToMagnetByPath(path) {
+    const targetPath = String(path || '').trim()
+    if (!targetPath) return
+    openMagnetPanel()
+    await nextTick()
+    const element = document.getElementById(getMagnetRowId(targetPath))
+    if (!element) return
+    element.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
 
   function openSystemAddModal() {
@@ -893,14 +926,20 @@ export function useAppConfigCenterPage() {
     success,
     appOptions,
     selectedAppId,
+    setSelectedAppId,
     rows,
     systemRows,
     osRows,
     magnets,
     magnetConflicts,
     magnetSaving,
+    magnetCollapsed,
     loadAllConfigs,
     goBackApps,
+    toggleMagnetCollapsed,
+    openMagnetPanel,
+    getMagnetRowId,
+    jumpToMagnetByPath,
     getCellValue,
     getCellError,
     displayValue,

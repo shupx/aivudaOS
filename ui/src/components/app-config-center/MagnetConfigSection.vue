@@ -6,6 +6,9 @@ const { t } = useI18n()
 defineProps({
   magnets: { type: Array, default: () => [] },
   magnetConflicts: { type: Array, default: () => [] },
+  collapsed: { type: Boolean, default: true },
+  toggleCollapsed: { type: Function, required: true },
+  getMagnetRowId: { type: Function, required: true },
   getMagnetValue: { type: Function, required: true },
   getMagnetDisplayValue: { type: Function, required: true },
   onMagnetBooleanChange: { type: Function, required: true },
@@ -18,10 +21,18 @@ defineProps({
 <template>
   <article class="actions-panel">
     <header class="log-header">
-      <h3>{{ t('appConfigCenter.magnetTitle') }}</h3>
+      <div class="panel-actions panel-title-actions">
+        <h3>{{ t('appConfigCenter.magnetTitle') }}</h3>
+        <button class="btn" @click="toggleCollapsed">
+          {{ collapsed ? t('appConfigCenter.expand') : t('appConfigCenter.collapse') }}
+        </button>
+      </div>
     </header>
 
-    <div v-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
+    <p class="muted">{{ t('appConfigCenter.magnetDesc') }}</p>
+
+    <div v-if="collapsed" class="muted">{{ t('appConfigCenter.magnetCollapsedHint') }}</div>
+    <div v-else-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
     <div v-else class="table-wrap">
       <table class="config-table compact">
         <thead>
@@ -33,7 +44,7 @@ defineProps({
           </tr>
         </thead>
         <tbody>
-          <tr v-for="group in magnets" :key="group.group_id">
+          <tr v-for="group in magnets" :id="getMagnetRowId(group.path)" :key="group.group_id">
             <td class="mono-cell">{{ group.path }}</td>
             <td>
               <label v-if="group.value_type === 'boolean'" class="check-item">
@@ -58,6 +69,6 @@ defineProps({
       </table>
     </div>
 
-    <p v-if="magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
+    <p v-if="!collapsed && magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
   </article>
 </template>

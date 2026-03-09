@@ -18,9 +18,10 @@ const {
   osRows,
   magnets,
   magnetConflicts,
-  magnetSaving,
+  magnetCollapsed,
   loadAllConfigs,
   goBackApps,
+  setSelectedAppId,
   getCellValue,
   getCellError,
   displayValue,
@@ -57,6 +58,9 @@ const {
   closeSystemAddModal,
   addSystemParam,
   confirmRemoveSystemParam,
+  toggleMagnetCollapsed,
+  getMagnetRowId,
+  jumpToMagnetByPath,
   onMagnetBooleanChange,
   onMagnetTextChange,
   saveMagnetChanges,
@@ -79,24 +83,12 @@ const {
     <p v-if="error" class="error-text">{{ error }}</p>
     <p v-if="success" class="ok-text">{{ success }}</p>
 
-    <article class="actions-panel">
-      <header class="log-header">
-        <h3>{{ t('appConfigCenter.filterTitle') }}</h3>
-      </header>
-      <div class="panel-actions wrap">
-        <label class="muted" for="config-center-app-select">{{ t('appConfigCenter.filterApp') }}</label>
-        <select id="config-center-app-select" v-model="selectedAppId" class="select-input">
-          <option value="">{{ t('appConfigCenter.filterAll') }}</option>
-          <option v-for="item in appOptions" :key="item.appId" :value="item.appId">
-            {{ item.name }} ({{ item.appId }} @ {{ item.version }})
-          </option>
-        </select>
-      </div>
-    </article>
-
     <MagnetConfigSection
       :magnets="magnets"
       :magnet-conflicts="magnetConflicts"
+      :collapsed="magnetCollapsed"
+      :toggle-collapsed="toggleMagnetCollapsed"
+      :get-magnet-row-id="getMagnetRowId"
       :get-magnet-value="getMagnetValue"
       :get-magnet-display-value="getMagnetDisplayValue"
       :on-magnet-boolean-change="onMagnetBooleanChange"
@@ -162,7 +154,12 @@ const {
                     @change="onTextChange(row, $event?.target?.value || '')"
                   >
 
-                  <p v-if="row.readonly" class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
+                  <template v-if="row.readonly">
+                    <p class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
+                    <button class="link-btn" @click="jumpToMagnetByPath(row.path)">
+                      {{ t('appConfigCenter.jumpToMagnet') }}
+                    </button>
+                  </template>
                   <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
                 </div>
               </td>
@@ -304,17 +301,10 @@ const {
       </section>
     </div>
 
-    <OsConfigSection
-      :os-rows="osRows"
-      :get-cell-value="getCellValue"
-      :get-cell-error="getCellError"
-      :display-value="displayValue"
-      :on-enum-change="onEnumChange"
-      :on-text-change="onTextChange"
-      :value-to-inline-text="valueToInlineText"
-    />
-
     <AppParamsSection
+      :app-options="appOptions"
+      :selected-app-id="selectedAppId"
+      :set-selected-app-id="setSelectedAppId"
       :rows="rows"
       :get-cell-value="getCellValue"
       :get-cell-error="getCellError"
@@ -324,6 +314,17 @@ const {
       :get-description-text="getDescriptionText"
       :get-row-theme-class="getRowThemeClass"
       :on-boolean-change="onBooleanChange"
+      :on-enum-change="onEnumChange"
+      :on-text-change="onTextChange"
+      :jump-to-magnet-by-path="jumpToMagnetByPath"
+      :value-to-inline-text="valueToInlineText"
+    />
+
+    <OsConfigSection
+      :os-rows="osRows"
+      :get-cell-value="getCellValue"
+      :get-cell-error="getCellError"
+      :display-value="displayValue"
       :on-enum-change="onEnumChange"
       :on-text-change="onTextChange"
       :value-to-inline-text="valueToInlineText"
