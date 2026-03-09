@@ -246,7 +246,12 @@ class RuntimeService:
 
         command = self._build_exec_command(manifest, install_path)
         command = self._decorate_command_for_realtime_logs(command)
-        config_env = self._build_config_env(app_id, active_version, manifest)
+        config_env = self._build_config_env(
+            app_id,
+            active_version,
+            manifest,
+            install_path=install_path,
+        )
         runtime_env = {**self._runtime_log_env(), **config_env}
         log_path = self._app_log_path(app_id)
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -393,7 +398,12 @@ class RuntimeService:
                 raise AppNotInstalledError(f"{app_id} has no active version")
             runtime_env = {
                 **self._runtime_log_env(),
-                **self._build_config_env(app_id, active_version, manifest),
+                **self._build_config_env(
+                    app_id,
+                    active_version,
+                    manifest,
+                    install_path=install_path,
+                ),
             }
             log_path = self._app_log_path(app_id)
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -691,7 +701,12 @@ class RuntimeService:
                     continue
                 runtime_env = {
                     **runtime_env,
-                    **self._build_config_env(app_id, active_version, manifest),
+                    **self._build_config_env(
+                        app_id,
+                        active_version,
+                        manifest,
+                        install_path=install_path,
+                    ),
                 }
                 log_path = self._app_log_path(app_id)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -761,6 +776,8 @@ class RuntimeService:
         app_id: str,
         app_version: str,
         manifest: AppManifest,
+        *,
+        install_path: Path | None = None,
     ) -> dict[str, str]:
         self._ensure_version_config_ready(app_id, app_version, manifest)
         cfg = self._config.get_app_config(app_id, app_version)
@@ -775,12 +792,19 @@ class RuntimeService:
             raise AppRuntimeError(str(exc)) from exc
 
         config_path = self._config.app_config_path(app_id, app_version)
+        install_path = install_path or self._versioning.version_dir(app_id, app_version)
+        runtime_data_path = self._versioning.ensure_version_runtime_data_dir(
+            app_id,
+            app_version,
+        )
         helpers_entry_path = (
             PROJECT_ROOT / "core" / "shell_helpers" / "aivuda_app_helpers.sh"
         ).resolve()
         env: dict[str, str] = {
             "AIVUDA_APP_ID": app_id,
             "AIVUDA_APP_VERSION": app_version,
+            "AIVUDA_APP_INSTALL_PATH": str(install_path.resolve()),
+            "AIVUDA_APP_RUNTIME_DATA_PATH": str(runtime_data_path.resolve()),
             "AIVUDA_APP_CONFIG_PATH": str(config_path.resolve()),
             "AIVUDA_APP_HELPERS_ENTRY_PATH": str(helpers_entry_path),
         }

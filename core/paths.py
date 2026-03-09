@@ -31,6 +31,7 @@ APPS_DIR = RUNTIME_ROOT / "apps"
 
 # Runtime data
 DATA_DIR = RUNTIME_ROOT / "data"
+APP_RUNTIME_DATA_DIR = DATA_DIR / "runtime"
 DB_PATH = DATA_DIR / "aivuda.db"
 # ARTIFACT_CACHE_DIR = DATA_DIR / "artifact-cache"
 UPLOAD_TEMP_DIR = DATA_DIR / "uploads"
@@ -82,6 +83,7 @@ def ensure_dirs() -> None:
         APP_CONFIG_DIR,
         APPS_DIR,
         DATA_DIR,
+        APP_RUNTIME_DATA_DIR,
         # ARTIFACT_CACHE_DIR, 
         UPLOAD_TEMP_DIR,
         SESSIONS_DIR,

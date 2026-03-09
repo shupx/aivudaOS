@@ -6,7 +6,7 @@ from pathlib import Path
 
 from core.db.connection import db_conn
 from core.errors import NotFoundError
-from core.paths import APPS_DIR
+from core.paths import APPS_DIR, APP_RUNTIME_DATA_DIR
 
 
 class VersioningService:
@@ -20,6 +20,17 @@ class VersioningService:
 
     def active_link(self, app_id: str) -> Path:
         return APPS_DIR / app_id / "active"
+
+    def app_runtime_data_dir(self, app_id: str) -> Path:
+        return APP_RUNTIME_DATA_DIR / app_id
+
+    def version_runtime_data_dir(self, app_id: str, version: str) -> Path:
+        return self.app_runtime_data_dir(app_id) / version
+
+    def ensure_version_runtime_data_dir(self, app_id: str, version: str) -> Path:
+        runtime_dir = self.version_runtime_data_dir(app_id, version)
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        return runtime_dir
 
     def active_version(self, app_id: str) -> str | None:
         """Read the active version from the symlink. Returns None if no symlink."""
@@ -64,6 +75,9 @@ class VersioningService:
         ver_dir = self.version_dir(app_id, version)
         if ver_dir.exists():
             shutil.rmtree(ver_dir)
+        runtime_dir = self.version_runtime_data_dir(app_id, version)
+        if runtime_dir.exists():
+            shutil.rmtree(runtime_dir, ignore_errors=True)
         ver_dir.mkdir(parents=True, exist_ok=True)
         return ver_dir
 
@@ -72,6 +86,9 @@ class VersioningService:
         ver_dir = self.version_dir(app_id, version)
         if ver_dir.exists():
             shutil.rmtree(ver_dir, ignore_errors=True)
+        runtime_dir = self.version_runtime_data_dir(app_id, version)
+        if runtime_dir.exists():
+            shutil.rmtree(runtime_dir, ignore_errors=True)
 
         # If active pointed to this version, remove symlink
         if self.active_version(app_id) == version:
@@ -91,6 +108,10 @@ class VersioningService:
         app_dir = self.app_dir(app_id)
         if app_dir.exists():
             shutil.rmtree(app_dir, ignore_errors=True)
+
+        runtime_app_dir = self.app_runtime_data_dir(app_id)
+        if runtime_app_dir.exists():
+            shutil.rmtree(runtime_app_dir, ignore_errors=True)
 
         with db_conn() as conn:
             conn.execute("DELETE FROM app_installation WHERE app_id = ?", (app_id,))

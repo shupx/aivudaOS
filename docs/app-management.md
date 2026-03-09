@@ -112,7 +112,10 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 │           └── {version}.yaml    # 每个 App 每个版本独立配置
 ├── data/
 │   ├── aivuda.db                 # SQLite 数据库
-│   └── uploads/                  # 上传临时目录
+│   ├── uploads/                  # 上传临时目录
+│   └── runtime/
+│       └── {app_id}/
+│           └── {version}/        # 每个 app 每个版本独立 runtime 数据目录
 ```
 
 ## 数据库表
@@ -196,6 +199,8 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 - 运行时会注入配置文件路径相关环境变量：
      - `AIVUDA_APP_CONFIG_PATH`：当前 app 当前版本的配置文件路径（例如 `${AIVUDAOS_WS_ROOT}/config/apps/{app_id}/{version}.yaml`）
      - `AIVUDA_APP_ID` / `AIVUDA_APP_VERSION`：当前 app 标识与版本
+     - `AIVUDA_APP_INSTALL_PATH`：当前 app 当前版本安装目录（例如 `${AIVUDAOS_WS_ROOT}/apps/{app_id}/versions/{version}`）
+     - `AIVUDA_APP_RUNTIME_DATA_PATH`：当前 app 当前版本 runtime 数据目录（例如 `${AIVUDAOS_WS_ROOT}/data/runtime/{app_id}/{version}`）
      - `AIVUDA_APP_HELPERS_ENTRY_PATH`：统一 helper 入口（`core/shell_helpers/aivuda_app_helpers.sh`）
 - app 启动脚本建议先 `source "$AIVUDA_APP_HELPERS_ENTRY_PATH"`
 - 之后可调用 `aivuda_yaml_get <dotted.path> [default]` 与 `aivuda_yaml_has <dotted.path>`
@@ -310,6 +315,7 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 - `active` symlink 指向当前激活版本
 - `switch-version` 可切换激活版本，可选自动重启
 - `uninstall` 可删除单个版本或整个 App（`purge=true` 同时删除配置）
+- 卸载版本或整应用时，会同步删除 `${AIVUDAOS_WS_ROOT}/data/runtime/{app_id}/{version}`（或整个 `{app_id}`）目录
 
 ## 升级流程
 
