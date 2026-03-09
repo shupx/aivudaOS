@@ -6,6 +6,7 @@ import AppsView from './views/AppsView.vue'
 import AppDetailView from './views/AppDetailView.vue'
 import AppConfigView from './views/AppConfigView.vue'
 import AppConfigCenterView from './views/AppConfigCenterView.vue'
+import AppBuiltInUiView from './views/AppBuiltInUiView.vue'
 import OnlineStoreView from './views/OnlineStoreView.vue'
 import OnlineStoreDetailView from './views/OnlineStoreDetailView.vue'
 import { appState } from './state/appState'
@@ -22,6 +23,7 @@ const routes = [
       { path: 'apps', component: AppsView },
       { path: 'apps/configs', component: AppConfigCenterView },
       { path: 'apps/:appId', component: AppDetailView },
+      { path: 'apps/:appId/ui', component: AppBuiltInUiView },
       { path: 'apps/:appId/config', component: AppConfigView },
       { path: 'store', component: OnlineStoreView },
       { path: 'store/:appId', component: OnlineStoreDetailView },

@@ -117,6 +117,17 @@ export default {
     start: '启动',
     autostart: '自启动',
     iconAlt: '应用图标',
+    openBuiltInUi: 'open UI',
+  },
+  appBuiltInUi: {
+    title: '内置UI：{appId}',
+    backToApps: '返回应用列表',
+    backToDetail: '返回应用详情',
+    reload: '重新加载',
+    iframeTitle: '{appId} 的应用内置UI',
+    frameLoadFailed: '加载应用内置UI失败',
+    openDirectlyHint: '如果 iframe 加载失败，可尝试直接打开：',
+    openDirectly: '新标签页打开',
   },
   appDetail: {
     title: '应用详情',

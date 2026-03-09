@@ -564,6 +564,12 @@ input {
   gap: 10px;
 }
 
+.app-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-title-wrap {
   display: flex;
   align-items: center;
@@ -596,6 +602,36 @@ input {
   font-weight: 600;
 }
 
+.app-ui-text-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  height: 28px;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.app-ui-text-btn:hover {
+  border-color: #60a5fa;
+}
+
+.app-ui-frame-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 70vh;
+}
+
+.app-ui-frame {
+  border: none;
+  width: 100%;
+  min-height: 70vh;
+  background: #ffffff;
+}
+
 .app-meta {
   display: grid;
   gap: 6px;
@@ -603,11 +639,18 @@ input {
   color: #334155;
 }
 
+.app-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .switch-row {
   display: flex;
-  justify-content: flex-end;
   align-items: flex-end;
   gap: 14px;
+  margin-left: auto;
 }
 
 .switch-item {

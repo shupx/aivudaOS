@@ -154,6 +154,7 @@ class RuntimeService:
             pass
 
         runtime_state = self.get_runtime_state(app_id)
+        built_in_ui_entry = self.get_app_ui_entry_path(app_id)
 
         return {
             "app_id": app_id,
@@ -174,6 +175,7 @@ class RuntimeService:
                 "app_version": active_ver,
             },
             "manifest": manifest_info,
+            "has_builtin_ui": built_in_ui_entry is not None,
         }
 
     def get_installed_list(self) -> list[dict[str, Any]]:
@@ -204,6 +206,7 @@ class RuntimeService:
                 except Exception:
                     pass
                 runtime_state = self.get_runtime_state(aid)
+                built_in_ui_entry = self.get_app_ui_entry_path(aid)
                 seen[aid] = {
                     "app_id": aid,
                     "name": name,
@@ -217,6 +220,7 @@ class RuntimeService:
                     "pid": runtime_state.pid,
                     "last_started_at": runtime_state.last_started_at,
                     "last_stopped_at": runtime_state.last_stopped_at,
+                    "has_builtin_ui": built_in_ui_entry is not None,
                 }
             seen[aid]["versions"].append(row["version"])
 
@@ -852,6 +856,45 @@ class RuntimeService:
         if default_icon.exists() and default_icon.is_file():
             return default_icon
         return PROJECT_ROOT / "ui" / "public" / "vite.svg"
+
+    def get_app_ui_entry_path(self, app_id: str) -> Path | None:
+        install_path = self._versioning.active_install_path(app_id)
+        if install_path is None:
+            return None
+
+        try:
+            manifest = self._get_manifest(app_id)
+        except AppNotInstalledError:
+            return None
+
+        return self._resolve_manifest_relative_file(
+            install_path,
+            manifest.ui_index_path,
+        )
+
+    def get_app_ui_asset_path(self, app_id: str, asset_relative_path: str) -> Path | None:
+        entry_path = self.get_app_ui_entry_path(app_id)
+        if entry_path is None:
+            return None
+
+        raw = (asset_relative_path or "").strip()
+        if not raw:
+            return entry_path
+
+        if raw.startswith("/"):
+            return None
+
+        ui_root = entry_path.parent.resolve()
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            return None
+
+        resolved = (ui_root / candidate).resolve()
+        if resolved != ui_root and ui_root not in resolved.parents:
+            return None
+        if not resolved.exists() or not resolved.is_file():
+            return None
+        return resolved
 
     @staticmethod
     def _resolve_manifest_relative_file(

@@ -171,6 +171,8 @@ App 启动时会注入配置路径相关环境变量：
 - `POST /aivuda_os/api/apps/operations/{operation_id}/cancel` — 请求取消运行中的操作（如上传安装）
 - `WS /aivuda_os/api/apps/operations/{operation_id}/interactive/ws` — 安装交互输入通道（query 带 `token`）
 - `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
+- `GET /aivuda_os/api/apps/{app_id}/ui/` — 获取应用内置 UI 首页（manifest `ui_index_path`，可选）
+- `GET /aivuda_os/api/apps/{app_id}/ui/{asset_path}` — 获取内置 UI 静态资源
 - `GET /aivuda_os/api/apps/configs/active` — 获取所有已安装 app 的 active 配置、schema 与约束（统一参数页使用）
 - `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置（可选 query: `app_version`）
 - `PUT  /aivuda_os/api/apps/{app_id}/config` — 更新应用配置（body 可带 `app_version`）

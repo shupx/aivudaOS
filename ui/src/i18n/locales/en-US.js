@@ -117,6 +117,17 @@ export default {
     start: 'Start',
     autostart: 'Autostart',
     iconAlt: 'app icon',
+    openBuiltInUi: 'open UI',
+  },
+  appBuiltInUi: {
+    title: 'Built-in UI: {appId}',
+    backToApps: 'Back to Apps',
+    backToDetail: 'Back to App Detail',
+    reload: 'Reload',
+    iframeTitle: 'Built-in app UI for {appId}',
+    frameLoadFailed: 'Failed to load built-in UI',
+    openDirectlyHint: 'If iframe fails, try opening directly:',
+    openDirectly: 'Open in new tab',
   },
   appDetail: {
     title: 'App Details',

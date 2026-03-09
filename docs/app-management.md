@@ -36,6 +36,7 @@ my-app-1.0.0.tar.gz
 > 支持包内有一层包裹目录（如 `my-app/manifest.yaml`），系统会自动向下查找。
 > 安装时会校验 `run.entrypoint` 是否存在，并自动补齐可执行权限（`chmod +x`）。
 > App 图标由 manifest 的 `icon` 字段指定（可选）；未指定或文件不存在时使用默认图标。
+> App 内置 UI 入口由 manifest 的 `ui_index_path` 字段指定（可选）；未指定时前端不显示“进入内置 UI”。
 
 ### manifest.yaml 字段
 
@@ -48,6 +49,7 @@ run:
   entrypoint: ./start.sh       # 启动入口（必填）
   args: []                     # 启动参数
 icon: ./assets/icon.png        # 应用图标路径（可选，相对安装根目录）
+ui_index_path: ui/index.html   # 应用内置 UI 首页（可选，相对安装根目录）
 pre_install: ./scripts/pre_install.sh      # 安装前脚本（可选）
 pre_uninstall: ./scripts/pre_uninstall.sh  # 卸载前脚本（可选）
 update_this_version: ./scripts/update_this_version.sh # update_this_version 脚本（可选）
@@ -226,6 +228,8 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 | WS | `/aivuda_os/api/apps/operations/{operation_id}/interactive/ws?token=...` | 交互输入通道（写入脚本 stdin） |
 | GET | `/aivuda_os/api/apps/installed` | 已安装应用列表 |
 | GET | `/aivuda_os/api/apps/{app_id}/status` | 应用详情（安装信息 + 运行状态） |
+| GET | `/aivuda_os/api/apps/{app_id}/ui/?token=...` | 获取应用内置 UI 首页 |
+| GET | `/aivuda_os/api/apps/{app_id}/ui/{asset_path}?token=...` | 获取内置 UI 静态资源 |
 | POST | `/aivuda_os/api/apps/{app_id}/start` | 启动 |
 | POST | `/aivuda_os/api/apps/{app_id}/stop` | 停止 |
 | POST | `/aivuda_os/api/apps/{app_id}/restart` | 重启 |

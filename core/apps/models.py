@@ -15,6 +15,7 @@ class AppManifest:
     pre_install: str | None = None
     pre_uninstall: str | None = None
     update_this_version: str | None = None
+    ui_index_path: str = ""
     default_config_path: str = ""
     config_schema_path: str = ""
     default_config: dict[str, Any] = field(default_factory=dict)
@@ -32,6 +33,7 @@ class AppManifest:
             pre_install=raw.get("pre_install"),
             pre_uninstall=raw.get("pre_uninstall"),
             update_this_version=raw.get("update_this_version"),
+            ui_index_path=str(raw.get("ui_index_path") or ""),
             default_config_path=str(raw.get("default_config_path") or ""),
             config_schema_path=str(raw.get("config_schema_path") or ""),
             default_config=raw.get("default_config") or {},
@@ -58,6 +60,8 @@ class AppManifest:
             d["pre_uninstall"] = self.pre_uninstall
         if self.update_this_version is not None:
             d["update_this_version"] = self.update_this_version
+        if self.ui_index_path:
+            d["ui_index_path"] = self.ui_index_path
         return d
 
 

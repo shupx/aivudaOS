@@ -17,6 +17,7 @@ const iconLoadFailed = ref(false)
 const { t } = useI18n()
 
 const description = computed(() => props.app.description || t('appCard.noDescription'))
+const hasBuiltInUi = computed(() => Boolean(props.app.has_builtin_ui))
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
@@ -44,6 +45,11 @@ function goDetail() {
   router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}`)
 }
 
+function goBuiltInUi() {
+  if (!hasBuiltInUi.value) return
+  router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
+}
+
 function onIconError() {
   iconLoadFailed.value = true
 }
@@ -68,7 +74,9 @@ function onIconError() {
         >
         <h3>{{ app.name || app.app_id }}</h3>
       </div>
-      <span class="app-version">{{ app.active_version || '-' }}</span>
+      <div class="app-header-actions">
+        <span class="app-version">{{ app.active_version || '-' }}</span>
+      </div>
     </header>
 
     <div class="app-meta">
@@ -77,15 +85,28 @@ function onIconError() {
       <p><strong>{{ t('appCard.status') }}:</strong> {{ app.running ? t('appCard.running') : t('appCard.stopped') }}</p>
     </div>
 
-    <div class="switch-row">
-      <div class="switch-item" @click.stop>
-        <span>{{ t('appCard.start') }}</span>
-        <SwitchToggle :model-value="Boolean(app.running)" :disabled="busy" @update:model-value="onRunningChange" />
-      </div>
+    <div class="app-card-footer">
+      <button
+        v-if="hasBuiltInUi"
+        class="app-ui-text-btn"
+        type="button"
+        :title="t('appCard.openBuiltInUi')"
+        :aria-label="t('appCard.openBuiltInUi')"
+        @click.stop="goBuiltInUi"
+      >
+        {{ t('appCard.openBuiltInUi') }}
+      </button>
 
-      <div class="switch-item switch-item-autostart" @click.stop>
-        <span>{{ t('appCard.autostart') }}</span>
-        <SwitchToggle :model-value="Boolean(app.autostart)" :disabled="busy" @update:model-value="onAutostartChange" />
+      <div class="switch-row">
+        <div class="switch-item" @click.stop>
+          <span>{{ t('appCard.start') }}</span>
+          <SwitchToggle :model-value="Boolean(app.running)" :disabled="busy" @update:model-value="onRunningChange" />
+        </div>
+
+        <div class="switch-item switch-item-autostart" @click.stop>
+          <span>{{ t('appCard.autostart') }}</span>
+          <SwitchToggle :model-value="Boolean(app.autostart)" :disabled="busy" @update:model-value="onAutostartChange" />
+        </div>
       </div>
     </div>
   </article>

@@ -6,6 +6,10 @@ export async function fetchInstalledApps() {
   return data?.items || []
 }
 
+export function buildAppBuiltInUiEntryUrl(appId) {
+  return buildAuthUrl(`/api/apps/${encodeURIComponent(appId)}/ui/`)
+}
+
 export async function fetchActiveAppConfigs() {
   const data = await request('/api/apps/configs/active', { auth: true })
   return {
