@@ -19,13 +19,18 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 - `$HOME/aivudaOS_ws/config`
 - `$HOME/aivudaOS_ws/data`
 
+其中：
+
+- `os.yaml`：系统运行参数（例如 runtime 模式），不参与磁吸。
+- `sys.yaml`：公用业务参数（允许增删改），参与磁吸；默认包含 `role.id=1`。
+
 可通过环境变量覆盖：
 
 ```bash
 export AIVUDAOS_WS_ROOT=/your/custom/path
 ```
 
-首次启动会自动创建所需目录和默认配置文件（`os.yaml`、`users.yaml`、`magnets.yaml`）。
+首次启动会自动创建所需目录和默认配置文件（`os.yaml`、`sys.yaml`、`users.yaml`、`magnets.yaml`）。
 
 ## 快速启动
 
@@ -142,8 +147,10 @@ App 启动时会注入配置路径相关环境变量：
 - `GET  /aivuda_os/api/auth/me`
 
 ### 配置
-- `GET  /aivuda_os/api/config`
-- `PUT  /aivuda_os/api/config`
+- `GET  /aivuda_os/api/config`（`sys.yaml`）
+- `PUT  /aivuda_os/api/config`（`sys.yaml`）
+- `GET  /aivuda_os/api/config/os`（`os.yaml`）
+- `PUT  /aivuda_os/api/config/os`（`os.yaml`）
 
 ### 应用管理
 - `POST /aivuda_os/api/apps/repo/sync` — 从仓库同步应用目录

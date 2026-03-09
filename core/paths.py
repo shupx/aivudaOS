@@ -21,6 +21,7 @@ RUNTIME_ROOT = _runtime_root()
 # Config files (YAML)
 CONFIG_DIR = RUNTIME_ROOT / "config"
 OS_CONFIG_PATH = CONFIG_DIR / "os.yaml"
+SYS_CONFIG_PATH = CONFIG_DIR / "sys.yaml"
 USERS_CONFIG_PATH = CONFIG_DIR / "users.yaml"
 APP_CONFIG_DIR = CONFIG_DIR / "apps"
 MAGNET_CONFIG_PATH = CONFIG_DIR / "magnets.yaml"
@@ -42,14 +43,16 @@ APP_LOG_DIR = LOG_DIR / "apps"
 UI_DIST_DIR = PROJECT_ROOT / "ui" / "dist"
 
 DEFAULT_OS_CONFIG: dict[str, object] = {
-    "appstore_base_url": "https://39.102.60.150",
-    "failsafe_action": "rtl",
-    "max_altitude_m": 120,
-    "port": 8000,
-    "repo_url": "https://39.102.60.150/repo",
-    "return_home_altitude_m": 30,
     "runtime_process_manager": "auto",
     "runtime_systemd_scope": "user",
+}
+
+DEFAULT_SYS_CONFIG: dict[str, object] = {
+    "sys": {
+        "role": {
+            "id": 1,
+        }
+    }
 }
 
 DEFAULT_USERS_CONFIG: dict[str, object] = {
@@ -110,6 +113,21 @@ def _ensure_default_runtime_files() -> None:
     if not USERS_CONFIG_PATH.exists():
         USERS_CONFIG_PATH.write_text(
             yaml.dump(DEFAULT_USERS_CONFIG, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+    if not SYS_CONFIG_PATH.exists():
+        SYS_CONFIG_PATH.write_text(
+            yaml.dump(
+                {
+                    "_version": 1,
+                    "_updated_at": None,
+                    "_updated_by": "system",
+                    **DEFAULT_SYS_CONFIG,
+                },
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
             encoding="utf-8",
         )
 

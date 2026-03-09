@@ -4,12 +4,24 @@ import { request } from './api'
 export const DEFAULT_APPSTORE_BASE_URL = 'https://39.102.60.150'
 export const APPSTORE_BASE_URL_STORAGE_KEY = 'aivuda_ui_appstore_base_url'
 
-export async function fetchOsConfig() {
+export async function fetchSysConfig() {
   return request('/api/config', { auth: true })
 }
 
-export async function updateOsConfig(data, version) {
+export async function updateSysConfig(data, version) {
   return request('/api/config', {
+    method: 'PUT',
+    body: { data, version },
+    auth: true,
+  })
+}
+
+export async function fetchOsConfig() {
+  return request('/api/config/os', { auth: true })
+}
+
+export async function updateOsConfig(data, version) {
+  return request('/api/config/os', {
     method: 'PUT',
     body: { data, version },
     auth: true,

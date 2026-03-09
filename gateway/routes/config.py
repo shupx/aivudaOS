@@ -28,14 +28,14 @@ async def get_config(token: str) -> dict[str, Any]:
     _require_auth(token)
     config: ConfigService = get_config_service()
     magnet = get_magnet_service()
-    cfg = config.get_os_config()
+    cfg = config.get_sys_config()
     magnets = magnet.list_groups()
     return {
         "data": cfg.data,
         "version": cfg.version,
         "updated_at": cfg.updated_at,
         "updated_by": cfg.updated_by,
-        "readonly_paths": sorted(magnet.readonly_paths_for_os()),
+        "readonly_paths": sorted(magnet.readonly_paths_for_sys()),
         "magnets": magnets.get("items") or [],
         "magnet_conflicts": magnets.get("conflicts") or [],
         "magnet_version": magnets.get("version", 0),
@@ -48,11 +48,12 @@ async def put_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]
     config: ConfigService = get_config_service()
     magnet = get_magnet_service()
 
-    current = config.get_os_config()
-    blocked_paths = magnet.blocked_paths_for_os_update(
+    current = config.get_sys_config()
+    blocked_paths = magnet.blocked_paths_for_sys_update(
         before_data=current.data,
         after_data=payload.data,
     )
+
     if blocked_paths:
         raise HTTPException(
             status_code=400,
@@ -63,13 +64,41 @@ async def put_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]
         )
 
     try:
-        result = config.update_os_config(
+        result = config.update_sys_config(
             payload.data, payload.version, user.username
         )
     except ConfigVersionConflictError:
         raise HTTPException(status_code=409, detail="Config version conflict")
 
     magnet.recompute(updated_by=user.username)
+    return {"ok": True, "version": result.version}
+
+
+@router.get("/os")
+async def get_os_config(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    config: ConfigService = get_config_service()
+    cfg = config.get_os_config()
+    return {
+        "data": cfg.data,
+        "version": cfg.version,
+        "updated_at": cfg.updated_at,
+        "updated_by": cfg.updated_by,
+    }
+
+
+@router.put("/os")
+async def put_os_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]:
+    user = _require_auth(token)
+    config: ConfigService = get_config_service()
+
+    try:
+        result = config.update_os_config(
+            payload.data, payload.version, user.username
+        )
+    except ConfigVersionConflictError:
+        raise HTTPException(status_code=409, detail="Config version conflict")
+
     return {"ok": True, "version": result.version}
 
 

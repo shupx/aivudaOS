@@ -749,8 +749,8 @@ def _get_manifest_from_db(app_id: str, app_version: str) -> dict[str, Any]:
 
 def _get_constraints_for_app(app_id: str) -> list[dict[str, Any]]:
     config = get_config_service()
-    os_data = config.get_os_config().data
-    constraints = os_data.get("app_config_equal_constraints")
+    sys_data = config.get_sys_config().data
+    constraints = sys_data.get("app_config_equal_constraints")
     if not isinstance(constraints, list):
         return []
 

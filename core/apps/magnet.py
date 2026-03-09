@@ -54,7 +54,7 @@ class MagnetService:
                         readonly.add(path)
         return readonly
 
-    def readonly_paths_for_os(self) -> set[str]:
+    def readonly_paths_for_sys(self) -> set[str]:
         groups = self.list_groups().get("items") or []
         readonly: set[str] = set()
         for group in groups:
@@ -63,7 +63,7 @@ class MagnetService:
             for binding in group.get("bindings") or []:
                 if not isinstance(binding, dict):
                     continue
-                if binding.get("kind") == "os":
+                if binding.get("kind") == "sys":
                     path = str(binding.get("path") or "").strip()
                     if path:
                         readonly.add(path)
@@ -82,13 +82,13 @@ class MagnetService:
                 blocked.append(path)
         return blocked
 
-    def blocked_paths_for_os_update(
+    def blocked_paths_for_sys_update(
         self,
         before_data: dict[str, Any],
         after_data: dict[str, Any],
     ) -> list[str]:
         blocked: list[str] = []
-        for path in sorted(self.readonly_paths_for_os()):
+        for path in sorted(self.readonly_paths_for_sys()):
             if _nested_get(before_data, path) != _nested_get(after_data, path):
                 blocked.append(path)
         return blocked
@@ -211,7 +211,7 @@ class MagnetService:
             return previous_group.get("value")
 
         for item in entries:
-            if item.get("kind") == "os":
+            if item.get("kind") == "sys":
                 return item.get("value")
 
         return entries[0].get("value")
@@ -219,14 +219,19 @@ class MagnetService:
     def _collect_candidates(self) -> dict[str, list[dict[str, Any]]]:
         discovered: dict[str, list[dict[str, Any]]] = {}
 
-        os_cfg = self._config.get_os_config().data
-        for path in _flatten_leaf_paths(os_cfg):
+        sys_cfg = self._config.get_sys_config().data
+        sys_schema_map = _read_sys_schema_map(sys_cfg)
+        for path in _flatten_leaf_paths(sys_cfg):
+            value = _nested_get(sys_cfg, path)
+            schema = sys_schema_map.get(path)
+            inferred_type = _extract_schema_type(schema) or _infer_type_name(value)
             discovered.setdefault(path, []).append(
                 {
-                    "kind": "os",
+                    "kind": "sys",
                     "path": path,
-                    "value": _nested_get(os_cfg, path),
-                    "type_name": _infer_type_name(_nested_get(os_cfg, path)),
+                    "value": value,
+                    "schema": schema,
+                    "type_name": inferred_type,
                 }
             )
 
@@ -268,12 +273,12 @@ class MagnetService:
             if not target_path:
                 continue
 
-            if kind == "os":
-                cfg = self._config.get_os_config()
-                os_data = dict(cfg.data)
-                _nested_set(os_data, target_path, value)
-                self._config.update_os_config(
-                    os_data,
+            if kind == "sys":
+                cfg = self._config.get_sys_config()
+                sys_data = dict(cfg.data)
+                _nested_set(sys_data, target_path, value)
+                self._config.update_sys_config(
+                    sys_data,
                     expected_version=cfg.version,
                     username=updated_by,
                 )
@@ -514,8 +519,8 @@ def _infer_type_name(value: Any) -> str:
 def _binding_of(item: dict[str, Any]) -> dict[str, Any]:
     kind = str(item.get("kind") or "")
     path = str(item.get("path") or "")
-    if kind == "os":
-        return {"kind": "os", "path": path}
+    if kind == "sys":
+        return {"kind": "sys", "path": path}
     return {
         "kind": "app",
         "app_id": str(item.get("app_id") or ""),
@@ -527,3 +532,18 @@ def _binding_of(item: dict[str, Any]) -> dict[str, Any]:
 def _stable_group_id(path: str) -> str:
     safe = path.replace(".", "__")
     return f"magnet__{safe}"
+
+
+def _read_sys_schema_map(sys_cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = sys_cfg.get("_sys_schema")
+    if not isinstance(raw, dict):
+        return {}
+
+    output: dict[str, dict[str, Any]] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        if not isinstance(value, dict):
+            continue
+        output[key] = value
+    return output

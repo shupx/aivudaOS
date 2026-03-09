@@ -1,29 +1,25 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
+import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
+import OsConfigSection from '../components/app-config-center/OsConfigSection.vue'
+import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 
 const { t } = useI18n()
 
 const {
   loading,
-  saving,
   error,
   success,
   appOptions,
   selectedAppId,
   rows,
   systemRows,
+  osRows,
   magnets,
   magnetConflicts,
   magnetSaving,
-  hasChanges,
-  hasMagnetChanges,
-  showConfirmModal,
-  pendingChanges,
   loadAllConfigs,
-  openSaveConfirm,
-  closeSaveConfirm,
-  confirmSave,
   goBackApps,
   getCellValue,
   getCellError,
@@ -32,11 +28,35 @@ const {
   getRangeText,
   getDescriptionText,
   getRowThemeClass,
+  getSystemEnumValues,
+  getSystemInputType,
+  getSystemValuePlaceholder,
+  showSystemAddModal,
+  schemaTypeOptions,
+  showNewSystemTextInput,
+  newSystemValueInputType,
+  newSystemPath,
+  newSystemValue,
+  newSystemBooleanValue,
+  newSystemSchemaType,
+  newSystemSchemaEnum,
+  newSystemSchemaMin,
+  newSystemSchemaMax,
+  newSystemSchemaMinLength,
+  newSystemSchemaMaxLength,
+  newSystemSchemaPattern,
+  newSystemSchemaItemType,
   getMagnetValue,
   getMagnetDisplayValue,
   onBooleanChange,
   onEnumChange,
+  onSystemEnumChange,
   onTextChange,
+  openSystemAddModal,
+  closeSystemAddModal,
+  addSystemParam,
+  removeSystemParam,
+  onSystemSchemaChange,
   onMagnetBooleanChange,
   onMagnetTextChange,
   saveMagnetChanges,
@@ -52,9 +72,6 @@ const {
         <button class="btn" @click="goBackApps">{{ t('appConfigCenter.backToApps') }}</button>
         <button class="btn btn-stable-refresh" :disabled="loading" @click="loadAllConfigs">
           {{ loading ? t('common.loadingShort') : t('common.refresh') }}
-        </button>
-        <button class="btn primary" :disabled="saving || loading || !hasChanges" @click="openSaveConfirm">
-          {{ saving ? t('common.processing') : t('appConfigCenter.saveAll') }}
         </button>
       </div>
     </header>
@@ -77,61 +94,25 @@ const {
       </div>
     </article>
 
-    <article class="actions-panel">
-      <header class="log-header">
-        <h3>{{ t('appConfigCenter.magnetTitle') }}</h3>
-      </header>
-
-      <div v-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
-      <div v-else class="table-wrap">
-        <table class="config-table compact">
-          <thead>
-            <tr>
-              <th>{{ t('appConfigCenter.colPath') }}</th>
-              <th>{{ t('appConfigCenter.colCurrent') }}</th>
-              <th>{{ t('appConfigCenter.colType') }}</th>
-              <th>{{ t('appConfigCenter.magnetBindings') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="group in magnets" :key="group.group_id">
-              <td class="mono-cell">{{ group.path }}</td>
-              <td>
-                <label v-if="group.value_type === 'boolean'" class="check-item">
-                  <input
-                    :checked="Boolean(getMagnetValue(group))"
-                    type="checkbox"
-                    @change="onMagnetBooleanChange(group, $event?.target?.checked)"
-                  >
-                  {{ Boolean(getMagnetValue(group)) ? 'true' : 'false' }}
-                </label>
-                <input
-                  v-else
-                  class="input"
-                  :value="getMagnetDisplayValue(group)"
-                  @change="onMagnetTextChange(group, $event?.target?.value || '')"
-                >
-              </td>
-              <td>{{ group.value_type || '-' }}</td>
-              <td class="mono-cell">{{ valueToInlineText(group.bindings || []) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="panel-actions wrap" style="margin-top: 10px;">
-        <button class="btn primary" :disabled="magnetSaving || !hasMagnetChanges" @click="saveMagnetChanges">
-          {{ magnetSaving ? t('common.processing') : t('appConfigCenter.magnetSave') }}
-        </button>
-      </div>
-
-      <p v-if="magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
-    </article>
+    <MagnetConfigSection
+      :magnets="magnets"
+      :magnet-conflicts="magnetConflicts"
+      :get-magnet-value="getMagnetValue"
+      :get-magnet-display-value="getMagnetDisplayValue"
+      :on-magnet-boolean-change="onMagnetBooleanChange"
+      :on-magnet-text-change="onMagnetTextChange"
+      :save-magnet-changes="saveMagnetChanges"
+      :value-to-inline-text="valueToInlineText"
+    />
 
     <article class="actions-panel">
       <header class="log-header">
         <h3>{{ t('appConfigCenter.systemTitle') }}</h3>
       </header>
+
+      <div class="panel-actions wrap" style="margin-bottom: 10px;">
+        <button class="btn" @click="openSystemAddModal">{{ t('appConfigCenter.systemAdd') }}</button>
+      </div>
 
       <div v-if="!systemRows.length" class="empty-box">{{ t('appConfigCenter.systemEmpty') }}</div>
       <div v-else class="table-wrap">
@@ -140,11 +121,13 @@ const {
             <tr>
               <th>{{ t('appConfigCenter.colPath') }}</th>
               <th>{{ t('appConfigCenter.colCurrent') }}</th>
+              <th>{{ t('appConfigCenter.colSchema') }}</th>
               <th>{{ t('appConfigCenter.colType') }}</th>
+              <th>{{ t('appConfigCenter.colAction') }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in systemRows" :key="`os:${row.path}`">
+            <tr v-for="row in systemRows" :key="`sys:${row.path}`">
               <td class="mono-cell">{{ row.path }}</td>
               <td>
                 <div class="config-edit-cell">
@@ -157,10 +140,23 @@ const {
                     >
                     {{ Boolean(getCellValue(row)) ? 'true' : 'false' }}
                   </label>
+                  <select
+                    v-else-if="getSystemEnumValues(row).length"
+                    class="select-input"
+                    :disabled="row.readonly"
+                    :value="getSystemEnumValues(row).findIndex((item) => JSON.stringify(item) === JSON.stringify(getCellValue(row)))"
+                    @change="onSystemEnumChange(row, $event?.target?.value)"
+                  >
+                    <option v-for="(item, idx) in getSystemEnumValues(row)" :key="`sys-enum-${row.path}-${idx}`" :value="idx">
+                      {{ valueToInlineText(item) }}
+                    </option>
+                  </select>
                   <input
                     v-else
                     class="input"
+                    :type="getSystemInputType(row)"
                     :disabled="row.readonly"
+                    :placeholder="getSystemValuePlaceholder(row)"
                     :value="displayValue(row)"
                     @change="onTextChange(row, $event?.target?.value || '')"
                   >
@@ -169,129 +165,235 @@ const {
                   <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
                 </div>
               </td>
-              <td>{{ row.type || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </article>
-
-    <article class="actions-panel">
-      <header class="log-header">
-        <h3>{{ t('appConfigCenter.tableTitle') }}</h3>
-      </header>
-
-      <div v-if="!rows.length" class="empty-box">{{ t('appConfigCenter.empty') }}</div>
-
-      <div v-else class="table-wrap">
-        <table class="config-table">
-          <thead>
-            <tr>
-              <th>{{ t('appConfigCenter.colPath') }}</th>
-              <th>{{ t('appConfigCenter.colCurrent') }}</th>
-              <th>{{ t('appConfigCenter.colDefault') }}</th>
-              <th>{{ t('appConfigCenter.colType') }}</th>
-              <th>{{ t('appConfigCenter.colRange') }}</th>
-              <th>{{ t('appConfigCenter.colDesc') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="(row, index) in rows" :key="`${row.appId}:${row.path}`">
-              <tr
-                v-if="index === 0 || rows[index - 1]?.appId !== row.appId"
-                class="config-app-title-row"
-                :class="getRowThemeClass(row.appId)"
-              >
-                <td colspan="6">
-                  {{ row.appName }} ({{ row.appId }} @ {{ row.appVersion || '-' }})
-                </td>
-              </tr>
-
-              <tr :class="getRowThemeClass(row.appId)">
-                <td class="mono-cell">{{ row.path }}</td>
               <td>
                 <div class="config-edit-cell">
-                  <label v-if="row.type === 'boolean'" class="check-item">
-                    <input
-                      :checked="Boolean(getCellValue(row))"
-                      :disabled="row.readonly"
-                      type="checkbox"
-                      @change="onBooleanChange(row, $event?.target?.checked)"
-                    >
-                    {{ Boolean(getCellValue(row)) ? 'true' : 'false' }}
-                  </label>
-
                   <select
-                    v-else-if="Array.isArray(row.enumValues) && row.enumValues.length"
                     class="select-input"
                     :disabled="row.readonly"
-                    :value="row.enumValues.findIndex((item) => JSON.stringify(item) === JSON.stringify(getCellValue(row)))"
-                    @change="onEnumChange(row, $event?.target?.value)"
+                    :value="row.schemaObj?.type || ''"
+                    @change="onSystemSchemaChange(row, 'type', $event?.target?.value || '')"
                   >
-                    <option v-for="(item, idx) in row.enumValues" :key="idx" :value="idx">
-                      {{ valueToInlineText(item) }}
+                    <option value="">{{ t('appConfigCenter.schemaTypeNone') }}</option>
+                    <option v-for="item in schemaTypeOptions" :key="`row-type:${item}`" :value="item">
+                      {{ item }}
                     </option>
                   </select>
 
                   <input
-                    v-else
                     class="input"
                     :disabled="row.readonly"
-                    :value="displayValue(row)"
-                    @change="onTextChange(row, $event?.target?.value || '')"
+                    :value="Array.isArray(row.schemaObj?.enum) ? row.schemaObj.enum.map((item) => valueToInlineText(item)).join(', ') : ''"
+                    :placeholder="t('appConfigCenter.schemaEnumPlaceholder')"
+                    @change="onSystemSchemaChange(row, 'enumText', $event?.target?.value || '')"
                   >
 
-                  <p v-if="row.readonly" class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
-                  <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
+                  <template v-if="row.schemaObj?.type === 'integer' || row.schemaObj?.type === 'number'">
+                    <input
+                      class="input"
+                      :disabled="row.readonly"
+                      :value="row.schemaObj?.minimum ?? ''"
+                      :placeholder="t('appConfigCenter.schemaMinPlaceholder')"
+                      @change="onSystemSchemaChange(row, 'minimum', $event?.target?.value || '')"
+                    >
+                    <input
+                      class="input"
+                      :disabled="row.readonly"
+                      :value="row.schemaObj?.maximum ?? ''"
+                      :placeholder="t('appConfigCenter.schemaMaxPlaceholder')"
+                      @change="onSystemSchemaChange(row, 'maximum', $event?.target?.value || '')"
+                    >
+                  </template>
+
+                  <template v-if="row.schemaObj?.type === 'string'">
+                    <input
+                      class="input"
+                      :disabled="row.readonly"
+                      :value="row.schemaObj?.minLength ?? ''"
+                      :placeholder="t('appConfigCenter.schemaMinLengthPlaceholder')"
+                      @change="onSystemSchemaChange(row, 'minLength', $event?.target?.value || '')"
+                    >
+                    <input
+                      class="input"
+                      :disabled="row.readonly"
+                      :value="row.schemaObj?.maxLength ?? ''"
+                      :placeholder="t('appConfigCenter.schemaMaxLengthPlaceholder')"
+                      @change="onSystemSchemaChange(row, 'maxLength', $event?.target?.value || '')"
+                    >
+                    <input
+                      class="input"
+                      :disabled="row.readonly"
+                      :value="row.schemaObj?.pattern || ''"
+                      :placeholder="t('appConfigCenter.schemaPatternPlaceholder')"
+                      @change="onSystemSchemaChange(row, 'pattern', $event?.target?.value || '')"
+                    >
+                  </template>
+
+                  <template v-if="row.schemaObj?.type === 'array'">
+                    <select
+                      class="select-input"
+                      :disabled="row.readonly"
+                      :value="row.schemaObj?.items?.type || ''"
+                      @change="onSystemSchemaChange(row, 'itemType', $event?.target?.value || '')"
+                    >
+                      <option value="">{{ t('appConfigCenter.schemaItemTypeNone') }}</option>
+                      <option v-for="item in schemaTypeOptions" :key="`row-item:${item}`" :value="item">
+                        {{ item }}
+                      </option>
+                    </select>
+                  </template>
                 </div>
               </td>
-              <td class="mono-cell">{{ getDefaultText(row) }}</td>
               <td>{{ row.type || '-' }}</td>
-              <td>{{ getRangeText(row) }}</td>
-              <td>{{ getDescriptionText(row) }}</td>
-              </tr>
-            </template>
+              <td>
+                <button class="btn" :disabled="row.readonly" @click="removeSystemParam(row)">
+                  {{ t('appConfigCenter.systemDelete') }}
+                </button>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
     </article>
 
-    <div v-if="showConfirmModal" class="modal-overlay" @click.self="saving ? null : closeSaveConfirm()">
-      <section class="modal-card modal-wide">
+    <div v-if="showSystemAddModal" class="modal-overlay" @click.self="closeSystemAddModal">
+      <section class="modal-card">
         <header class="modal-header">
-          <h3>{{ t('appConfigCenter.confirmTitle') }}</h3>
+          <h3>{{ t('appConfigCenter.systemAdd') }}</h3>
         </header>
 
-        <p class="muted">{{ t('appConfigCenter.confirmHint') }}</p>
+        <div class="field">
+          <label>{{ t('appConfigCenter.colPath') }}</label>
+          <input
+            v-model="newSystemPath"
+            class="input"
+            :placeholder="t('appConfigCenter.systemPathPlaceholder')"
+          >
+        </div>
 
-        <div class="table-wrap">
-          <table class="config-table compact">
-            <thead>
-              <tr>
-                <th>{{ t('appConfigCenter.colApp') }}</th>
-                <th>{{ t('appConfigCenter.colPath') }}</th>
-                <th>{{ t('appConfigCenter.colBefore') }}</th>
-                <th>{{ t('appConfigCenter.colAfter') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in pendingChanges" :key="`${item.appId}:${item.path}`">
-                <td>{{ item.appName }} ({{ item.appId }})</td>
-                <td class="mono-cell">{{ item.path }}</td>
-                <td class="mono-cell">{{ valueToInlineText(item.before) }}</td>
-                <td class="mono-cell">{{ valueToInlineText(item.after) }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="field">
+          <label>{{ t('appConfigCenter.colCurrent') }}</label>
+          <label v-if="newSystemSchemaType === 'boolean'" class="check-item">
+            <input
+              v-model="newSystemBooleanValue"
+              type="checkbox"
+            >
+            {{ newSystemBooleanValue ? 'true' : 'false' }}
+          </label>
+          <input
+            v-if="showNewSystemTextInput"
+            v-model="newSystemValue"
+            class="input"
+            :type="newSystemValueInputType"
+            :placeholder="newSystemSchemaType === 'object' || newSystemSchemaType === 'array' ? t('appConfigCenter.systemValueJsonPlaceholder') : t('appConfigCenter.systemValuePlaceholder')"
+          >
+        </div>
+
+        <div class="field">
+          <label>{{ t('appConfigCenter.colSchema') }}</label>
+          <select v-model="newSystemSchemaType" class="select-input">
+            <option value="">{{ t('appConfigCenter.schemaTypeNone') }}</option>
+            <option v-for="item in schemaTypeOptions" :key="`add-type:${item}`" :value="item">
+              {{ item }}
+            </option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>{{ t('appConfigCenter.schemaEnumLabel') }}</label>
+          <input
+            v-model="newSystemSchemaEnum"
+            class="input"
+            :placeholder="t('appConfigCenter.schemaEnumPlaceholder')"
+          >
+        </div>
+
+        <template v-if="newSystemSchemaType === 'integer' || newSystemSchemaType === 'number'">
+          <div class="field">
+            <label>{{ t('appConfigCenter.schemaMinLabel') }}</label>
+            <input
+              v-model="newSystemSchemaMin"
+              class="input"
+              :placeholder="t('appConfigCenter.schemaMinPlaceholder')"
+            >
+          </div>
+          <div class="field">
+            <label>{{ t('appConfigCenter.schemaMaxLabel') }}</label>
+            <input
+              v-model="newSystemSchemaMax"
+              class="input"
+              :placeholder="t('appConfigCenter.schemaMaxPlaceholder')"
+            >
+          </div>
+        </template>
+
+        <template v-if="newSystemSchemaType === 'string'">
+          <div class="field">
+            <label>{{ t('appConfigCenter.schemaMinLengthLabel') }}</label>
+            <input
+              v-model="newSystemSchemaMinLength"
+              class="input"
+              :placeholder="t('appConfigCenter.schemaMinLengthPlaceholder')"
+            >
+          </div>
+          <div class="field">
+            <label>{{ t('appConfigCenter.schemaMaxLengthLabel') }}</label>
+            <input
+              v-model="newSystemSchemaMaxLength"
+              class="input"
+              :placeholder="t('appConfigCenter.schemaMaxLengthPlaceholder')"
+            >
+          </div>
+          <div class="field">
+            <label>{{ t('appConfigCenter.schemaPatternLabel') }}</label>
+            <input
+              v-model="newSystemSchemaPattern"
+              class="input"
+              :placeholder="t('appConfigCenter.schemaPatternPlaceholder')"
+            >
+          </div>
+        </template>
+
+        <div v-if="newSystemSchemaType === 'array'" class="field">
+          <label>{{ t('appConfigCenter.schemaItemTypeLabel') }}</label>
+          <select v-model="newSystemSchemaItemType" class="select-input">
+            <option value="">{{ t('appConfigCenter.schemaItemTypeNone') }}</option>
+            <option v-for="item in schemaTypeOptions" :key="`add-item:${item}`" :value="item">
+              {{ item }}
+            </option>
+          </select>
         </div>
 
         <footer class="panel-actions">
-          <button class="btn" :disabled="saving" @click="closeSaveConfirm">{{ t('common.cancel') }}</button>
-          <button class="btn primary" :disabled="saving" @click="confirmSave">
-            {{ saving ? t('common.processing') : t('appConfigCenter.confirmSave') }}
-          </button>
+          <button class="btn" @click="closeSystemAddModal">{{ t('common.cancel') }}</button>
+          <button class="btn primary" @click="addSystemParam">{{ t('appConfigCenter.systemAdd') }}</button>
         </footer>
       </section>
     </div>
+
+    <OsConfigSection
+      :os-rows="osRows"
+      :get-cell-value="getCellValue"
+      :get-cell-error="getCellError"
+      :display-value="displayValue"
+      :on-enum-change="onEnumChange"
+      :on-text-change="onTextChange"
+      :value-to-inline-text="valueToInlineText"
+    />
+
+    <AppParamsSection
+      :rows="rows"
+      :get-cell-value="getCellValue"
+      :get-cell-error="getCellError"
+      :display-value="displayValue"
+      :get-default-text="getDefaultText"
+      :get-range-text="getRangeText"
+      :get-description-text="getDescriptionText"
+      :get-row-theme-class="getRowThemeClass"
+      :on-boolean-change="onBooleanChange"
+      :on-enum-change="onEnumChange"
+      :on-text-change="onTextChange"
+      :value-to-inline-text="valueToInlineText"
+    />
+
   </section>
 </template>

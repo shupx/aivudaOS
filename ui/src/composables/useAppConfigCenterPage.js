@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { fetchActiveAppConfigs, updateAppConfig, updateMagnetGroup } from '../services/core/apps'
-import { fetchOsConfig, updateOsConfig } from '../services/core/config'
+import { fetchOsConfig, fetchSysConfig, updateOsConfig, updateSysConfig } from '../services/core/config'
 
 export function useAppConfigCenterPage() {
   const { t } = useI18n()
@@ -28,18 +28,55 @@ export function useAppConfigCenterPage() {
   const magnetVersion = ref(0)
   const magnetConflicts = ref([])
   const magnetSaving = ref(false)
+  const sysDraftData = ref({})
+  const sysOriginalData = ref({})
+  const sysVersion = ref(0)
+  const sysReadonlyPaths = ref([])
   const osDraftData = ref({})
   const osOriginalData = ref({})
   const osVersion = ref(0)
-  const osReadonlyPaths = ref([])
+  const showSystemAddModal = ref(false)
+  const newSystemPath = ref('')
+  const newSystemValue = ref('')
+  const newSystemBooleanValue = ref(false)
+  const newSystemSchemaType = ref('')
+  const newSystemSchemaEnum = ref('')
+  const newSystemSchemaMin = ref('')
+  const newSystemSchemaMax = ref('')
+  const newSystemSchemaMinLength = ref('')
+  const newSystemSchemaMaxLength = ref('')
+  const newSystemSchemaPattern = ref('')
+  const newSystemSchemaItemType = ref('')
+  const schemaTypeOptions = ['string', 'integer', 'number', 'boolean', 'object', 'array']
+  const showNewSystemTextInput = computed(() => newSystemSchemaType.value !== 'boolean')
+  const newSystemValueInputType = computed(() => {
+    if (newSystemSchemaType.value === 'integer' || newSystemSchemaType.value === 'number') {
+      return 'number'
+    }
+    return 'text'
+  })
 
   const systemRows = computed(() => {
-    return flattenDataLeaves(osDraftData.value || {}, new Set(osReadonlyPaths.value || [])).map((item) => ({
+    const schemaMap = getSysSchemaMap(sysDraftData.value || {})
+    return flattenDataLeaves(sysDraftData.value || {}, new Set(sysReadonlyPaths.value || [])).map((item) => ({
       ...item,
       appId: '__system__',
       appName: t('appConfigCenter.systemTitle'),
       appVersion: '-',
+      scope: 'sys',
+      schemaObj: isRecord(schemaMap[item.path]) ? deepClone(schemaMap[item.path]) : null,
+      type: schemaTypeFromSchema(schemaMap[item.path]) || item.type,
+    }))
+  })
+
+  const osRows = computed(() => {
+    return flattenDataLeaves(osDraftData.value || {}, new Set()).map((item) => ({
+      ...item,
+      appId: '__os__',
+      appName: t('appConfigCenter.osTitle'),
+      appVersion: '-',
       scope: 'os',
+      enumValues: osParamOptions(item.path),
     }))
   })
 
@@ -105,7 +142,7 @@ export function useAppConfigCenterPage() {
     success.value = ''
 
     try {
-      const [data, osData] = await Promise.all([fetchActiveAppConfigs(), fetchOsConfig()])
+      const [data, sysData, osData] = await Promise.all([fetchActiveAppConfigs(), fetchSysConfig(), fetchOsConfig()])
       const items = Array.isArray(data?.items) ? data.items : []
       appItems.value = items
 
@@ -151,10 +188,14 @@ export function useAppConfigCenterPage() {
       magnetVersion.value = Number(data?.magnetVersion || 0)
       magnetConflicts.value = Array.isArray(data?.magnetConflicts) ? data.magnetConflicts : []
 
+      sysDraftData.value = deepClone(sysData?.data || {})
+      sysOriginalData.value = deepClone(sysData?.data || {})
+      sysVersion.value = Number(sysData?.version || 0)
+      sysReadonlyPaths.value = Array.isArray(sysData?.readonly_paths) ? sysData.readonly_paths : []
+
       osDraftData.value = deepClone(osData?.data || {})
       osOriginalData.value = deepClone(osData?.data || {})
       osVersion.value = Number(osData?.version || 0)
-      osReadonlyPaths.value = Array.isArray(osData?.readonly_paths) ? osData.readonly_paths : []
 
       const queryAppId = String(route.query.app_id || '')
       if (queryAppId && nextDraft[queryAppId]) {
@@ -173,7 +214,36 @@ export function useAppConfigCenterPage() {
     }
   }
 
+  function applyMagnetSnapshot(snapshot) {
+    const nextMagnets = Array.isArray(snapshot?.magnets) ? snapshot.magnets : []
+    const nextMagnetOriginal = {}
+    const nextMagnetDraft = {}
+    for (const item of nextMagnets) {
+      const groupId = String(item?.group_id || '')
+      if (!groupId) continue
+      nextMagnetOriginal[groupId] = deepClone(item?.value)
+      nextMagnetDraft[groupId] = deepClone(item?.value)
+    }
+    magnets.value = nextMagnets
+    magnetOriginalById.value = nextMagnetOriginal
+    magnetDraftById.value = nextMagnetDraft
+    magnetVersion.value = Number(snapshot?.magnet_version || snapshot?.magnetVersion || 0)
+    magnetConflicts.value = Array.isArray(snapshot?.magnet_conflicts)
+      ? snapshot.magnet_conflicts
+      : (Array.isArray(snapshot?.magnetConflicts) ? snapshot.magnetConflicts : [])
+    sysReadonlyPaths.value = Array.isArray(snapshot?.readonly_paths) ? snapshot.readonly_paths : []
+  }
+
+  async function refreshMagnetsAfterSysChange() {
+    const latest = await fetchSysConfig()
+    applyMagnetSnapshot(latest || {})
+    return latest
+  }
+
   function getCellValue(row) {
+    if (row?.scope === 'sys') {
+      return nestedGet(sysDraftData.value || {}, row.path)
+    }
     if (row?.scope === 'os') {
       return nestedGet(osDraftData.value || {}, row.path)
     }
@@ -202,22 +272,31 @@ export function useAppConfigCenterPage() {
     return valueToInlineText(getCellValue(row))
   }
 
-  function onBooleanChange(row, checked) {
-    applyValue(row, Boolean(checked))
+  async function onBooleanChange(row, checked) {
+    await applyValue(row, Boolean(checked))
   }
 
-  function onEnumChange(row, indexText) {
+  async function onEnumChange(row, indexText) {
     const index = Number(indexText)
     if (!Number.isInteger(index) || !Array.isArray(row.enumValues) || index < 0 || index >= row.enumValues.length) {
       return
     }
-    applyValue(row, deepClone(row.enumValues[index]))
+    await applyValue(row, deepClone(row.enumValues[index]))
   }
 
-  function onTextChange(row, rawText) {
+  async function onSystemEnumChange(row, indexText) {
+    const enumValues = getSystemEnumValues(row)
+    const index = Number(indexText)
+    if (!Number.isInteger(index) || index < 0 || index >= enumValues.length) {
+      return
+    }
+    await applyValue(row, deepClone(enumValues[index]))
+  }
+
+  async function onTextChange(row, rawText) {
     try {
       const next = parseValueByType(rawText, row.type)
-      applyValue(row, next)
+      await applyValue(row, next)
     } catch (err) {
       cellErrors.value = {
         ...cellErrors.value,
@@ -226,16 +305,17 @@ export function useAppConfigCenterPage() {
     }
   }
 
-  function applyValue(row, nextValue) {
+  async function applyValue(row, nextValue) {
     if (row.readonly) {
       error.value = t('appConfigCenter.readonlyInMagnetZone')
       return
     }
 
-    if (row?.scope === 'os') {
-      const osData = deepClone(osDraftData.value || {})
-      nestedSet(osData, row.path, nextValue)
-      osDraftData.value = osData
+    if (row?.scope === 'sys') {
+      const beforeData = deepClone(sysDraftData.value || {})
+      const nextData = deepClone(sysDraftData.value || {})
+      nestedSet(nextData, row.path, nextValue)
+      sysDraftData.value = nextData
 
       const key = cellErrorKey(row)
       if (cellErrors.value[key]) {
@@ -246,9 +326,49 @@ export function useAppConfigCenterPage() {
 
       error.value = ''
       success.value = ''
+
+      try {
+        const resp = await updateSysConfig(deepClone(nextData), Number(sysVersion.value || 0))
+        sysVersion.value = Number(resp?.version || sysVersion.value || 0)
+        sysOriginalData.value = deepClone(nextData)
+        await refreshMagnetsAfterSysChange()
+        success.value = t('appConfigCenter.autoSyncSuccess')
+      } catch (err) {
+        sysDraftData.value = beforeData
+        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      }
       return
     }
 
+    if (row?.scope === 'os') {
+      const beforeData = deepClone(osDraftData.value || {})
+      const nextData = deepClone(osDraftData.value || {})
+      nestedSet(nextData, row.path, nextValue)
+      osDraftData.value = nextData
+
+      const key = cellErrorKey(row)
+      if (cellErrors.value[key]) {
+        const nextErrors = { ...cellErrors.value }
+        delete nextErrors[key]
+        cellErrors.value = nextErrors
+      }
+
+      error.value = ''
+      success.value = ''
+
+      try {
+        const resp = await updateOsConfig(deepClone(nextData), Number(osVersion.value || 0))
+        osVersion.value = Number(resp?.version || osVersion.value || 0)
+        osOriginalData.value = deepClone(nextData)
+        success.value = t('appConfigCenter.autoSyncSuccess')
+      } catch (err) {
+        osDraftData.value = beforeData
+        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      }
+      return
+    }
+
+    const beforeAppData = deepClone(draftByApp.value[row.appId] || {})
     const appData = deepClone(draftByApp.value[row.appId] || {})
     nestedSet(appData, row.path, nextValue)
     draftByApp.value = {
@@ -265,6 +385,29 @@ export function useAppConfigCenterPage() {
 
     error.value = ''
     success.value = ''
+
+    try {
+      const resp = await updateAppConfig(row.appId, {
+        version: Number(revisionByApp.value[row.appId] || 0),
+        app_version: appVersionByApp.value[row.appId] || '',
+        data: deepClone(appData),
+      })
+      revisionByApp.value = {
+        ...revisionByApp.value,
+        [row.appId]: Number(resp?.version || revisionByApp.value[row.appId] || 0),
+      }
+      originalByApp.value = {
+        ...originalByApp.value,
+        [row.appId]: deepClone(appData),
+      }
+      success.value = t('appConfigCenter.autoSyncSuccess')
+    } catch (err) {
+      draftByApp.value = {
+        ...draftByApp.value,
+        [row.appId]: beforeAppData,
+      }
+      error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+    }
   }
 
   function openSaveConfirm() {
@@ -333,10 +476,10 @@ export function useAppConfigCenterPage() {
       }
     }
 
-    const hasOsChange = changes.some((item) => item.scope === 'os')
+    const hasOsChange = changes.some((item) => item.scope === 'sys')
     if (hasOsChange) {
       try {
-        const resp = await updateOsConfig(deepClone(osDraftData.value || {}), Number(osVersion.value || 0))
+        const resp = await updateSysConfig(deepClone(osDraftData.value || {}), Number(osVersion.value || 0))
         osVersion.value = Number(resp?.version || osVersion.value || 0)
         osOriginalData.value = deepClone(osDraftData.value || {})
       } catch (err) {
@@ -392,43 +535,33 @@ export function useAppConfigCenterPage() {
     success.value = ''
   }
 
-  async function saveMagnetChanges() {
-    if (magnetSaving.value) return
-
-    const changedGroups = magnets.value.filter((group) => {
-      const groupId = String(group?.group_id || '')
-      if (!groupId) return false
-      return !isValueEqual(magnetOriginalById.value[groupId], magnetDraftById.value[groupId])
-    })
-
-    if (!changedGroups.length) {
-      error.value = t('appConfigCenter.noChanges')
-      return
-    }
-
+  async function saveMagnetChanges(group) {
+    const groupId = String(group?.group_id || '')
+    if (!groupId) return
     magnetSaving.value = true
     error.value = ''
     success.value = ''
 
-    let currentVersion = Number(magnetVersion.value || 0)
-    for (const group of changedGroups) {
-      const groupId = String(group?.group_id || '')
-      try {
-        const resp = await updateMagnetGroup(groupId, {
-          version: currentVersion,
-          value: deepClone(magnetDraftById.value[groupId]),
-        })
-        currentVersion = Number(resp?.version || currentVersion)
-      } catch (err) {
-        magnetSaving.value = false
-        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
-        return
+    try {
+      const resp = await updateMagnetGroup(groupId, {
+        version: Number(magnetVersion.value || 0),
+        value: deepClone(magnetDraftById.value[groupId]),
+      })
+      magnetVersion.value = Number(resp?.version || magnetVersion.value || 0)
+      magnetOriginalById.value = {
+        ...magnetOriginalById.value,
+        [groupId]: deepClone(magnetDraftById.value[groupId]),
       }
+      success.value = t('appConfigCenter.autoSyncSuccess')
+    } catch (err) {
+      magnetDraftById.value = {
+        ...magnetDraftById.value,
+        [groupId]: deepClone(magnetOriginalById.value[groupId]),
+      }
+      error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+    } finally {
+      magnetSaving.value = false
     }
-
-    magnetSaving.value = false
-    await loadAllConfigs()
-    success.value = t('appConfigCenter.magnetSaveSuccess')
   }
 
   function collectChanges() {
@@ -452,16 +585,38 @@ export function useAppConfigCenterPage() {
     }
 
     for (const row of systemRows.value) {
-      const before = nestedGet(osOriginalData.value || {}, row.path)
-      const after = nestedGet(osDraftData.value || {}, row.path)
+      const before = nestedGet(sysOriginalData.value || {}, row.path)
+      const after = nestedGet(sysDraftData.value || {}, row.path)
       if (isValueEqual(before, after)) {
         continue
       }
       output.push({
-        scope: 'os',
+        scope: 'sys',
         appId: row.appId,
         appName: row.appName,
         path: row.path,
+        before,
+        after,
+      })
+    }
+
+    const oldSysPaths = flattenLeafPaths(sysOriginalData.value || {})
+    const newSysPaths = flattenLeafPaths(sysDraftData.value || {})
+    const mergedPathSet = new Set([...oldSysPaths, ...newSysPaths])
+    for (const path of mergedPathSet) {
+      const before = nestedGet(osOriginalData.value || {}, path)
+      const after = nestedGet(osDraftData.value || {}, path)
+      if (isValueEqual(before, after)) {
+        continue
+      }
+      if (output.some((item) => item.scope === 'sys' && item.path === path)) {
+        continue
+      }
+      output.push({
+        scope: 'sys',
+        appId: '__system__',
+        appName: t('appConfigCenter.systemTitle'),
+        path,
         before,
         after,
       })
@@ -474,8 +629,213 @@ export function useAppConfigCenterPage() {
     router.push('/dashboard/apps')
   }
 
+  function openSystemAddModal() {
+    newSystemPath.value = ''
+    newSystemValue.value = ''
+    newSystemBooleanValue.value = false
+    newSystemSchemaType.value = ''
+    newSystemSchemaEnum.value = ''
+    newSystemSchemaMin.value = ''
+    newSystemSchemaMax.value = ''
+    newSystemSchemaMinLength.value = ''
+    newSystemSchemaMaxLength.value = ''
+    newSystemSchemaPattern.value = ''
+    newSystemSchemaItemType.value = ''
+    showSystemAddModal.value = true
+    error.value = ''
+    success.value = ''
+  }
+
+  function closeSystemAddModal() {
+    showSystemAddModal.value = false
+  }
+
+  function addSystemParam() {
+    const path = String(newSystemPath.value || '').trim()
+    if (!path) {
+      error.value = t('appConfigCenter.systemPathRequired')
+      return
+    }
+    if (path.startsWith('_')) {
+      error.value = t('appConfigCenter.systemPathInvalid')
+      return
+    }
+
+    const schemaValue = buildSchemaFromFields({
+      type: newSystemSchemaType.value,
+      enumText: newSystemSchemaEnum.value,
+      minimum: newSystemSchemaMin.value,
+      maximum: newSystemSchemaMax.value,
+      minLength: newSystemSchemaMinLength.value,
+      maxLength: newSystemSchemaMaxLength.value,
+      pattern: newSystemSchemaPattern.value,
+      itemType: newSystemSchemaItemType.value,
+    })
+
+    if (schemaValue?.__error) {
+      error.value = schemaFormErrorMessage(schemaValue.__error, t)
+      return
+    }
+
+    let value = null
+    const raw = String(newSystemValue.value || '').trim()
+    if (!raw) {
+      error.value = t('appConfigCenter.systemValueRequired')
+      return
+    }
+    try {
+      if (isRecord(schemaValue) && schemaValue.type === 'boolean') {
+        value = Boolean(newSystemBooleanValue.value)
+      } else if (isRecord(schemaValue) && typeof schemaValue.type === 'string' && schemaValue.type) {
+        value = parseValueByType(raw, schemaValue.type)
+      } else {
+        value = JSON.parse(raw)
+      }
+    } catch {
+      error.value = t('appConfigCenter.invalidValue')
+      return
+    }
+
+    const beforeData = deepClone(sysDraftData.value || {})
+    const next = deepClone(sysDraftData.value || {})
+    nestedSet(next, path, value)
+    const schemaMap = getSysSchemaMap(next)
+    if (schemaValue) {
+      schemaMap[path] = schemaValue
+    }
+    setSysSchemaMap(next, schemaMap)
+    sysDraftData.value = next
+    showSystemAddModal.value = false
+    error.value = ''
+    success.value = ''
+
+    updateSysConfig(deepClone(next), Number(sysVersion.value || 0))
+      .then(async (resp) => {
+        sysVersion.value = Number(resp?.version || sysVersion.value || 0)
+        sysOriginalData.value = deepClone(next)
+        await refreshMagnetsAfterSysChange()
+        success.value = t('appConfigCenter.autoSyncSuccess')
+      })
+      .catch((err) => {
+        sysDraftData.value = beforeData
+        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      })
+  }
+
+  function removeSystemParam(row) {
+    if (!row || row.readonly) {
+      error.value = t('appConfigCenter.readonlyInMagnetZone')
+      return
+    }
+    const beforeData = deepClone(sysDraftData.value || {})
+    const next = deepClone(sysDraftData.value || {})
+    nestedDelete(next, row.path)
+    const schemaMap = getSysSchemaMap(next)
+    delete schemaMap[row.path]
+    setSysSchemaMap(next, schemaMap)
+    sysDraftData.value = next
+    error.value = ''
+    success.value = ''
+
+    updateSysConfig(deepClone(next), Number(sysVersion.value || 0))
+      .then(async (resp) => {
+        sysVersion.value = Number(resp?.version || sysVersion.value || 0)
+        sysOriginalData.value = deepClone(next)
+        await refreshMagnetsAfterSysChange()
+        success.value = t('appConfigCenter.autoSyncSuccess')
+      })
+      .catch((err) => {
+        sysDraftData.value = beforeData
+        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      })
+  }
+
+  function onSystemSchemaChange(row, field, rawValue) {
+    if (!row || row.readonly) {
+      error.value = t('appConfigCenter.readonlyInMagnetZone')
+      return
+    }
+
+    const current = isRecord(row.schemaObj) ? deepClone(row.schemaObj) : {}
+    const nextDraft = {
+      type: normalizeType(current.type),
+      enumText: schemaEnumToText(current.enum),
+      minimum: numberToInput(current.minimum),
+      maximum: numberToInput(current.maximum),
+      minLength: numberToInput(current.minLength),
+      maxLength: numberToInput(current.maxLength),
+      pattern: typeof current.pattern === 'string' ? current.pattern : '',
+      itemType: normalizeType(current?.items?.type),
+    }
+    nextDraft[field] = rawValue
+
+    const parsedSchema = buildSchemaFromFields(nextDraft)
+    if (parsedSchema?.__error) {
+      error.value = schemaFormErrorMessage(parsedSchema.__error, t)
+      return
+    }
+
+    const beforeData = deepClone(sysDraftData.value || {})
+    const next = deepClone(sysDraftData.value || {})
+    const schemaMap = getSysSchemaMap(next)
+    if (!parsedSchema) {
+      delete schemaMap[row.path]
+    } else {
+      schemaMap[row.path] = parsedSchema
+    }
+    setSysSchemaMap(next, schemaMap)
+    sysDraftData.value = next
+    error.value = ''
+    success.value = ''
+
+    updateSysConfig(deepClone(next), Number(sysVersion.value || 0))
+      .then(async (resp) => {
+        sysVersion.value = Number(resp?.version || sysVersion.value || 0)
+        sysOriginalData.value = deepClone(next)
+        await refreshMagnetsAfterSysChange()
+        success.value = t('appConfigCenter.autoSyncSuccess')
+      })
+      .catch((err) => {
+        sysDraftData.value = beforeData
+        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      })
+  }
+
+  function osParamOptions(path) {
+    if (path === 'runtime_process_manager') {
+      return ['auto', 'systemd', 'popen']
+    }
+    if (path === 'runtime_systemd_scope') {
+      return ['user', 'system']
+    }
+    return []
+  }
+
   function getRowThemeClass(appId) {
     return appThemeById.value[String(appId || '')] || 'config-row-app-0'
+  }
+
+  function getSystemEnumValues(row) {
+    if (Array.isArray(row?.schemaObj?.enum) && row.schemaObj.enum.length) {
+      return row.schemaObj.enum
+    }
+    return []
+  }
+
+  function getSystemInputType(row) {
+    const type = String(row?.type || '')
+    if (type === 'integer' || type === 'number') {
+      return 'number'
+    }
+    return 'text'
+  }
+
+  function getSystemValuePlaceholder(row) {
+    const type = String(row?.type || '')
+    if (type === 'object' || type === 'array') {
+      return t('appConfigCenter.systemValueJsonPlaceholder')
+    }
+    return t('appConfigCenter.systemValuePlaceholder')
   }
 
   watch(
@@ -516,17 +876,11 @@ export function useAppConfigCenterPage() {
     selectedAppId,
     rows,
     systemRows,
+    osRows,
     magnets,
     magnetConflicts,
     magnetSaving,
-    hasChanges,
-    hasMagnetChanges,
-    showConfirmModal,
-    pendingChanges,
     loadAllConfigs,
-    openSaveConfirm,
-    closeSaveConfirm,
-    confirmSave,
     goBackApps,
     getCellValue,
     getCellError,
@@ -535,11 +889,35 @@ export function useAppConfigCenterPage() {
     getRangeText,
     getDescriptionText,
     getRowThemeClass,
+    getSystemEnumValues,
+    getSystemInputType,
+    getSystemValuePlaceholder,
+    showSystemAddModal,
+    schemaTypeOptions,
+    showNewSystemTextInput,
+    newSystemValueInputType,
+    newSystemPath,
+    newSystemValue,
+    newSystemBooleanValue,
+    newSystemSchemaType,
+    newSystemSchemaEnum,
+    newSystemSchemaMin,
+    newSystemSchemaMax,
+    newSystemSchemaMinLength,
+    newSystemSchemaMaxLength,
+    newSystemSchemaPattern,
+    newSystemSchemaItemType,
     getMagnetValue,
     getMagnetDisplayValue,
     onBooleanChange,
     onEnumChange,
+    onSystemEnumChange,
     onTextChange,
+    openSystemAddModal,
+    closeSystemAddModal,
+    addSystemParam,
+    removeSystemParam,
+    onSystemSchemaChange,
     onMagnetBooleanChange,
     onMagnetTextChange,
     saveMagnetChanges,
@@ -746,6 +1124,127 @@ function normalizeType(typeValue) {
   return ''
 }
 
+function schemaTypeFromSchema(schema) {
+  if (!isRecord(schema)) return ''
+  return normalizeType(schema.type)
+}
+
+function schemaEnumToText(values) {
+  if (!Array.isArray(values) || !values.length) return ''
+  return values.map((item) => valueToInlineText(item)).join(', ')
+}
+
+function numberToInput(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  return String(value)
+}
+
+function parseNumberInput(raw, integerOnly) {
+  const text = String(raw ?? '').trim()
+  if (!text) return null
+  const value = Number(text)
+  if (!Number.isFinite(value)) {
+    return { __error: 'number' }
+  }
+  if (integerOnly && !Number.isInteger(value)) {
+    return { __error: 'integer' }
+  }
+  return value
+}
+
+function buildSchemaFromFields(fields) {
+  const type = normalizeType(fields?.type)
+  if (!type) return null
+
+  const schema = { type }
+
+  const enumText = String(fields?.enumText || '').trim()
+  if (enumText) {
+    const rawParts = enumText.split(',').map((item) => item.trim()).filter(Boolean)
+    try {
+      schema.enum = rawParts.map((item) => parseSchemaEnumValue(item, type))
+    } catch {
+      return { __error: 'schema enum invalid' }
+    }
+  }
+
+  if (type === 'integer' || type === 'number') {
+    const minValue = parseNumberInput(fields?.minimum, type === 'integer')
+    if (isRecord(minValue) && minValue.__error) {
+      return { __error: 'schema minimum invalid' }
+    }
+    if (minValue !== null) {
+      schema.minimum = minValue
+    }
+
+    const maxValue = parseNumberInput(fields?.maximum, type === 'integer')
+    if (isRecord(maxValue) && maxValue.__error) {
+      return { __error: 'schema maximum invalid' }
+    }
+    if (maxValue !== null) {
+      schema.maximum = maxValue
+    }
+  }
+
+  if (type === 'string') {
+    const minLength = parseNumberInput(fields?.minLength, true)
+    if (isRecord(minLength) && minLength.__error) {
+      return { __error: 'schema minLength invalid' }
+    }
+    if (minLength !== null) {
+      schema.minLength = minLength
+    }
+
+    const maxLength = parseNumberInput(fields?.maxLength, true)
+    if (isRecord(maxLength) && maxLength.__error) {
+      return { __error: 'schema maxLength invalid' }
+    }
+    if (maxLength !== null) {
+      schema.maxLength = maxLength
+    }
+
+    const pattern = String(fields?.pattern || '').trim()
+    if (pattern) {
+      schema.pattern = pattern
+    }
+  }
+
+  if (type === 'array') {
+    const itemType = normalizeType(fields?.itemType)
+    if (itemType) {
+      schema.items = { type: itemType }
+    }
+  }
+
+  return schema
+}
+
+function parseSchemaEnumValue(text, type) {
+  if (type === 'string') {
+    return text
+  }
+  return parseValueByType(text, type)
+}
+
+function schemaFormErrorMessage(code, t) {
+  if (code === 'schema enum invalid') {
+    return t('appConfigCenter.schemaEnumInvalid')
+  }
+  if (code === 'schema minimum invalid') {
+    return t('appConfigCenter.schemaMinInvalid')
+  }
+  if (code === 'schema maximum invalid') {
+    return t('appConfigCenter.schemaMaxInvalid')
+  }
+  if (code === 'schema minLength invalid') {
+    return t('appConfigCenter.schemaMinLengthInvalid')
+  }
+  if (code === 'schema maxLength invalid') {
+    return t('appConfigCenter.schemaMaxLengthInvalid')
+  }
+  return t('appConfigCenter.systemSchemaInvalid')
+}
+
 function nestedGet(data, dottedPath) {
   if (!dottedPath) return data
   const segments = String(dottedPath).split('.')
@@ -777,6 +1276,56 @@ function nestedSet(data, dottedPath, value) {
   cursor[segments[segments.length - 1]] = value
 }
 
+function nestedDelete(data, dottedPath) {
+  const segments = String(dottedPath || '').split('.').filter(Boolean)
+  if (!segments.length) {
+    return
+  }
+
+  const stack = []
+  let cursor = data
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const key = segments[index]
+    if (!isRecord(cursor[key])) {
+      return
+    }
+    stack.push([cursor, key])
+    cursor = cursor[key]
+  }
+
+  delete cursor[segments[segments.length - 1]]
+
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const [parent, key] = stack[index]
+    if (isRecord(parent[key]) && Object.keys(parent[key]).length === 0) {
+      delete parent[key]
+    }
+  }
+}
+
+function flattenLeafPaths(data, parentPath = '') {
+  if (!isRecord(data)) {
+    if (!parentPath || parentPath.startsWith('_')) {
+      return []
+    }
+    return [parentPath]
+  }
+
+  const paths = []
+  for (const [key, value] of Object.entries(data)) {
+    if (String(key).startsWith('_')) {
+      continue
+    }
+    const nextPath = parentPath ? `${parentPath}.${key}` : String(key)
+    if (isRecord(value)) {
+      paths.push(...flattenLeafPaths(value, nextPath))
+      continue
+    }
+    paths.push(nextPath)
+  }
+  return paths
+}
+
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value ?? null))
 }
@@ -796,7 +1345,7 @@ function isValueEqual(left, right) {
 }
 
 function cellErrorKey(row) {
-  return `${row.appId}:${row.path}`
+  return `${row.scope || 'app'}:${row.appId}:${row.path}`
 }
 
 function isNumber(value) {
@@ -815,4 +1364,33 @@ function inferValueType(value) {
   if (typeof value === 'string') return 'string'
   if (isRecord(value)) return 'object'
   return 'unknown'
+}
+
+function getSysSchemaMap(data) {
+  if (!isRecord(data)) {
+    return {}
+  }
+  const raw = data._sys_schema
+  if (!isRecord(raw)) {
+    return {}
+  }
+  const output = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isRecord(value)) {
+      continue
+    }
+    output[String(key)] = deepClone(value)
+  }
+  return output
+}
+
+function setSysSchemaMap(data, schemaMap) {
+  if (!isRecord(data)) {
+    return
+  }
+  if (!isRecord(schemaMap) || Object.keys(schemaMap).length === 0) {
+    delete data._sys_schema
+    return
+  }
+  data._sys_schema = deepClone(schemaMap)
 }

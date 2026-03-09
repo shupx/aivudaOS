@@ -10,7 +10,7 @@ import yaml
 from core.config.filelock import atomic_write_text, get_lock
 from core.config.models import UserRecord, UsersConfig, VersionedConfig
 from core.errors import ConfigVersionConflictError
-from core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, USERS_CONFIG_PATH
+from core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
 
 
 class ConfigService:
@@ -29,6 +29,16 @@ class ConfigService:
     def get_os_setting(self, key: str, default: Any = None) -> Any:
         cfg = self.get_os_config()
         return cfg.data.get(key, default)
+
+    # --- SYS Config (shared parameters) ---
+
+    def get_sys_config(self) -> VersionedConfig:
+        return self._read_versioned(SYS_CONFIG_PATH)
+
+    def update_sys_config(
+        self, data: dict[str, Any], expected_version: int, username: str
+    ) -> VersionedConfig:
+        return self._write_versioned(SYS_CONFIG_PATH, data, expected_version, username)
 
     # --- Per-App Config ---
 
