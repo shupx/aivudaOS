@@ -46,6 +46,7 @@ const {
   newSystemSchemaMaxLength,
   newSystemSchemaPattern,
   newSystemSchemaItemType,
+  newSystemSchemaDescription,
   getMagnetValue,
   getMagnetDisplayValue,
   onBooleanChange,
@@ -55,8 +56,7 @@ const {
   openSystemAddModal,
   closeSystemAddModal,
   addSystemParam,
-  removeSystemParam,
-  onSystemSchemaChange,
+  confirmRemoveSystemParam,
   onMagnetBooleanChange,
   onMagnetTextChange,
   saveMagnetChanges,
@@ -121,8 +121,9 @@ const {
             <tr>
               <th>{{ t('appConfigCenter.colPath') }}</th>
               <th>{{ t('appConfigCenter.colCurrent') }}</th>
-              <th>{{ t('appConfigCenter.colSchema') }}</th>
               <th>{{ t('appConfigCenter.colType') }}</th>
+              <th>{{ t('appConfigCenter.colRange') }}</th>
+              <th>{{ t('appConfigCenter.colDesc') }}</th>
               <th>{{ t('appConfigCenter.colAction') }}</th>
             </tr>
           </thead>
@@ -165,87 +166,11 @@ const {
                   <p v-if="getCellError(row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(row) }}</p>
                 </div>
               </td>
-              <td>
-                <div class="config-edit-cell">
-                  <select
-                    class="select-input"
-                    :disabled="row.readonly"
-                    :value="row.schemaObj?.type || ''"
-                    @change="onSystemSchemaChange(row, 'type', $event?.target?.value || '')"
-                  >
-                    <option value="">{{ t('appConfigCenter.schemaTypeNone') }}</option>
-                    <option v-for="item in schemaTypeOptions" :key="`row-type:${item}`" :value="item">
-                      {{ item }}
-                    </option>
-                  </select>
-
-                  <input
-                    class="input"
-                    :disabled="row.readonly"
-                    :value="Array.isArray(row.schemaObj?.enum) ? row.schemaObj.enum.map((item) => valueToInlineText(item)).join(', ') : ''"
-                    :placeholder="t('appConfigCenter.schemaEnumPlaceholder')"
-                    @change="onSystemSchemaChange(row, 'enumText', $event?.target?.value || '')"
-                  >
-
-                  <template v-if="row.schemaObj?.type === 'integer' || row.schemaObj?.type === 'number'">
-                    <input
-                      class="input"
-                      :disabled="row.readonly"
-                      :value="row.schemaObj?.minimum ?? ''"
-                      :placeholder="t('appConfigCenter.schemaMinPlaceholder')"
-                      @change="onSystemSchemaChange(row, 'minimum', $event?.target?.value || '')"
-                    >
-                    <input
-                      class="input"
-                      :disabled="row.readonly"
-                      :value="row.schemaObj?.maximum ?? ''"
-                      :placeholder="t('appConfigCenter.schemaMaxPlaceholder')"
-                      @change="onSystemSchemaChange(row, 'maximum', $event?.target?.value || '')"
-                    >
-                  </template>
-
-                  <template v-if="row.schemaObj?.type === 'string'">
-                    <input
-                      class="input"
-                      :disabled="row.readonly"
-                      :value="row.schemaObj?.minLength ?? ''"
-                      :placeholder="t('appConfigCenter.schemaMinLengthPlaceholder')"
-                      @change="onSystemSchemaChange(row, 'minLength', $event?.target?.value || '')"
-                    >
-                    <input
-                      class="input"
-                      :disabled="row.readonly"
-                      :value="row.schemaObj?.maxLength ?? ''"
-                      :placeholder="t('appConfigCenter.schemaMaxLengthPlaceholder')"
-                      @change="onSystemSchemaChange(row, 'maxLength', $event?.target?.value || '')"
-                    >
-                    <input
-                      class="input"
-                      :disabled="row.readonly"
-                      :value="row.schemaObj?.pattern || ''"
-                      :placeholder="t('appConfigCenter.schemaPatternPlaceholder')"
-                      @change="onSystemSchemaChange(row, 'pattern', $event?.target?.value || '')"
-                    >
-                  </template>
-
-                  <template v-if="row.schemaObj?.type === 'array'">
-                    <select
-                      class="select-input"
-                      :disabled="row.readonly"
-                      :value="row.schemaObj?.items?.type || ''"
-                      @change="onSystemSchemaChange(row, 'itemType', $event?.target?.value || '')"
-                    >
-                      <option value="">{{ t('appConfigCenter.schemaItemTypeNone') }}</option>
-                      <option v-for="item in schemaTypeOptions" :key="`row-item:${item}`" :value="item">
-                        {{ item }}
-                      </option>
-                    </select>
-                  </template>
-                </div>
-              </td>
               <td>{{ row.type || '-' }}</td>
+              <td>{{ row.rangeText || '-' }}</td>
+              <td>{{ row.description || '-' }}</td>
               <td>
-                <button class="btn" :disabled="row.readonly" @click="removeSystemParam(row)">
+                <button class="btn" :disabled="row.readonly" @click="confirmRemoveSystemParam(row)">
                   {{ t('appConfigCenter.systemDelete') }}
                 </button>
               </td>
@@ -361,6 +286,15 @@ const {
               {{ item }}
             </option>
           </select>
+        </div>
+
+        <div class="field">
+          <label>{{ t('appConfigCenter.schemaDescriptionLabel') }}</label>
+          <input
+            v-model="newSystemSchemaDescription"
+            class="input"
+            :placeholder="t('appConfigCenter.schemaDescriptionPlaceholder')"
+          >
         </div>
 
         <footer class="panel-actions">

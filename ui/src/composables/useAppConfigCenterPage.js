@@ -47,6 +47,7 @@ export function useAppConfigCenterPage() {
   const newSystemSchemaMaxLength = ref('')
   const newSystemSchemaPattern = ref('')
   const newSystemSchemaItemType = ref('')
+  const newSystemSchemaDescription = ref('')
   const schemaTypeOptions = ['string', 'integer', 'number', 'boolean', 'object', 'array']
   const showNewSystemTextInput = computed(() => newSystemSchemaType.value !== 'boolean')
   const newSystemValueInputType = computed(() => {
@@ -66,6 +67,12 @@ export function useAppConfigCenterPage() {
       scope: 'sys',
       schemaObj: isRecord(schemaMap[item.path]) ? deepClone(schemaMap[item.path]) : null,
       type: schemaTypeFromSchema(schemaMap[item.path]) || item.type,
+      rangeText: isRecord(schemaMap[item.path])
+        ? buildRangeText(schemaMap[item.path], schemaTypeFromSchema(schemaMap[item.path]) || item.type)
+        : '',
+      description: isRecord(schemaMap[item.path]) && typeof schemaMap[item.path].description === 'string'
+        ? schemaMap[item.path].description
+        : '',
     }))
   })
 
@@ -641,6 +648,7 @@ export function useAppConfigCenterPage() {
     newSystemSchemaMaxLength.value = ''
     newSystemSchemaPattern.value = ''
     newSystemSchemaItemType.value = ''
+    newSystemSchemaDescription.value = ''
     showSystemAddModal.value = true
     error.value = ''
     success.value = ''
@@ -670,6 +678,7 @@ export function useAppConfigCenterPage() {
       maxLength: newSystemSchemaMaxLength.value,
       pattern: newSystemSchemaPattern.value,
       itemType: newSystemSchemaItemType.value,
+      description: newSystemSchemaDescription.value,
     })
 
     if (schemaValue?.__error) {
@@ -750,6 +759,15 @@ export function useAppConfigCenterPage() {
       })
   }
 
+  function confirmRemoveSystemParam(row) {
+    if (!row) return
+    const message = t('appConfigCenter.systemDeleteConfirm', { path: row.path || '' })
+    if (!window.confirm(message)) {
+      return
+    }
+    removeSystemParam(row)
+  }
+
   function onSystemSchemaChange(row, field, rawValue) {
     if (!row || row.readonly) {
       error.value = t('appConfigCenter.readonlyInMagnetZone')
@@ -766,6 +784,7 @@ export function useAppConfigCenterPage() {
       maxLength: numberToInput(current.maxLength),
       pattern: typeof current.pattern === 'string' ? current.pattern : '',
       itemType: normalizeType(current?.items?.type),
+      description: typeof current.description === 'string' ? current.description : '',
     }
     nextDraft[field] = rawValue
 
@@ -907,6 +926,7 @@ export function useAppConfigCenterPage() {
     newSystemSchemaMaxLength,
     newSystemSchemaPattern,
     newSystemSchemaItemType,
+    newSystemSchemaDescription,
     getMagnetValue,
     getMagnetDisplayValue,
     onBooleanChange,
@@ -917,6 +937,7 @@ export function useAppConfigCenterPage() {
     closeSystemAddModal,
     addSystemParam,
     removeSystemParam,
+    confirmRemoveSystemParam,
     onSystemSchemaChange,
     onMagnetBooleanChange,
     onMagnetTextChange,
@@ -1214,6 +1235,11 @@ function buildSchemaFromFields(fields) {
     if (itemType) {
       schema.items = { type: itemType }
     }
+  }
+
+  const description = String(fields?.description || '').trim()
+  if (description) {
+    schema.description = description
   }
 
   return schema

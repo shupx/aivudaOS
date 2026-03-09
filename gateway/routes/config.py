@@ -63,11 +63,20 @@ async def put_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]
             },
         )
 
-    try:
-        result = config.update_sys_config(
-            payload.data, payload.version, user.username
-        )
-    except ConfigVersionConflictError:
+    result = None
+    for _ in range(5):
+        current_for_write = config.get_sys_config()
+        try:
+            result = config.update_sys_config(
+                payload.data,
+                current_for_write.version,
+                user.username,
+            )
+            break
+        except ConfigVersionConflictError:
+            continue
+
+    if result is None:
         raise HTTPException(status_code=409, detail="Config version conflict")
 
     magnet.recompute(updated_by=user.username)
@@ -92,11 +101,20 @@ async def put_os_config(payload: ConfigUpdateRequest, token: str) -> dict[str, A
     user = _require_auth(token)
     config: ConfigService = get_config_service()
 
-    try:
-        result = config.update_os_config(
-            payload.data, payload.version, user.username
-        )
-    except ConfigVersionConflictError:
+    result = None
+    for _ in range(5):
+        current_for_write = config.get_os_config()
+        try:
+            result = config.update_os_config(
+                payload.data,
+                current_for_write.version,
+                user.username,
+            )
+            break
+        except ConfigVersionConflictError:
+            continue
+
+    if result is None:
         raise HTTPException(status_code=409, detail="Config version conflict")
 
     return {"ok": True, "version": result.version}
