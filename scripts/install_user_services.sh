@@ -104,7 +104,7 @@ ensure_caddy_bind_443_permission() {
   fi
 
   if command -v getcap >/dev/null 2>&1; then
-    if getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service=ep"; then
+    if getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service"; then
       return
     fi
   fi
@@ -115,7 +115,7 @@ ensure_caddy_bind_443_permission() {
   sudo setcap cap_net_bind_service=+ep "${CADDY_BIN}"
 
   if command -v getcap >/dev/null 2>&1; then
-    if ! getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service=ep"; then
+    if ! getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service"; then
       echo "Failed to grant cap_net_bind_service on ${CADDY_BIN}" >&2
       exit 1
     fi

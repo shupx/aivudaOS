@@ -9,8 +9,13 @@ from core.auth.service import AuthService
 from core.config.service import ConfigService
 from core.errors import AuthenticationError, ConfigVersionConflictError
 from core.errors import InvalidConfigError, NotFoundError
-from gateway.deps import get_auth_service, get_config_service, get_magnet_service
-from gateway.schemas import ConfigUpdateRequest, MagnetUpdateRequest
+from gateway.deps import (
+    get_auth_service,
+    get_config_service,
+    get_magnet_service,
+    get_sudo_nopasswd_service,
+)
+from gateway.schemas import ConfigUpdateRequest, MagnetUpdateRequest, SudoNopasswdUpdateRequest
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -21,6 +26,31 @@ def _require_auth(token: str) -> SessionInfo:
         return auth.validate_token(token)
     except AuthenticationError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+@router.get("/system/sudo-nopasswd")
+async def get_sudo_nopasswd(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_sudo_nopasswd_service()
+    try:
+        return service.get_status()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/system/sudo-nopasswd")
+async def put_sudo_nopasswd(payload: SudoNopasswdUpdateRequest, token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_sudo_nopasswd_service()
+    try:
+        result = service.set_enabled(payload.enabled, payload.sudo_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, **result}
 
 
 @router.get("")

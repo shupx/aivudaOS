@@ -46,12 +46,7 @@ pip install -r requirements.txt
 
 ```bash
 # 实际uvicorn有bug还是关注了所有文件变化。
-PYTHONPATH=. uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir gateway --reload-dir core
-```
-
-```bash
-# 推荐用gunicorn
-PYTHONPATH=. gunicorn gateway.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind 0.0.0.0:8000 --reload
+python3 -m uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir gateway --reload-dir core
 ```
 
 

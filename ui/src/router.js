@@ -9,6 +9,7 @@ import AppConfigCenterView from './views/AppConfigCenterView.vue'
 import AppBuiltInUiView from './views/AppBuiltInUiView.vue'
 import OnlineStoreView from './views/OnlineStoreView.vue'
 import OnlineStoreDetailView from './views/OnlineStoreDetailView.vue'
+import SystemSettingsView from './views/SystemSettingsView.vue'
 import { appState } from './state/appState'
 
 const routes = [
@@ -27,6 +28,7 @@ const routes = [
       { path: 'apps/:appId/config', component: AppConfigView },
       { path: 'store', component: OnlineStoreView },
       { path: 'store/:appId', component: OnlineStoreDetailView },
+      { path: 'settings', component: SystemSettingsView },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard/apps' },

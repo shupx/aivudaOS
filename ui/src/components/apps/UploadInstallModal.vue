@@ -42,7 +42,7 @@ const {
 
 <template>
   <div v-if="visible" class="modal-overlay" @click.self="closeByOverlay">
-    <section class="modal-card">
+    <section class="modal-card modal-resizable">
       <header class="modal-header">
         <h3>{{ t('apps.uploadModalTitle') }}</h3>
       </header>

@@ -26,6 +26,11 @@ class MagnetUpdateRequest(BaseModel):
     value: Any
 
 
+class SudoNopasswdUpdateRequest(BaseModel):
+    enabled: bool
+    sudo_password: str | None = None
+
+
 class AppConfigUpdateRequest(BaseModel):
     version: int
     data: dict[str, Any]

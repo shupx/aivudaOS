@@ -11,11 +11,13 @@ const {
   isAppsRoute,
   isConfigRoute,
   isStoreRoute,
+  isSystemSettingsRoute,
   locale,
   goStatus,
   goApps,
   goConfigs,
   goStore,
+  goSystemSettings,
   toggleSidebar,
   doLogout,
   changeLocale,
@@ -38,8 +40,11 @@ const {
           :class="{ active: isStatusRoute }"
           @click="goStatus"
         >
-          <span v-if="!sidebarCollapsed">{{ t('dashboard.systemStatus') }}</span>
-          <span v-else>S</span>
+          <span class="menu-btn-content" v-if="!sidebarCollapsed">
+            <span class="menu-icon" aria-hidden="true">📊</span>
+            <span>{{ t('dashboard.systemStatus') }}</span>
+          </span>
+          <span class="menu-icon" aria-hidden="true" v-else>📊</span>
         </button>
 
         <button
@@ -47,8 +52,11 @@ const {
           :class="{ active: isAppsRoute }"
           @click="goApps"
         >
-          <span v-if="!sidebarCollapsed">{{ t('dashboard.appsMenu') }}</span>
-          <span v-else>A</span>
+          <span class="menu-btn-content" v-if="!sidebarCollapsed">
+            <span class="menu-icon" aria-hidden="true">🧩</span>
+            <span>{{ t('dashboard.appsMenu') }}</span>
+          </span>
+          <span class="menu-icon" aria-hidden="true" v-else>🧩</span>
         </button>
 
         <button
@@ -56,8 +64,11 @@ const {
           :class="{ active: isConfigRoute }"
           @click="goConfigs"
         >
-          <span v-if="!sidebarCollapsed">{{ t('dashboard.configCenter') }}</span>
-          <span v-else>C</span>
+          <span class="menu-btn-content" v-if="!sidebarCollapsed">
+            <span class="menu-icon" aria-hidden="true">⚙️</span>
+            <span>{{ t('dashboard.configCenter') }}</span>
+          </span>
+          <span class="menu-icon" aria-hidden="true" v-else>⚙️</span>
         </button>
 
         <button
@@ -65,8 +76,23 @@ const {
           :class="{ active: isStoreRoute }"
           @click="goStore"
         >
-          <span v-if="!sidebarCollapsed">{{ t('dashboard.onlineStore') }}</span>
-          <span v-else>O</span>
+          <span class="menu-btn-content" v-if="!sidebarCollapsed">
+            <span class="menu-icon" aria-hidden="true">🛍️</span>
+            <span>{{ t('dashboard.onlineStore') }}</span>
+          </span>
+          <span class="menu-icon" aria-hidden="true" v-else>🛍️</span>
+        </button>
+
+        <button
+          class="menu-btn"
+          :class="{ active: isSystemSettingsRoute }"
+          @click="goSystemSettings"
+        >
+          <span class="menu-btn-content" v-if="!sidebarCollapsed">
+            <span class="menu-icon" aria-hidden="true">🛠️</span>
+            <span>{{ t('dashboard.systemSettings') }}</span>
+          </span>
+          <span class="menu-icon" aria-hidden="true" v-else>🛠️</span>
         </button>
       </nav>
 

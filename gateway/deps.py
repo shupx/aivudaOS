@@ -9,6 +9,7 @@ from core.apps.runtime import RuntimeService
 from core.apps.versioning import VersioningService
 from core.auth.service import AuthService
 from core.config.service import ConfigService
+from core.config.sudo_nopasswd import SudoNopasswdService
 
 
 @lru_cache
@@ -55,4 +56,9 @@ def get_magnet_service() -> MagnetService:
 @lru_cache
 def get_app_operation_manager() -> AppOperationManager:
     return AppOperationManager()
+
+
+@lru_cache
+def get_sudo_nopasswd_service() -> SudoNopasswdService:
+    return SudoNopasswdService()
 

@@ -69,33 +69,37 @@ const {
 </script>
 
 <template>
-  <section class="apps-panel">
-    <header class="panel-header">
-      <h2>{{ t('appConfigCenter.title') }}</h2>
-      <div class="panel-actions wrap">
-        <button class="btn" @click="goBackApps">{{ t('appConfigCenter.backToApps') }}</button>
-        <button class="btn btn-stable-refresh" :disabled="loading" @click="loadAllConfigs">
-          {{ loading ? t('common.loadingShort') : t('common.refresh') }}
-        </button>
+  <section class="apps-panel app-config-center-page">
+    <header class="panel-header app-config-center-header-sticky">
+      <div class="app-config-center-header-row">
+        <h2>{{ t('appConfigCenter.title') }}</h2>
+        <div class="panel-actions wrap">
+          <button class="btn" @click="goBackApps">{{ t('appConfigCenter.backToApps') }}</button>
+          <button class="btn btn-stable-refresh" :disabled="loading" @click="loadAllConfigs">
+            {{ loading ? t('common.loadingShort') : t('common.refresh') }}
+          </button>
+        </div>
       </div>
+
+      <p v-if="error" class="error-text">{{ error }}</p>
+      <p v-else-if="success" class="ok-text">{{ success }}</p>
     </header>
 
-    <p v-if="error" class="error-text">{{ error }}</p>
-    <p v-if="success" class="ok-text">{{ success }}</p>
-
-    <MagnetConfigSection
-      :magnets="magnets"
-      :magnet-conflicts="magnetConflicts"
-      :collapsed="magnetCollapsed"
-      :toggle-collapsed="toggleMagnetCollapsed"
-      :get-magnet-row-id="getMagnetRowId"
-      :get-magnet-value="getMagnetValue"
-      :get-magnet-display-value="getMagnetDisplayValue"
-      :on-magnet-boolean-change="onMagnetBooleanChange"
-      :on-magnet-text-change="onMagnetTextChange"
-      :save-magnet-changes="saveMagnetChanges"
-      :value-to-inline-text="valueToInlineText"
-    />
+    <div class="app-config-center-magnet-sticky">
+      <MagnetConfigSection
+        :magnets="magnets"
+        :magnet-conflicts="magnetConflicts"
+        :collapsed="magnetCollapsed"
+        :toggle-collapsed="toggleMagnetCollapsed"
+        :get-magnet-row-id="getMagnetRowId"
+        :get-magnet-value="getMagnetValue"
+        :get-magnet-display-value="getMagnetDisplayValue"
+        :on-magnet-boolean-change="onMagnetBooleanChange"
+        :on-magnet-text-change="onMagnetTextChange"
+        :save-magnet-changes="saveMagnetChanges"
+        :value-to-inline-text="valueToInlineText"
+      />
+    </div>
 
     <article class="actions-panel">
       <header class="log-header">

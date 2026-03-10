@@ -187,7 +187,7 @@ const {
     </article>
 
     <div v-if="showActionOutputModal" class="modal-overlay" @click.self="actionBusy ? null : closeActionOutputModal">
-      <section class="modal-card modal-wide">
+      <section class="modal-card modal-wide modal-resizable">
         <header class="modal-header">
           <h3>{{ t('appDetail.actionOutputTitle') }}</h3>
         </header>

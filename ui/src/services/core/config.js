@@ -28,6 +28,18 @@ export async function updateOsConfig(data, version) {
   })
 }
 
+export async function fetchSudoNopasswdSetting() {
+  return request('/api/config/system/sudo-nopasswd', { auth: true })
+}
+
+export async function updateSudoNopasswdSetting(enabled, sudoPassword = '') {
+  return request('/api/config/system/sudo-nopasswd', {
+    method: 'PUT',
+    body: { enabled: Boolean(enabled), sudo_password: String(sudoPassword || '') },
+    auth: true,
+  })
+}
+
 export function resolveAppStoreBaseUrl(configData) {
   const fromConfig = String(configData?.appstore_base_url || '').trim()
   if (fromConfig) {

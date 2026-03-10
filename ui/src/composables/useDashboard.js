@@ -16,6 +16,7 @@ export function useDashboard() {
   })
   const isConfigRoute = computed(() => route.path.startsWith('/dashboard/apps/configs'))
   const isStoreRoute = computed(() => route.path.startsWith('/dashboard/store'))
+  const isSystemSettingsRoute = computed(() => route.path.startsWith('/dashboard/settings'))
   const locale = computed(() => appState.locale)
   const user = computed(() => appState.user)
   const role = computed(() => appState.role)
@@ -52,6 +53,10 @@ export function useDashboard() {
     router.push('/dashboard/store')
   }
 
+  function goSystemSettings() {
+    router.push('/dashboard/settings')
+  }
+
   function doLogout() {
     logout()
     router.replace('/login')
@@ -67,6 +72,7 @@ export function useDashboard() {
     isAppsRoute,
     isConfigRoute,
     isStoreRoute,
+    isSystemSettingsRoute,
     locale,
     user,
     role,
@@ -74,6 +80,7 @@ export function useDashboard() {
     goApps,
     goConfigs,
     goStore,
+    goSystemSettings,
     toggleSidebar,
     doLogout,
     changeLocale,
