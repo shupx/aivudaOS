@@ -302,6 +302,7 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 
 - 客户端可发送纯文本，或 JSON `{ "type": "input", "data": "..." }`
 - 后端会自动补 `\n` 后写入脚本 stdin
+- 空输入（例如仅按 Enter，发送空字符串）也会被接受，并作为换行写入脚本 stdin
 - 任务结束后交互会话自动关闭
 
 取消操作：

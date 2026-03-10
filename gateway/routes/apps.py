@@ -576,8 +576,6 @@ async def operation_interactive_ws(
                 continue
 
             text = str(payload)
-            if not text.strip():
-                continue
 
             try:
                 operations.submit_interactive_input(operation_id, text)

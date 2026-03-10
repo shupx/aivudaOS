@@ -95,7 +95,6 @@ const {
           </button>
           <button
             class="btn"
-            :disabled="!interactiveInput"
             @click="$emit('interactive-submit')"
           >
             {{ t('apps.interactiveSend') }}
