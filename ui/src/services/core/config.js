@@ -40,6 +40,13 @@ export async function updateSudoNopasswdSetting(enabled, sudoPassword = '') {
   })
 }
 
+export async function triggerRelogin() {
+  return request('/api/config/system/relogin', {
+    method: 'POST',
+    auth: true,
+  })
+}
+
 export function resolveAppStoreBaseUrl(configData) {
   const fromConfig = String(configData?.appstore_base_url || '').trim()
   if (fromConfig) {

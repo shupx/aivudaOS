@@ -134,6 +134,7 @@ App 启动时会注入配置路径相关环境变量：
 | `/dashboard/apps/configs` | 统一应用参数配置（所有 app active 版本） |
 | `/dashboard/apps/:appId/config` | 应用参数配置（按版本） |
 | `/dashboard/store` | 在线应用商店（查看与下载/安装） |
+| `/dashboard/settings` | 系统设置（sudo 免密、重登录） |
 
 ## API 接口
 
@@ -146,6 +147,9 @@ App 启动时会注入配置路径相关环境变量：
 - `PUT  /aivuda_os/api/config`（`sys.yaml`）
 - `GET  /aivuda_os/api/config/os`（`os.yaml`）
 - `PUT  /aivuda_os/api/config/os`（`os.yaml`）
+- `GET  /aivuda_os/api/config/system/sudo-nopasswd`（读取 sudo 免密状态）
+- `PUT  /aivuda_os/api/config/system/sudo-nopasswd`（更新 sudo 免密状态）
+- `POST /aivuda_os/api/config/system/relogin`（注销并重启 `user@UID.service`，用于用户组变更后重登录）
 
 ### 应用管理
 - `POST /aivuda_os/api/apps/repo/sync` — 从仓库同步应用目录

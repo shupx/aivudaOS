@@ -13,6 +13,7 @@ from gateway.deps import (
     get_auth_service,
     get_config_service,
     get_magnet_service,
+    get_relogin_service,
     get_sudo_nopasswd_service,
 )
 from gateway.schemas import ConfigUpdateRequest, MagnetUpdateRequest, SudoNopasswdUpdateRequest
@@ -51,6 +52,22 @@ async def put_sudo_nopasswd(payload: SudoNopasswdUpdateRequest, token: str) -> d
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"ok": True, **result}
+
+
+@router.post("/system/relogin")
+async def relogin_system_user(token: str) -> dict[str, Any]:
+    _require_auth(token)
+
+    auth = get_auth_service()
+    auth.logout(token)
+
+    relogin_service = get_relogin_service()
+    relogin_service.trigger_relogin()
+
+    return {
+        "ok": True,
+        "message": "Relogin has been scheduled. User services will restart shortly.",
+    }
 
 
 @router.get("")

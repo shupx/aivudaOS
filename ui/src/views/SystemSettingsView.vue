@@ -7,6 +7,7 @@ const { t } = useI18n()
 const {
   loading,
   saving,
+  reloginPending,
   error,
   success,
   username,
@@ -17,6 +18,7 @@ const {
   sudoPassword,
   showSudoPassword,
   submitToggle,
+  reloginNow,
   load,
 } = useSystemSettingsPage()
 </script>
@@ -48,6 +50,13 @@ const {
           :disabled="loading || saving"
           @update:model-value="toggleEnabled"
         />
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.reloginAction') }}</span>
+        <button class="btn danger" :disabled="loading || saving || reloginPending" @click="reloginNow">
+          {{ reloginPending ? t('common.processing') : t('systemSettings.reloginNow') }}
+        </button>
       </div>
     </article>
 

@@ -245,6 +245,9 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 | GET | `/aivuda_os/api/apps/{app_id}/config` | 获取 App 配置（可选 query: `app_version`） |
 | PUT | `/aivuda_os/api/apps/{app_id}/config` | 更新 App 配置 `{ "version": 1, "app_version": "1.0.0", "data": {...} }` |
 | GET | `/aivuda_os/api/apps/configs/active` | 获取全部已安装 app 的 active 配置、schema、约束（统一参数中心） |
+| GET | `/aivuda_os/api/config/system/sudo-nopasswd` | 获取当前系统用户 sudo 免密状态 |
+| PUT | `/aivuda_os/api/config/system/sudo-nopasswd` | 设置当前系统用户 sudo 免密（需 sudo 密码） |
+| POST | `/aivuda_os/api/config/system/relogin` | 注销当前 token 并后台执行 `sudo systemctl restart user@$(id -u $USER).service` |
 
 > 所有端点需要 `token` 参数进行身份验证。
 
