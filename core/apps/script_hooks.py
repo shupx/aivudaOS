@@ -75,7 +75,7 @@ class ScriptHookRunner:
                 log_file.write(line.encode("utf-8", errors="replace"))
                 log_file.flush()
                 if on_output:
-                    on_output(line.rstrip("\n"))
+                    on_output(line)
             code = proc.wait()
             output = "".join(output_lines)
 

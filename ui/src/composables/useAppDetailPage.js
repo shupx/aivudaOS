@@ -61,6 +61,10 @@ export function useAppDetailPage() {
 
   let logTimer = null
 
+  function normalizeOutputText(value) {
+    return String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  }
+
   const canSwitchVersion = computed(() => {
     return Boolean(
       app.value
@@ -101,8 +105,8 @@ export function useAppDetailPage() {
   }
 
   function appendActionLine(line) {
-    if (!line) return
-    actionLiveOutput.value += `${line}\n`
+    if (line === undefined || line === null) return
+    actionLiveOutput.value += normalizeOutputText(line)
     if (actionLiveOutput.value.length > 250000) {
       actionLiveOutput.value = actionLiveOutput.value.slice(-150000)
     }
@@ -110,7 +114,7 @@ export function useAppDetailPage() {
 
   function appendActionChunk(chunk) {
     if (!chunk) return
-    actionLiveOutput.value += String(chunk)
+    actionLiveOutput.value += normalizeOutputText(chunk)
     if (actionLiveOutput.value.length > 250000) {
       actionLiveOutput.value = actionLiveOutput.value.slice(-150000)
     }
@@ -168,7 +172,7 @@ export function useAppDetailPage() {
         },
         onError(err) {
           actionInteractiveReady.value = false
-          appendActionLine(`${t('apps.interactiveConnectionError')}: ${String(err?.message || err || '')}`)
+          appendActionLine(`${t('apps.interactiveConnectionError')}: ${String(err?.message || err || '')}\n`)
         },
       })
 
@@ -183,11 +187,11 @@ export function useAppDetailPage() {
             if (typeof event.chunk === 'string') {
               appendActionChunk(event.chunk)
             } else {
-              appendActionLine(event.line || '')
+              appendActionLine(typeof event.line === 'string' ? event.line : `${event.line || ''}\n`)
             }
           }
           if (event.type === 'error') {
-            appendActionLine(event.message || t('apps.operationFailed'))
+            appendActionLine(`${event.message || t('apps.operationFailed')}\n`)
             actionError.value = event.message || t('apps.operationFailed')
             actionLiveStatusDone.value = false
           }

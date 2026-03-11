@@ -28,6 +28,10 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
   const currentOperationId = ref('')
   let interactiveSubmitHandler = null
 
+  function normalizeOutputText(value) {
+    return String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  }
+
   function openUploadModal({ hint = '', showFilePicker = true } = {}) {
     uploadError.value = ''
     uploadStatusDone.value = false
@@ -67,8 +71,8 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
   }
 
   function appendUploadLine(line) {
-    if (!line) return
-    uploadOutput.value += line
+    if (line === undefined || line === null) return
+    uploadOutput.value += normalizeOutputText(line)
     if (uploadOutput.value.length > 200000) {
       uploadOutput.value = uploadOutput.value.slice(-120000)
     }
@@ -76,7 +80,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
 
   function appendUploadChunk(chunk) {
     if (!chunk) return
-    uploadOutput.value += chunk
+    uploadOutput.value += normalizeOutputText(chunk)
     if (uploadOutput.value.length > 200000) {
       uploadOutput.value = uploadOutput.value.slice(-120000)
     }
@@ -198,11 +202,11 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
             if (typeof event.chunk === 'string') {
               appendUploadChunk(event.chunk)
             } else {
-              appendUploadLine(`${event.line || ''}\n`)
+              appendUploadLine(typeof event.line === 'string' ? event.line : `${event.line || ''}\n`)
             }
           }
           if (event.type === 'error') {
-            appendUploadLine(event.message || t('apps.operationFailed'))
+            appendUploadLine(`${event.message || t('apps.operationFailed')}\n`)
             uploadError.value = event.message || t('apps.operationFailed')
             uploadStatusDone.value = false
           }
