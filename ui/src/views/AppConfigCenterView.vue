@@ -2,7 +2,6 @@
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
-import OsConfigSection from '../components/app-config-center/OsConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 
 const { t } = useI18n()
@@ -15,7 +14,6 @@ const {
   selectedAppId,
   rows,
   systemRows,
-  osRows,
   magnets,
   magnetConflicts,
   magnetCollapsed,
@@ -28,6 +26,7 @@ const {
   getDefaultText,
   getRangeText,
   getDescriptionText,
+  getNeedRestartText,
   getRowThemeClass,
   getSystemEnumValues,
   getSystemInputType,
@@ -65,6 +64,8 @@ const {
   onMagnetTextChange,
   saveMagnetChanges,
   valueToInlineText,
+  needRestartToastVisible,
+  needRestartToastMessage,
 } = useAppConfigCenterPage()
 </script>
 
@@ -119,6 +120,7 @@ const {
               <th>{{ t('appConfigCenter.colCurrent') }}</th>
               <th>{{ t('appConfigCenter.colType') }}</th>
               <th>{{ t('appConfigCenter.colRange') }}</th>
+              <th>{{ t('appConfigCenter.colNeedRestart') }}</th>
               <th>{{ t('appConfigCenter.colDesc') }}</th>
               <th>{{ t('appConfigCenter.colAction') }}</th>
             </tr>
@@ -169,6 +171,7 @@ const {
               </td>
               <td>{{ row.type || '-' }}</td>
               <td>{{ row.rangeText || '-' }}</td>
+              <td>{{ getNeedRestartText(row) }}</td>
               <td>{{ row.description || '-' }}</td>
               <td>
                 <button class="btn" :disabled="row.readonly" @click="confirmRemoveSystemParam(row)">
@@ -316,6 +319,7 @@ const {
       :get-default-text="getDefaultText"
       :get-range-text="getRangeText"
       :get-description-text="getDescriptionText"
+      :get-need-restart-text="getNeedRestartText"
       :get-row-theme-class="getRowThemeClass"
       :on-boolean-change="onBooleanChange"
       :on-enum-change="onEnumChange"
@@ -324,15 +328,9 @@ const {
       :value-to-inline-text="valueToInlineText"
     />
 
-    <OsConfigSection
-      :os-rows="osRows"
-      :get-cell-value="getCellValue"
-      :get-cell-error="getCellError"
-      :display-value="displayValue"
-      :on-enum-change="onEnumChange"
-      :on-text-change="onTextChange"
-      :value-to-inline-text="valueToInlineText"
-    />
+    <div v-if="needRestartToastVisible" class="side-toast side-toast-info">
+      {{ needRestartToastMessage }}
+    </div>
 
   </section>
 </template>

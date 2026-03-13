@@ -9,6 +9,7 @@ from core.errors import InvalidConfigError
 SUPPORTED_SCHEMA_KEYS = {
     "type",
     "default",
+    "need_restart",
     "description",
     "enum",
     "properties",

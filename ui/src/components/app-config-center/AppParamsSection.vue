@@ -14,6 +14,7 @@ defineProps({
   getDefaultText: { type: Function, required: true },
   getRangeText: { type: Function, required: true },
   getDescriptionText: { type: Function, required: true },
+  getNeedRestartText: { type: Function, required: true },
   getRowThemeClass: { type: Function, required: true },
   onBooleanChange: { type: Function, required: true },
   onEnumChange: { type: Function, required: true },
@@ -55,6 +56,7 @@ defineProps({
             <th>{{ t('appConfigCenter.colDefault') }}</th>
             <th>{{ t('appConfigCenter.colType') }}</th>
             <th>{{ t('appConfigCenter.colRange') }}</th>
+            <th>{{ t('appConfigCenter.colNeedRestart') }}</th>
             <th>{{ t('appConfigCenter.colDesc') }}</th>
           </tr>
         </thead>
@@ -65,7 +67,7 @@ defineProps({
               class="config-app-title-row"
               :class="getRowThemeClass(row.appId)"
             >
-              <td colspan="6">
+              <td colspan="7">
                 {{ row.appName }} ({{ row.appId }} @ {{ row.appVersion || '-' }})
               </td>
             </tr>
@@ -116,6 +118,7 @@ defineProps({
               <td class="mono-cell">{{ getDefaultText(row) }}</td>
               <td>{{ row.type || '-' }}</td>
               <td>{{ getRangeText(row) }}</td>
+              <td>{{ getNeedRestartText(row) }}</td>
               <td>{{ getDescriptionText(row) }}</td>
             </tr>
           </template>

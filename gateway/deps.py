@@ -9,13 +9,19 @@ from core.apps.runtime import RuntimeService
 from core.apps.versioning import VersioningService
 from core.auth.relogin import ReloginService
 from core.auth.service import AuthService
+from core.config.avahi import AvahiService
 from core.config.service import ConfigService
 from core.config.sudo_nopasswd import SudoNopasswdService
 
 
 @lru_cache
+def get_avahi_service() -> AvahiService:
+    return AvahiService()
+
+
+@lru_cache
 def get_config_service() -> ConfigService:
-    return ConfigService()
+    return ConfigService(avahi_service=get_avahi_service())
 
 
 @lru_cache

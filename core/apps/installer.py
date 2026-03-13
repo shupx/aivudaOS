@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import yaml
 
+from core.apps.caddy_config import CaddyConfigService
 from core.apps.config_validation import validate_config_data
 from core.apps.magnet import MagnetService
 from core.apps.models import AppManifest
@@ -37,6 +38,7 @@ class InstallerService:
         self._config = config_service
         self._magnet = magnet_service
         self._script_hooks = ScriptHookRunner()
+        self._caddy = CaddyConfigService(versioning=versioning)
 
     # ------------------------------------------------------------------ #
     #  Local upload install (primary flow)
@@ -212,6 +214,10 @@ class InstallerService:
                         raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
 
                 self._ensure_entrypoint_ready(install_path, manifest)
+                try:
+                    self._caddy.validate_candidate(app_id, manifest, install_path)
+                except InvalidConfigError as exc:
+                    raise PackageFormatError(str(exc)) from exc
                 ensure_not_canceled()
 
                 # Record in database
@@ -219,12 +225,21 @@ class InstallerService:
                 emit("status", phase="db", status="running", message="写入数据库", app_id=app_id)
 
                 # Initialize per-app config
-                self._config.init_app_config(app_id, version, manifest.default_config)
+                self._config.init_app_config(
+                    app_id,
+                    version,
+                    manifest.default_config,
+                    overwrite_default=True,
+                )
                 ensure_not_canceled()
 
                 # Activate this version
                 self._versioning.activate_version(app_id, version)
                 self._magnet.recompute(updated_by="system")
+                try:
+                    self._caddy.sync_and_reload()
+                except InvalidConfigError as exc:
+                    raise PackageFormatError(str(exc)) from exc
                 emit("status", phase="activate", status="running", message="激活版本", app_id=app_id)
             except Exception:
                 shutil.rmtree(install_path, ignore_errors=True)

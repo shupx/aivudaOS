@@ -845,6 +845,44 @@ input {
   font-size: 13px;
 }
 
+.side-toast {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  z-index: 40;
+  max-width: min(480px, calc(100vw - 40px));
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+  animation: side-toast-fade 3s ease forwards;
+}
+
+.side-toast.side-toast-info {
+  background: #1e293b;
+}
+
+@keyframes side-toast-fade {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  82% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
 @media (max-width: 900px) {
   .dashboard-layout,
   .dashboard-layout.collapsed {

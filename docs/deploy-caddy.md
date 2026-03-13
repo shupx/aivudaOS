@@ -6,6 +6,8 @@
 - Caddy 反向代理后端 API（`127.0.0.1:8000`）
 - 对外暴露 HTTP `80` 与 HTTPS `8443`
 
+> 本项目用caddy而不是nginx，是因为caddy配置https tls证书和websocket反代更简单，caddyfile比nginx config好写
+
 ## 1. 安装 Caddy（无 sudo）
 
 推荐在仓库根目录执行：
@@ -43,13 +45,13 @@ bash scripts/run_aivudaos_stack.sh
 可选：先校验配置再启动。
 
 ```bash
-./.tools/caddy/caddy validate --config Caddyfile --adapter caddyfile
+./.tools/caddy/caddy validate --config "${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile" --adapter caddyfile
 ```
 
 默认监听：
 
 - HTTP: `http://<host>:80`
-- HTTPS: `https://<host>:8443`（当前 `tls internal`，浏览器可能提示证书不受信任）
+- HTTPS: `https://<avahi_hostname>.local:8443`（当前 `tls internal`，浏览器可能提示证书不受信任）
 
 ## 4. 用户自启动（backend + caddy 一起）
 
@@ -59,12 +61,14 @@ bash scripts/run_aivudaos_stack.sh
 bash scripts/install_user_services.sh
 ```
 
-脚本会要求输入两个 HTTPS 地址：
+脚本会自动：
 
-- 公网 IP/域名：`AIVUDAOS_PUBLIC_HTTPS_HOST`
-- 内网 IP/域名：`AIVUDAOS_PRIVATE_HTTPS_HOST`
-
-输入内网地址时，脚本会先列出当前服务器检测到的本机 IPv4 地址供选择，也可以手工输入。
+- 在 Debian/Ubuntu（`apt-get` 可用）安装 `avahi-daemon` 与 `avahi-utils`
+- 为当前用户配置 sudo 免密（`/etc/sudoers.d/$USER`，幂等）
+- 从 `~/aivudaOS_ws/config/os.yaml` 的 `avahi_hostname` 读取主机名，若不存在则自动生成 `robot-xxx`
+- 将主机名写入 `/etc/avahi/avahi-daemon.conf` 的 `[server]` 块 `host-name=<value>` 并重启 `avahi-daemon.service`
+- 将 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点写成具体 `https://<hostname>.local:8443`（不使用环境变量占位）
+- 当主机名变更导致 Caddyfile 内容变化时，自动执行一次 caddy reload
 
 脚本会创建并启用单个 `systemd --user` 服务：
 
@@ -101,9 +105,10 @@ journalctl --user -u aivudaos.service -f
 - `/aivuda_os/api/apps/operations/{operation_id}/events`（SSE）与
   `/aivuda_os/api/apps/operations/{operation_id}/interactive/ws`（WebSocket）
   均通过 Caddy 转发到后端。
+- 运行中若通过 `PUT /aivuda_os/api/config/os` 修改 `avahi_hostname`，后端会立即把 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS host 同步为新的 `<avahi_hostname>.local`，并在 Caddy 正在运行时尝试 reload。
 
 ## 6. 重要注意事项
 
-1. 请在 `aivudaOS/` 仓库根目录启动 Caddy（`Caddyfile` 使用相对路径 `./ui/dist`）。
+1. 运行时 Caddy 配置文件是 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`，首次启动会从仓库模板 `aivudaOS/Caddyfile_template` 自动复制。
 2. 建议后端仅监听 `127.0.0.1:8000`，由 Caddy 统一对外暴露。
 3. 当前 `tls internal` 适合内网/开发环境；公网正式域名可改为 ACME 证书模式。

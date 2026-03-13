@@ -19,6 +19,14 @@ const {
   showSudoPassword,
   submitToggle,
   reloginNow,
+  osRows,
+  getOsCellValue,
+  getOsCellError,
+  getOsEnumOptions,
+  displayOsValue,
+  onOsBooleanChange,
+  onOsEnumChange,
+  onOsTextChange,
   load,
 } = useSystemSettingsPage()
 </script>
@@ -57,6 +65,67 @@ const {
         <button class="btn danger" :disabled="loading || saving || reloginPending" @click="reloginNow">
           {{ reloginPending ? t('common.processing') : t('systemSettings.reloginNow') }}
         </button>
+      </div>
+    </article>
+
+    <article class="actions-panel">
+      <header class="log-header">
+        <h3>{{ t('systemSettings.osParamsTitle') }}</h3>
+      </header>
+
+      <div v-if="!osRows.length" class="empty-box">{{ t('systemSettings.osParamsEmpty') }}</div>
+      <div v-else class="table-wrap">
+        <table class="config-table compact">
+          <thead>
+            <tr>
+              <th>{{ t('appConfigCenter.colPath') }}</th>
+              <th>{{ t('appConfigCenter.colCurrent') }}</th>
+              <th>{{ t('appConfigCenter.colType') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in osRows" :key="`os:${row.path}`">
+              <td class="mono-cell">{{ row.path }}</td>
+              <td>
+                <div class="config-edit-cell">
+                  <label v-if="row.type === 'boolean'" class="check-item">
+                    <input
+                      :checked="Boolean(getOsCellValue(row))"
+                      type="checkbox"
+                      @change="onOsBooleanChange(row, $event?.target?.checked)"
+                    >
+                    {{ Boolean(getOsCellValue(row)) ? 'true' : 'false' }}
+                  </label>
+                  <select
+                    v-else-if="getOsEnumOptions(row).length"
+                    class="select-input"
+                    :value="String(getOsCellValue(row) ?? '')"
+                    @change="onOsEnumChange(row, $event?.target?.value || '')"
+                  >
+                    <option
+                      v-for="item in getOsEnumOptions(row)"
+                      :key="`os-enum-${row.path}-${item.value}`"
+                      :value="item.value"
+                      :disabled="item.disabled"
+                    >
+                      {{ item.value }}
+                    </option>
+                  </select>
+                  <input
+                    v-else
+                    class="input"
+                    :value="displayOsValue(row)"
+                    @change="onOsTextChange(row, $event?.target?.value || '')"
+                  >
+                  <p v-if="getOsCellError(row)" class="error-text">
+                    {{ t('systemSettings.osInvalidValue') }}: {{ getOsCellError(row) }}
+                  </p>
+                </div>
+              </td>
+              <td>{{ row.type || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </article>
 

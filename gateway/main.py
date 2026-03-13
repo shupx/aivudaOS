@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
             logger.info("Autostart started apps: %s", summary["started"])
 
     if UI_DIST_DIR.exists():
-        # 开发环境直接提供静态文件(使得访问后端ip:port也能打开前端网页)，可以去掉，生产环境建议使用专门的静态文件服务器（如 nginx）来提供 UI 文件
+        # 开发环境直接提供静态文件（使得访问后端 ip:port 也能打开前端网页），可以去掉；生产环境建议使用专门的静态文件服务器或反向代理来提供 UI 文件
         app.mount(
             "/",
             StaticFiles(directory=str(UI_DIST_DIR), html=True),

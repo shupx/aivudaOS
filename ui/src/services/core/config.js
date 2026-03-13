@@ -47,6 +47,13 @@ export async function triggerRelogin() {
   })
 }
 
+export async function triggerAvahiRestart() {
+  return request('/api/config/system/avahi/restart', {
+    method: 'POST',
+    auth: true,
+  })
+}
+
 export function resolveAppStoreBaseUrl(configData) {
   const fromConfig = String(configData?.appstore_base_url || '').trim()
   if (fromConfig) {

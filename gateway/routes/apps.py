@@ -176,7 +176,11 @@ async def get_active_configs(token: str) -> dict[str, Any]:
         cfg = config.get_app_config(app_id, app_version)
         manifest = _get_manifest_from_db(app_id, app_version)
         schema = manifest.get("config_schema") if isinstance(manifest, dict) else {}
-        default_config = manifest.get("default_config") if isinstance(manifest, dict) else {}
+        default_config = config.get_app_default_config(
+            app_id,
+            app_version,
+            fallback=(manifest.get("default_config") if isinstance(manifest, dict) else {}),
+        )
         normalized_schema = normalize_config_schema(schema)
         data = dict(cfg.data) if cfg.version > 0 else dict(default_config or {})
 
@@ -186,6 +190,7 @@ async def get_active_configs(token: str) -> dict[str, Any]:
                 "name": str(app.get("name") or app_id),
                 "app_version": app_version,
                 "data": data,
+                "default_data": dict(default_config or {}),
                 "version": cfg.version,
                 "updated_at": cfg.updated_at,
                 "schema": schema or {},
@@ -655,7 +660,7 @@ async def stream_operation_events(
 async def get_app_config(app_id: str, token: str, app_version: str | None = None) -> dict[str, Any]:
     """Get config for an installed app.
 
-    Reads default_config from the manifest stored in DB.
+    Reads default config from runtime default file, with manifest fallback.
     """
     _require_auth(token)
     config = get_config_service()
@@ -667,7 +672,12 @@ async def get_app_config(app_id: str, token: str, app_version: str | None = None
 
     cfg = config.get_app_config(app_id, target_version)
     manifest = _get_manifest_from_db(app_id, target_version)
-    data = dict(cfg.data) if cfg.version > 0 else dict(manifest.get("default_config") or {})
+    default_config = config.get_app_default_config(
+        app_id,
+        target_version,
+        fallback=manifest.get("default_config") or {},
+    )
+    data = dict(cfg.data) if cfg.version > 0 else default_config
 
     constraints = _get_constraints_for_app(app_id)
     normalized_schema = normalize_config_schema(manifest.get("config_schema") or {})
@@ -727,7 +737,12 @@ async def put_app_config(
         )
 
     current_cfg = config.get_app_config(app_id, target_version)
-    current_data = current_cfg.data if current_cfg.version > 0 else dict(manifest.get("default_config") or {})
+    default_config = config.get_app_default_config(
+        app_id,
+        target_version,
+        fallback=manifest.get("default_config") or {},
+    )
+    current_data = current_cfg.data if current_cfg.version > 0 else default_config
     blocked_paths = magnet.blocked_paths_for_app_update(
         app_id=app_id,
         app_version=target_version,
@@ -872,7 +887,11 @@ def _resolve_endpoint_value(
         source = cfg.data
     else:
         manifest = _get_manifest_from_db(app_id, active_version)
-        source = manifest.get("default_config") or {}
+        source = config.get_app_default_config(
+            app_id,
+            active_version,
+            fallback=manifest.get("default_config") or {},
+        )
     return _nested_get(source, path)
 
 

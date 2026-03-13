@@ -239,7 +239,11 @@ class MagnetService:
             app_cfg = self._config.get_app_config(app_id, app_version)
             manifest = self._get_manifest(app_id, app_version)
             schema = manifest.get("config_schema") or {}
-            defaults = manifest.get("default_config") or {}
+            defaults = self._config.get_app_default_config(
+                app_id,
+                app_version,
+                fallback=manifest.get("default_config") or {},
+            )
             source = app_cfg.data if app_cfg.version > 0 else defaults
 
             for path, leaf_schema in _flatten_schema_leaves(schema).items():
@@ -294,7 +298,11 @@ class MagnetService:
                 data = dict(cfg.data)
                 if cfg.version == 0:
                     manifest = self._get_manifest(app_id, app_version)
-                    data = dict(manifest.get("default_config") or {})
+                    data = self._config.get_app_default_config(
+                        app_id,
+                        app_version,
+                        fallback=manifest.get("default_config") or {},
+                    )
 
                 _nested_set(data, target_path, value)
 

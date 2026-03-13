@@ -16,6 +16,7 @@ class AppManifest:
     pre_uninstall: str | None = None
     update_this_version: str | None = None
     ui_index_path: str = ""
+    caddyfile_config_path: str = ""
     default_config_path: str = ""
     config_schema_path: str = ""
     default_config: dict[str, Any] = field(default_factory=dict)
@@ -34,6 +35,7 @@ class AppManifest:
             pre_uninstall=raw.get("pre_uninstall"),
             update_this_version=raw.get("update_this_version"),
             ui_index_path=str(raw.get("ui_index_path") or ""),
+            caddyfile_config_path=str(raw.get("caddyfile_config_path") or ""),
             default_config_path=str(raw.get("default_config_path") or ""),
             config_schema_path=str(raw.get("config_schema_path") or ""),
             default_config=raw.get("default_config") or {},
@@ -62,6 +64,8 @@ class AppManifest:
             d["update_this_version"] = self.update_this_version
         if self.ui_index_path:
             d["ui_index_path"] = self.ui_index_path
+        if self.caddyfile_config_path:
+            d["caddyfile_config_path"] = self.caddyfile_config_path
         return d
 
 

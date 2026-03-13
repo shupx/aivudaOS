@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import yaml
 
+from core.config.avahi import AvahiService
+
 # PROJECT_ROOT is the aivudaOS/ directory itself
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CADDY_BIN_PATH = PROJECT_ROOT / ".tools" / "caddy" / "caddy"
+CADDYFILE_TEMPLATE_PATH = PROJECT_ROOT / "Caddyfile_template"
 
 
 def _runtime_root() -> Path:
@@ -20,6 +25,7 @@ RUNTIME_ROOT = _runtime_root()
 
 # Config files (YAML)
 CONFIG_DIR = RUNTIME_ROOT / "config"
+CADDYFILE_PATH = CONFIG_DIR / "Caddyfile"
 OS_CONFIG_PATH = CONFIG_DIR / "os.yaml"
 SYS_CONFIG_PATH = CONFIG_DIR / "sys.yaml"
 USERS_CONFIG_PATH = CONFIG_DIR / "users.yaml"
@@ -97,20 +103,51 @@ def ensure_dirs() -> None:
 
 
 def _ensure_default_runtime_files() -> None:
-    if not OS_CONFIG_PATH.exists():
+    avahi = AvahiService()
+    os_raw = {}
+    if OS_CONFIG_PATH.exists():
+        loaded = yaml.safe_load(OS_CONFIG_PATH.read_text("utf-8")) or {}
+        if isinstance(loaded, dict):
+            os_raw = dict(loaded)
+
+    if not isinstance(os_raw, dict):
+        os_raw = {}
+
+    changed = False
+    created_avahi = False
+
+    if "_version" not in os_raw:
+        os_raw["_version"] = 1
+        changed = True
+    if "_updated_at" not in os_raw:
+        os_raw["_updated_at"] = None
+        changed = True
+    if "_updated_by" not in os_raw:
+        os_raw["_updated_by"] = "system"
+        changed = True
+
+    for key, default_value in DEFAULT_OS_CONFIG.items():
+        if key not in os_raw:
+            os_raw[key] = default_value
+            changed = True
+
+    if "avahi_hostname" not in os_raw:
+        generated = avahi.generate_hostname(existing={str(os_raw.get("avahi_hostname") or "").strip().lower()})
+        os_raw["avahi_hostname"] = generated
+        created_avahi = True
+        changed = True
+
+    if changed or (not OS_CONFIG_PATH.exists()):
         OS_CONFIG_PATH.write_text(
-            yaml.dump(
-                {
-                    "_version": 1,
-                    "_updated_at": None,
-                    "_updated_by": "system",
-                    **DEFAULT_OS_CONFIG,
-                },
-                default_flow_style=False,
-                allow_unicode=True,
-            ),
+            yaml.dump(os_raw, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",
         )
+
+    if created_avahi:
+        try:
+            avahi.write_and_restart(str(os_raw.get("avahi_hostname") or ""))
+        except Exception:
+            pass
 
     if not USERS_CONFIG_PATH.exists():
         USERS_CONFIG_PATH.write_text(
@@ -138,3 +175,6 @@ def _ensure_default_runtime_files() -> None:
             yaml.dump(DEFAULT_MAGNETS_CONFIG, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",
         )
+
+    if not CADDYFILE_PATH.exists() and CADDYFILE_TEMPLATE_PATH.exists():
+        shutil.copy2(CADDYFILE_TEMPLATE_PATH, CADDYFILE_PATH)

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from core.apps.caddy_config import CaddyConfigService
 from core.apps.config_validation import validate_config_data
 from core.apps.magnet import MagnetService
 from core.apps.models import AppManifest, AppRuntimeState
@@ -46,6 +47,7 @@ class RuntimeService:
         self._magnet = magnet_service
         self._systemd = SystemdRuntimeBackend(PROJECT_ROOT)
         self._script_hooks = ScriptHookRunner()
+        self._caddy = CaddyConfigService(versioning=versioning)
 
     # ------------------------------------------------------------------ #
     #  Manifest from DB
@@ -448,12 +450,31 @@ class RuntimeService:
             raise NotFoundError(str(exc)) from exc
 
         self._ensure_version_config_ready(app_id, version, manifest)
+        try:
+            self._caddy.validate_candidate(
+                app_id,
+                manifest,
+                self._versioning.version_dir(app_id, version),
+            )
+        except InvalidConfigError as exc:
+            raise AppRuntimeError(f"switch_version validation failed: {exc}") from exc
 
         if runtime_state.running and restart:
             self.stop(app_id)
 
         self._versioning.activate_version(app_id, version)
         self._magnet.recompute(updated_by="system")
+        try:
+            self._caddy.sync_and_reload()
+        except InvalidConfigError as exc:
+            if current_active and current_active != version:
+                self._versioning.activate_version(app_id, current_active)
+                self._magnet.recompute(updated_by="system")
+                try:
+                    self._caddy.sync_and_reload()
+                except InvalidConfigError:
+                    pass
+            raise AppRuntimeError(f"switch_version failed while reloading caddy: {exc}") from exc
 
         if runtime_state.running and restart:
             self.start(app_id)
@@ -635,6 +656,10 @@ class RuntimeService:
 
         emit("status", phase="completed", status="completed", message="卸载完成", app_id=app_id)
         self._magnet.recompute(updated_by="system")
+        try:
+            self._caddy.sync_and_reload()
+        except InvalidConfigError as exc:
+            raise AppRuntimeError(f"uninstall failed while reloading caddy: {exc}") from exc
 
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
@@ -781,7 +806,12 @@ class RuntimeService:
     ) -> dict[str, str]:
         self._ensure_version_config_ready(app_id, app_version, manifest)
         cfg = self._config.get_app_config(app_id, app_version)
-        data = dict(cfg.data) if cfg.version > 0 else dict(manifest.default_config)
+        default_data = self._config.get_app_default_config(
+            app_id,
+            app_version,
+            fallback=manifest.default_config,
+        )
+        data = dict(cfg.data) if cfg.version > 0 else default_data
         try:
             validate_config_data(
                 data,
@@ -821,7 +851,12 @@ class RuntimeService:
             self._config.init_app_config(app_id, app_version, manifest.default_config)
             cfg = self._config.get_app_config(app_id, app_version)
 
-        data = dict(cfg.data) if cfg.version > 0 else dict(manifest.default_config)
+        default_data = self._config.get_app_default_config(
+            app_id,
+            app_version,
+            fallback=manifest.default_config,
+        )
+        data = dict(cfg.data) if cfg.version > 0 else default_data
         try:
             validate_config_data(
                 data,

@@ -2,15 +2,18 @@
   auto_https disable_redirects
 }
 
-(aivudaos_site) {
-  encode zstd gzip
 
+(aivudaos_common_route) {
   @api path /aivuda_os/api*
 
   route {
     handle @api {
+      encode zstd gzip
       reverse_proxy 127.0.0.1:8000
     }
+
+    # BEGIN AIVUDA APP IMPORTS
+    # END AIVUDA APP IMPORTS
 
     handle {
       root * ./ui/dist
@@ -21,10 +24,10 @@
 }
 
 http://:80 {
-  import aivudaos_site
+  import aivudaos_common_route
 }
 
-https://{$AIVUDAOS_PUBLIC_HTTPS_HOST:127.0.0.1}:8443, https://{$AIVUDAOS_PRIVATE_HTTPS_HOST:127.0.0.1}:8443 {
+https://__AVAHI_HOSTNAME__.local:8443 {
   tls internal
-  import aivudaos_site
+  import aivudaos_common_route
 }

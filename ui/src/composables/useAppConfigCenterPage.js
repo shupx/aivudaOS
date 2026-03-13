@@ -2,7 +2,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { fetchActiveAppConfigs, updateAppConfig, updateMagnetGroup } from '../services/core/apps'
-import { fetchOsConfig, fetchSysConfig, updateOsConfig, updateSysConfig } from '../services/core/config'
+import { fetchSysConfig, updateSysConfig } from '../services/core/config'
 
 export function useAppConfigCenterPage() {
   const { t } = useI18n()
@@ -19,6 +19,7 @@ export function useAppConfigCenterPage() {
   const originalByApp = ref({})
   const revisionByApp = ref({})
   const appVersionByApp = ref({})
+  const defaultDataByApp = ref({})
   const schemaByApp = ref({})
   const readonlyPathsByApp = ref({})
   const selectedAppId = ref('')
@@ -33,9 +34,9 @@ export function useAppConfigCenterPage() {
   const sysOriginalData = ref({})
   const sysVersion = ref(0)
   const sysReadonlyPaths = ref([])
-  const osDraftData = ref({})
-  const osOriginalData = ref({})
-  const osVersion = ref(0)
+  const needRestartToastVisible = ref(false)
+  const needRestartToastMessage = ref('')
+  let needRestartToastTimer = null
   const showSystemAddModal = ref(false)
   const newSystemPath = ref('')
   const newSystemValue = ref('')
@@ -74,17 +75,7 @@ export function useAppConfigCenterPage() {
       description: isRecord(schemaMap[item.path]) && typeof schemaMap[item.path].description === 'string'
         ? schemaMap[item.path].description
         : '',
-    }))
-  })
-
-  const osRows = computed(() => {
-    return flattenDataLeaves(osDraftData.value || {}, new Set()).map((item) => ({
-      ...item,
-      appId: '__os__',
-      appName: t('appConfigCenter.osTitle'),
-      appVersion: '-',
-      scope: 'os',
-      enumValues: osParamOptions(item.path),
+      needRestart: isRecord(schemaMap[item.path]) && schemaMap[item.path].need_restart === true,
     }))
   })
 
@@ -120,12 +111,13 @@ export function useAppConfigCenterPage() {
 
       const schema = schemaByApp.value[app.app_id] || {}
       const appData = draftByApp.value[app.app_id] || {}
+      const defaultData = defaultDataByApp.value[app.app_id] || {}
       const readonlyPaths = new Set(readonlyPathsByApp.value[app.app_id] || [])
       const appRows = flattenSchema(schema, appData, {
         appId: app.app_id,
         appName: app.name || app.app_id,
         appVersion: app.app_version || '',
-      }, readonlyPaths)
+      }, readonlyPaths, defaultData)
       result.push(...appRows)
     }
 
@@ -150,7 +142,7 @@ export function useAppConfigCenterPage() {
     success.value = ''
 
     try {
-      const [data, sysData, osData] = await Promise.all([fetchActiveAppConfigs(), fetchSysConfig(), fetchOsConfig()])
+      const [data, sysData] = await Promise.all([fetchActiveAppConfigs(), fetchSysConfig()])
       const items = Array.isArray(data?.items) ? data.items : []
       appItems.value = items
 
@@ -158,6 +150,7 @@ export function useAppConfigCenterPage() {
       const nextOriginal = {}
       const nextRevision = {}
       const nextVersion = {}
+      const nextDefaultData = {}
       const nextSchema = {}
       const nextReadonly = {}
 
@@ -170,6 +163,7 @@ export function useAppConfigCenterPage() {
         nextOriginal[appId] = deepClone(appData)
         nextRevision[appId] = Number(item?.version || 0)
         nextVersion[appId] = String(item?.app_version || '')
+        nextDefaultData[appId] = deepClone(item?.default_data || {})
         nextSchema[appId] = item?.normalized_schema || item?.schema || {}
         nextReadonly[appId] = Array.isArray(item?.readonly_paths) ? item.readonly_paths : []
       }
@@ -178,6 +172,7 @@ export function useAppConfigCenterPage() {
       originalByApp.value = nextOriginal
       revisionByApp.value = nextRevision
       appVersionByApp.value = nextVersion
+      defaultDataByApp.value = nextDefaultData
       schemaByApp.value = nextSchema
       readonlyPathsByApp.value = nextReadonly
 
@@ -187,10 +182,6 @@ export function useAppConfigCenterPage() {
       sysOriginalData.value = deepClone(sysData?.data || {})
       sysVersion.value = Number(sysData?.version || 0)
       sysReadonlyPaths.value = Array.isArray(sysData?.readonly_paths) ? sysData.readonly_paths : []
-
-      osDraftData.value = deepClone(osData?.data || {})
-      osOriginalData.value = deepClone(osData?.data || {})
-      osVersion.value = Number(osData?.version || 0)
 
       const queryAppId = String(route.query.app_id || '')
       if (queryAppId && nextDraft[queryAppId]) {
@@ -254,9 +245,6 @@ export function useAppConfigCenterPage() {
   function getCellValue(row) {
     if (row?.scope === 'sys') {
       return nestedGet(sysDraftData.value || {}, row.path)
-    }
-    if (row?.scope === 'os') {
-      return nestedGet(osDraftData.value || {}, row.path)
     }
     const appData = draftByApp.value[row.appId] || {}
     return nestedGet(appData, row.path)
@@ -351,34 +339,6 @@ export function useAppConfigCenterPage() {
       return
     }
 
-    if (row?.scope === 'os') {
-      const beforeData = deepClone(osDraftData.value || {})
-      const nextData = deepClone(osDraftData.value || {})
-      nestedSet(nextData, row.path, nextValue)
-      osDraftData.value = nextData
-
-      const key = cellErrorKey(row)
-      if (cellErrors.value[key]) {
-        const nextErrors = { ...cellErrors.value }
-        delete nextErrors[key]
-        cellErrors.value = nextErrors
-      }
-
-      error.value = ''
-      success.value = ''
-
-      try {
-        const resp = await updateOsConfig(deepClone(nextData), Number(osVersion.value || 0))
-        osVersion.value = Number(resp?.version || osVersion.value || 0)
-        osOriginalData.value = deepClone(nextData)
-        success.value = t('appConfigCenter.autoSyncSuccess')
-      } catch (err) {
-        osDraftData.value = beforeData
-        error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
-      }
-      return
-    }
-
     const beforeAppData = deepClone(draftByApp.value[row.appId] || {})
     const appData = deepClone(draftByApp.value[row.appId] || {})
     nestedSet(appData, row.path, nextValue)
@@ -413,6 +373,9 @@ export function useAppConfigCenterPage() {
       }
       await refreshAfterAppChange()
       success.value = t('appConfigCenter.autoSyncSuccess')
+      if (row.needRestart === true) {
+        showNeedRestartToast(row)
+      }
     } catch (err) {
       draftByApp.value = {
         ...draftByApp.value,
@@ -488,12 +451,12 @@ export function useAppConfigCenterPage() {
       }
     }
 
-    const hasOsChange = changes.some((item) => item.scope === 'sys')
-    if (hasOsChange) {
+    const hasSystemChange = changes.some((item) => item.scope === 'sys')
+    if (hasSystemChange) {
       try {
-        const resp = await updateSysConfig(deepClone(osDraftData.value || {}), Number(osVersion.value || 0))
-        osVersion.value = Number(resp?.version || osVersion.value || 0)
-        osOriginalData.value = deepClone(osDraftData.value || {})
+        const resp = await updateSysConfig(deepClone(sysDraftData.value || {}), Number(sysVersion.value || 0))
+        sysVersion.value = Number(resp?.version || sysVersion.value || 0)
+        sysOriginalData.value = deepClone(sysDraftData.value || {})
       } catch (err) {
         failed.push({
           appId: '__system__',
@@ -612,29 +575,29 @@ export function useAppConfigCenterPage() {
       })
     }
 
-    const oldSysPaths = flattenLeafPaths(sysOriginalData.value || {})
-    const newSysPaths = flattenLeafPaths(sysDraftData.value || {})
-    const mergedPathSet = new Set([...oldSysPaths, ...newSysPaths])
-    for (const path of mergedPathSet) {
-      const before = nestedGet(osOriginalData.value || {}, path)
-      const after = nestedGet(osDraftData.value || {}, path)
-      if (isValueEqual(before, after)) {
-        continue
-      }
-      if (output.some((item) => item.scope === 'sys' && item.path === path)) {
-        continue
-      }
-      output.push({
-        scope: 'sys',
-        appId: '__system__',
-        appName: t('appConfigCenter.systemTitle'),
-        path,
-        before,
-        after,
-      })
-    }
-
     return output
+  }
+
+  function showNeedRestartToast(row) {
+    if (needRestartToastTimer) {
+      clearTimeout(needRestartToastTimer)
+      needRestartToastTimer = null
+    }
+    needRestartToastMessage.value = t('appConfigCenter.needRestartToast', {
+      appName: row?.appName || row?.appId || '-',
+      path: row?.path || '-',
+    })
+    needRestartToastVisible.value = true
+    needRestartToastTimer = window.setTimeout(() => {
+      needRestartToastVisible.value = false
+      needRestartToastTimer = null
+    }, 3000)
+  }
+
+  function getNeedRestartText(row) {
+    return row?.needRestart === true
+      ? t('appConfigCenter.needRestartYes')
+      : t('appConfigCenter.needRestartNo')
   }
 
   function goBackApps() {
@@ -853,16 +816,6 @@ export function useAppConfigCenterPage() {
       })
   }
 
-  function osParamOptions(path) {
-    if (path === 'runtime_process_manager') {
-      return ['auto', 'systemd', 'popen']
-    }
-    if (path === 'runtime_systemd_scope') {
-      return ['user', 'system']
-    }
-    return []
-  }
-
   function getRowThemeClass(appId) {
     return appThemeById.value[String(appId || '')] || 'config-row-app-0'
   }
@@ -929,7 +882,6 @@ export function useAppConfigCenterPage() {
     setSelectedAppId,
     rows,
     systemRows,
-    osRows,
     magnets,
     magnetConflicts,
     magnetSaving,
@@ -946,6 +898,7 @@ export function useAppConfigCenterPage() {
     getDefaultText,
     getRangeText,
     getDescriptionText,
+    getNeedRestartText,
     getRowThemeClass,
     getSystemEnumValues,
     getSystemInputType,
@@ -982,10 +935,12 @@ export function useAppConfigCenterPage() {
     onMagnetTextChange,
     saveMagnetChanges,
     valueToInlineText,
+    needRestartToastVisible,
+    needRestartToastMessage,
   }
 }
 
-function flattenSchema(schema, data, appInfo, readonlyPaths, parentPath = '') {
+function flattenSchema(schema, data, appInfo, readonlyPaths, defaultData, parentPath = '') {
   if (!schema || typeof schema !== 'object') {
     return []
   }
@@ -1000,7 +955,7 @@ function flattenSchema(schema, data, appInfo, readonlyPaths, parentPath = '') {
         continue
       }
       const childPath = parentPath ? `${parentPath}.${key}` : key
-      rows.push(...flattenSchema(childSchema, data, appInfo, readonlyPaths, childPath))
+      rows.push(...flattenSchema(childSchema, data, appInfo, readonlyPaths, defaultData, childPath))
     }
     return rows
   }
@@ -1021,9 +976,10 @@ function flattenSchema(schema, data, appInfo, readonlyPaths, parentPath = '') {
     enumValues,
     rangeText,
     description: typeof schema.description === 'string' ? schema.description : '',
-    defaultValue: schema.default,
-    hasDefault: Object.prototype.hasOwnProperty.call(schema, 'default'),
+    defaultValue: nestedGet(defaultData, parentPath),
+    hasDefault: hasNestedPath(defaultData, parentPath),
     currentValue: nestedGet(data, parentPath),
+    needRestart: schema.need_restart === true,
     readonly: readonlyPaths.has(parentPath),
   })
 
@@ -1321,6 +1277,19 @@ function nestedGet(data, dottedPath) {
     cursor = cursor[segment]
   }
   return cursor
+}
+
+function hasNestedPath(data, dottedPath) {
+  if (!dottedPath) return false
+  const segments = String(dottedPath).split('.')
+  let cursor = data
+  for (const segment of segments) {
+    if (!isRecord(cursor) || !(segment in cursor)) {
+      return false
+    }
+    cursor = cursor[segment]
+  }
+  return true
 }
 
 function nestedSet(data, dottedPath, value) {

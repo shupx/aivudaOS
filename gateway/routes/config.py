@@ -70,6 +70,21 @@ async def relogin_system_user(token: str) -> dict[str, Any]:
     }
 
 
+@router.post("/system/avahi/restart")
+async def restart_avahi(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    config = get_config_service()
+    try:
+        config.restart_avahi_daemon()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to restart avahi-daemon.service: {exc}")
+    return {"ok": True}
+
+
 @router.get("")
 async def get_config(token: str) -> dict[str, Any]:
     _require_auth(token)
@@ -160,6 +175,8 @@ async def put_os_config(payload: ConfigUpdateRequest, token: str) -> dict[str, A
             break
         except ConfigVersionConflictError:
             continue
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     if result is None:
         raise HTTPException(status_code=409, detail="Config version conflict")
