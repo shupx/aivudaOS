@@ -34,7 +34,20 @@ export AIVUDAOS_WS_ROOT=/your/custom/path
 
 首次启动会自动创建所需目录和默认配置文件（`os.yaml`、`sys.yaml`、`users.yaml`、`magnets.yaml`）。
 
-## 快速启动
+## 访问入口
+
+caddy代理的入口： [http://127.0.0.1:80]()（仅本机） 或者 [https://<avahi_hostname>.local:443]() （远端）
+
+`<avahi_hostname>`可由以下命令查看：
+
+```bash
+# 用下方的命令查看avahi用的hostname，优先看/etc/avahi/avahi-daemon.conf里的host-name=，如果没有设置就是本机hostname
+HOST=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "$HOST" ] && echo ${HOST} || hostname
+```
+
+比如上方指令如果输出`robot-2b5`，那么远端可以访问 [https://robot-2b5.local:443](https://robot-2b5.local:443)
+
+## 启动方法
 
 ### 开发模式（热重载，单命令）
 
@@ -53,16 +66,9 @@ cd ui && npm install && cd ..
 
 说明：`--dev` 模式下会持续监听后端与前端变更并自动重载；按 `Ctrl+C` 会统一停止后端、前端 watch 和 caddy。
 
-caddy代理的入口：http://127.0.0.1:80（仅本机）, https://avahi-hostname:443 (avahi-hostname填/etc/avahi/avahi-daemon.conf里的hostname，如果没设置就是本机的hostname，终端直接打hostname查看)
-
-`scripts/install_user_services.sh` 会将解析到的 `avahi_hostname` 同步写入：
-
-- `/etc/avahi/avahi-daemon.conf` 的 `[server]` 块 `host-name=<value>`
-- `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点 `https://<value>.local:443`
-
-并在 hostname 发生变化时执行 caddy reload。
-
 ### 生产模式（gunicorn + uvicorn worker）
+
+#### 手动启动：
 
 gateway 启动后自动检测 `ui/dist/`，将前端静态文件与 API 挂载在同一端口。
 
@@ -77,18 +83,20 @@ cd ui && npm install && npm run build && cd ..
 PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker gateway.main:app -b 127.0.0.1:8000
 ```
 
-打开 [http://127.0.0.1:80]()（仅本机） 或者 [https://<avahi_hostname>.local:443]()
+#### 开机自启动：
 
-其中 HTTP 仅支持本机地址 `127.0.0.1:80`，远端访问请使用 HTTPS 的 `https://<avahi_hostname>.local:443`
+安装开机自启动servcie：
 
 ```bash
-# 用下方的命令查看avahi用的hostname，优先看/etc/avahi/avahi-daemon.conf里的host-name=，如果没有设置就是本机hostname
-HOST=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "$HOST" ] && echo ${HOST} || hostname
+./scripts/install_user_services.sh
 ```
 
-比如上方指令如果输出`robot-2b5`，那么远端可以访问 [https://robot-2b5.local:443](https://robot-2b5.local:443)
+`scripts/install_user_services.sh` 会将解析到的 `avahi_hostname` 同步写入：
 
-本地可以用 [http://127.0.0.1:80](http://127.0.0.1:80)
+- `/etc/avahi/avahi-daemon.conf` 的 `[server]` 块 `host-name=<value>`
+- `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点 `https://<value>.local:443`
+
+并在 hostname 发生变化时执行 caddy reload。
 
 ## Caddy 配置说明
 
