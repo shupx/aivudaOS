@@ -31,6 +31,16 @@ class SudoNopasswdUpdateRequest(BaseModel):
     sudo_password: str | None = None
 
 
+class AptSourcesWriteRequest(BaseModel):
+    content: str
+    sudo_password: str | None = None
+
+
+class AptSourcesRestoreRequest(BaseModel):
+    backup_id: str
+    sudo_password: str | None = None
+
+
 class AppConfigUpdateRequest(BaseModel):
     version: int
     data: dict[str, Any]

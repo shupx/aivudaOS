@@ -3,9 +3,13 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { logout } from '../services/core/auth'
 import {
+  fetchAptSourcesBackups,
+  fetchAptSourcesList,
   fetchOsConfig,
   fetchSudoNopasswdSetting,
+  restoreAptSourcesBackup,
   triggerRelogin,
+  updateAptSourcesList,
   updateOsConfig,
   updateSudoNopasswdSetting,
 } from '../services/core/config'
@@ -32,6 +36,31 @@ export function useSystemSettingsPage() {
   const sudoPassword = ref('')
   const showSudoPassword = ref(false)
   const pendingToggleValue = ref(false)
+
+  const showAptSourcesModal = ref(false)
+  const aptSourcesLoading = ref(false)
+  const aptSourcesWriting = ref(false)
+  const aptSourcesText = ref('')
+  const aptSourcesPath = ref('/etc/apt/sources.list')
+  const aptSudoPassword = ref('')
+  const showAptSudoPassword = ref(false)
+  const showAptPasswordModal = ref(false)
+  const aptPendingAction = ref('')
+  const aptBackups = ref([])
+  const selectedAptBackupId = ref('')
+  const aptUpdateOutput = ref('')
+  const aptEditorTextRef = ref(null)
+  const aptEditorHighlightRef = ref(null)
+
+  const aptSourceLines = computed(() => {
+    const text = String(aptSourcesText.value || '')
+    const lines = text.split(/\r?\n/)
+    return lines.map((line, index) => ({
+      key: `apt-line-${index}`,
+      text: line,
+      comment: /^\s*#/.test(line),
+    }))
+  })
 
   const osRows = computed(() => flattenDataLeaves(osDraftData.value || {}))
 
@@ -113,6 +142,143 @@ export function useSystemSettingsPage() {
       error.value = String(err?.message || err || t('systemSettings.reloginFailed'))
     } finally {
       reloginPending.value = false
+    }
+  }
+
+  async function openAptSourcesModal() {
+    showAptSourcesModal.value = true
+    aptSudoPassword.value = ''
+    showAptSudoPassword.value = false
+    aptUpdateOutput.value = ''
+    selectedAptBackupId.value = ''
+    await loadAptSources()
+  }
+
+  function closeAptSourcesModal() {
+    showAptSourcesModal.value = false
+    closeAptPasswordModal()
+    aptUpdateOutput.value = ''
+    selectedAptBackupId.value = ''
+  }
+
+  function openAptPasswordModal(action) {
+    aptPendingAction.value = String(action || '').trim()
+    aptSudoPassword.value = ''
+    showAptSudoPassword.value = false
+    showAptPasswordModal.value = true
+  }
+
+  function closeAptPasswordModal() {
+    showAptPasswordModal.value = false
+    aptPendingAction.value = ''
+    aptSudoPassword.value = ''
+    showAptSudoPassword.value = false
+  }
+
+  function syncAptEditorScroll() {
+    const textNode = aptEditorTextRef.value
+    const highlightNode = aptEditorHighlightRef.value
+    if (!textNode || !highlightNode) {
+      return
+    }
+    highlightNode.scrollTop = textNode.scrollTop
+    highlightNode.scrollLeft = textNode.scrollLeft
+  }
+
+  async function loadAptSources() {
+    aptSourcesLoading.value = true
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+    try {
+      const [sourcesResp, backupsResp] = await Promise.all([
+        fetchAptSourcesList(),
+        fetchAptSourcesBackups(),
+      ])
+      aptSourcesText.value = String(sourcesResp?.content || '')
+      aptSourcesPath.value = String(sourcesResp?.path || '/etc/apt/sources.list')
+      aptBackups.value = Array.isArray(backupsResp?.items) ? backupsResp.items : []
+      selectedAptBackupId.value = String(aptBackups.value?.[0]?.backup_id || '')
+    } catch (err) {
+      error.value = String(err?.message || err || t('systemSettings.aptLoadFailed'))
+    } finally {
+      aptSourcesLoading.value = false
+    }
+  }
+
+  function requestWriteAptSources() {
+    if (aptSourcesWriting.value || aptSourcesLoading.value) return
+    openAptPasswordModal('write')
+  }
+
+  function requestRestoreAptSources() {
+    if (aptSourcesWriting.value || aptSourcesLoading.value) return
+    if (!selectedAptBackupId.value) {
+      error.value = t('systemSettings.aptBackupRequired')
+      return
+    }
+    openAptPasswordModal('restore')
+  }
+
+  async function submitAptAction() {
+    if (aptSourcesWriting.value || aptSourcesLoading.value) return
+    if (!aptSudoPassword.value.trim()) {
+      error.value = t('systemSettings.sudoPasswordRequired')
+      return
+    }
+
+    if (aptPendingAction.value === 'write') {
+      await writeAptSources()
+      return
+    }
+
+    if (aptPendingAction.value === 'restore') {
+      await restoreAptSources()
+      return
+    }
+  }
+
+  async function writeAptSources() {
+    if (aptSourcesWriting.value || aptSourcesLoading.value) return
+
+    aptSourcesWriting.value = true
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+    try {
+      const resp = await updateAptSourcesList(aptSourcesText.value, aptSudoPassword.value)
+      aptUpdateOutput.value = String(resp?.apt_update?.output || '')
+      success.value = t('systemSettings.aptWriteSuccess')
+      closeAptPasswordModal()
+      await loadAptSources()
+    } catch (err) {
+      error.value = String(err?.message || err || t('systemSettings.aptWriteFailed'))
+    } finally {
+      aptSourcesWriting.value = false
+    }
+  }
+
+  async function restoreAptSources() {
+    if (aptSourcesWriting.value || aptSourcesLoading.value) return
+    if (!selectedAptBackupId.value) return
+
+    const confirmed = window.confirm(t('systemSettings.aptRestoreConfirm'))
+    if (!confirmed) return
+
+    aptSourcesWriting.value = true
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+    try {
+      const resp = await restoreAptSourcesBackup(selectedAptBackupId.value, aptSudoPassword.value)
+      aptUpdateOutput.value = String(resp?.apt_update?.output || '')
+      success.value = t('systemSettings.aptRestoreSuccess')
+      closeAptPasswordModal()
+      await loadAptSources()
+    } catch (err) {
+      error.value = String(err?.message || err || t('systemSettings.aptRestoreFailed'))
+    } finally {
+      aptSourcesWriting.value = false
     }
   }
 
@@ -230,6 +396,29 @@ export function useSystemSettingsPage() {
     showSudoPassword,
     submitToggle,
     reloginNow,
+    showAptSourcesModal,
+    aptSourcesLoading,
+    aptSourcesWriting,
+    aptSourcesText,
+    aptSourcesPath,
+    aptSourceLines,
+    aptSudoPassword,
+    showAptSudoPassword,
+    showAptPasswordModal,
+    aptPendingAction,
+    aptBackups,
+    selectedAptBackupId,
+    aptUpdateOutput,
+    aptEditorTextRef,
+    aptEditorHighlightRef,
+    openAptSourcesModal,
+    closeAptSourcesModal,
+    closeAptPasswordModal,
+    syncAptEditorScroll,
+    loadAptSources,
+    requestWriteAptSources,
+    requestRestoreAptSources,
+    submitAptAction,
     osRows,
     getOsCellValue,
     getOsCellError,

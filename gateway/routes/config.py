@@ -10,13 +10,20 @@ from core.config.service import ConfigService
 from core.errors import AuthenticationError, ConfigVersionConflictError
 from core.errors import InvalidConfigError, NotFoundError
 from gateway.deps import (
+    get_apt_sources_service,
     get_auth_service,
     get_config_service,
     get_magnet_service,
     get_relogin_service,
     get_sudo_nopasswd_service,
 )
-from gateway.schemas import ConfigUpdateRequest, MagnetUpdateRequest, SudoNopasswdUpdateRequest
+from gateway.schemas import (
+    AptSourcesRestoreRequest,
+    AptSourcesWriteRequest,
+    ConfigUpdateRequest,
+    MagnetUpdateRequest,
+    SudoNopasswdUpdateRequest,
+)
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -83,6 +90,66 @@ async def restart_avahi(token: str) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to restart avahi-daemon.service: {exc}")
     return {"ok": True}
+
+
+@router.get("/system/apt-sources-list")
+async def get_apt_sources_list(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_apt_sources_service()
+    try:
+        return service.read_sources()
+    except RuntimeError as exc:
+        code = str(getattr(exc, "code", "APT_SOURCES_READ_FAILED"))
+        message = str(getattr(exc, "message", str(exc)))
+        status = 400 if code in {"SUDO_PASSWORD_REQUIRED"} else 500
+        raise HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+@router.get("/system/apt-sources-list/backups")
+async def list_apt_sources_backups(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_apt_sources_service()
+    try:
+        return {
+            "ok": True,
+            "items": service.list_backups(),
+        }
+    except RuntimeError as exc:
+        code = str(getattr(exc, "code", "APT_SOURCES_BACKUPS_FAILED"))
+        message = str(getattr(exc, "message", str(exc)))
+        raise HTTPException(status_code=500, detail={"code": code, "message": message})
+
+
+@router.put("/system/apt-sources-list")
+async def put_apt_sources_list(payload: AptSourcesWriteRequest, token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_apt_sources_service()
+    try:
+        return service.write_sources(payload.content, sudo_password=payload.sudo_password)
+    except RuntimeError as exc:
+        code = str(getattr(exc, "code", "APT_SOURCES_WRITE_FAILED"))
+        message = str(getattr(exc, "message", str(exc)))
+        status = 400 if code in {"SUDO_PASSWORD_REQUIRED", "APT_UPDATE_FAILED", "WRITE_FAILED"} else 500
+        raise HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+@router.post("/system/apt-sources-list/restore")
+async def restore_apt_sources_list(payload: AptSourcesRestoreRequest, token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_apt_sources_service()
+    try:
+        return service.restore_backup(payload.backup_id, sudo_password=payload.sudo_password)
+    except RuntimeError as exc:
+        code = str(getattr(exc, "code", "APT_SOURCES_RESTORE_FAILED"))
+        message = str(getattr(exc, "message", str(exc)))
+        status = 400 if code in {
+            "SUDO_PASSWORD_REQUIRED",
+            "BACKUP_ID_REQUIRED",
+            "BACKUP_NOT_FOUND",
+            "APT_UPDATE_FAILED",
+            "WRITE_FAILED",
+        } else 500
+        raise HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
 @router.get("")

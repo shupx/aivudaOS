@@ -153,7 +153,7 @@ App 启动时会注入配置路径相关环境变量：
 | `/dashboard/apps/configs` | 统一应用参数配置（所有 app active 版本） |
 | `/dashboard/apps/:appId/config` | 应用参数配置（按版本） |
 | `/dashboard/store` | 在线应用商店（查看与下载/安装） |
-| `/dashboard/settings` | 系统设置（sudo 免密、重登录） |
+| `/dashboard/settings` | 系统设置（sudo 免密、重登录、APT 源配置） |
 
 ## API 接口
 
@@ -170,8 +170,20 @@ App 启动时会注入配置路径相关环境变量：
 - `PUT  /aivuda_os/api/config/system/sudo-nopasswd`（更新 sudo 免密状态）
 - `POST /aivuda_os/api/config/system/relogin`（注销并重启 `user@UID.service`，用于用户组变更后重登录）
 - `POST /aivuda_os/api/config/system/avahi/restart`（重启 `avahi-daemon.service`）
+- `GET  /aivuda_os/api/config/system/apt-sources-list`（读取 `/etc/apt/sources.list`）
+- `GET  /aivuda_os/api/config/system/apt-sources-list/backups`（读取 APT 源备份列表）
+- `PUT  /aivuda_os/api/config/system/apt-sources-list`（写入 APT 源，写入前自动创建时间戳备份，并自动执行 `apt update`）
+- `POST /aivuda_os/api/config/system/apt-sources-list/restore`（按备份版本恢复 APT 源，并自动执行 `apt update`）
 
 说明：当 `avahi_hostname` 通过 OS 参数更新后，后端会立即同步修改运行时 `Caddyfile` 的 HTTPS 域名为 `https://<avahi_hostname>.local:443`，若 Caddy 正在运行会尝试自动 reload。
+
+### APT 源配置说明
+
+- UI 入口：`系统设置 -> 配置 APT 源`。
+- 当前仅管理单文件：`/etc/apt/sources.list`（不包含 `sources.list.d/*.list`）。
+- 每次写入或恢复前都会自动备份为时间戳文件：`/var/backups/aivudaos/apt-sources/sources.list.<timestamp>.bak`。
+- 写入和恢复后会自动执行 `apt update`，输出会在前端弹窗里显示。
+- 前端会收集 sudo 密码并仅用于当前请求，不会持久化到浏览器存储。
 
 ### 应用管理
 - `POST /aivuda_os/api/apps/repo/sync` — 从仓库同步应用目录

@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import i18n from '../i18n'
 import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy } from '../state/appState'
@@ -107,6 +107,17 @@ function stopPolling() {
   pollTimer = null
 }
 
+function isAppsPollingRoute(path) {
+  const value = String(path || '')
+  if (!value.startsWith('/dashboard/apps')) {
+    return false
+  }
+  if (value.startsWith('/dashboard/apps/configs')) {
+    return false
+  }
+  return true
+}
+
 export function useAppsPanel() {
   const route = useRoute()
   const router = useRouter()
@@ -124,9 +135,20 @@ export function useAppsPanel() {
 
   onMounted(() => {
     refresh()
-    startPolling()
 
-    if (String(route.query?.openUpload || '') === '1') {
+    watch(
+      () => route.path,
+      (path) => {
+        if (isAppsPollingRoute(path)) {
+          startPolling()
+          return
+        }
+        stopPolling()
+      },
+      { immediate: true },
+    )
+
+    if (isAppsPollingRoute(route.path) && String(route.query?.openUpload || '') === '1') {
       uploadModal.openUploadModal()
       const nextQuery = { ...route.query }
       delete nextQuery.openUpload

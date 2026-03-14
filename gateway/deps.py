@@ -9,6 +9,7 @@ from core.apps.runtime import RuntimeService
 from core.apps.versioning import VersioningService
 from core.auth.relogin import ReloginService
 from core.auth.service import AuthService
+from core.config.apt_sources import AptSourcesService
 from core.config.avahi import AvahiService
 from core.config.service import ConfigService
 from core.config.sudo_nopasswd import SudoNopasswdService
@@ -73,4 +74,9 @@ def get_sudo_nopasswd_service() -> SudoNopasswdService:
 @lru_cache
 def get_relogin_service() -> ReloginService:
     return ReloginService()
+
+
+@lru_cache
+def get_apt_sources_service() -> AptSourcesService:
+    return AptSourcesService()
 

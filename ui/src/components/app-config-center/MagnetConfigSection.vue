@@ -31,7 +31,7 @@ defineProps({
 
     <p class="muted">{{ t('appConfigCenter.magnetDesc') }}</p>
 
-    <div v-if="collapsed" class="muted">{{ t('appConfigCenter.magnetCollapsedHint') }}</div>
+    <div v-if="collapsed" class="muted"></div>
     <div v-else-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
     <div v-else class="table-wrap">
       <table class="config-table compact">

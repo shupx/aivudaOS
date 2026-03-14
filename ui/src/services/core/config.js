@@ -47,6 +47,36 @@ export async function triggerRelogin() {
   })
 }
 
+export async function fetchAptSourcesList() {
+  return request('/api/config/system/apt-sources-list', { auth: true })
+}
+
+export async function fetchAptSourcesBackups() {
+  return request('/api/config/system/apt-sources-list/backups', { auth: true })
+}
+
+export async function updateAptSourcesList(content, sudoPassword = '') {
+  return request('/api/config/system/apt-sources-list', {
+    method: 'PUT',
+    body: {
+      content: String(content || ''),
+      sudo_password: String(sudoPassword || ''),
+    },
+    auth: true,
+  })
+}
+
+export async function restoreAptSourcesBackup(backupId, sudoPassword = '') {
+  return request('/api/config/system/apt-sources-list/restore', {
+    method: 'POST',
+    body: {
+      backup_id: String(backupId || ''),
+      sudo_password: String(sudoPassword || ''),
+    },
+    auth: true,
+  })
+}
+
 export function resolveAppStoreBaseUrl(configData) {
   const fromConfig = String(configData?.appstore_base_url || '').trim()
   if (fromConfig) {

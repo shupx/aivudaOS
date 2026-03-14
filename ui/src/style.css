@@ -350,6 +350,10 @@ input {
   z-index: 30;
 }
 
+.modal-overlay-inner {
+  z-index: 40;
+}
+
 .modal-card {
   width: min(560px, 100%);
   background: #ffffff;
@@ -395,6 +399,30 @@ input {
 .modal-header h3 {
   margin: 0;
   font-size: 17px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-close-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.modal-close-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .empty-box {
@@ -540,6 +568,67 @@ input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mono-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.apt-modal {
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.apt-editor-shell {
+  position: relative;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  min-height: 300px;
+  height: 340px;
+}
+
+.apt-editor-highlight,
+.apt-editor-text {
+  margin: 0;
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.apt-editor-highlight {
+  pointer-events: none;
+  background: #ffffff;
+}
+
+.apt-editor-text {
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: #0f172a;
+}
+
+.apt-line-normal {
+  color: #0f172a;
+}
+
+.apt-line-comment {
+  color: #94a3b8;
 }
 
 .config-schema-output {
