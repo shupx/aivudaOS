@@ -102,10 +102,8 @@ export default {
     osSaveFailed: 'OS参数保存失败',
     osInvalidValue: 'OS参数值格式错误',
     osOptionNotAllowed: '该运行时选项暂不可用',
-    avahiRestartConfirm: '检测到 avahi_hostname 已变更，是否现在重启 avahi-daemon？',
-    avahiRestartPending: '主机名已更新，请稍后手动重启 avahi-daemon 以应用 mDNS 变更。',
-    avahiRestartSuccess: 'avahi-daemon 重启成功',
-    avahiRestartFailed: 'avahi-daemon 重启失败',
+    avahiHostnameChangeConfirm: '修改 avahi_hostname 后，浏览器需要重新输入新的域名地址并刷新页面。是否继续更新？',
+    avahiHostnameChangeCanceled: '已取消更新 avahi_hostname。',
   },
   store: {
     title: '在线应用商店',

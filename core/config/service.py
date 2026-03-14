@@ -47,10 +47,27 @@ class ConfigService:
 
         new_hostname = str(updated.data.get("avahi_hostname") or "").strip().lower()
         if new_hostname and new_hostname != previous_hostname:
-            self._avahi.write_hostname(new_hostname)
-            caddy_changed = self._caddy.sync_https_hostname(new_hostname)
-            if caddy_changed:
-                self._caddy.reload_if_running()
+            try:
+                self._avahi.write_and_restart(new_hostname)
+                caddy_changed = self._caddy.sync_https_hostname(new_hostname)
+                if caddy_changed:
+                    self._caddy.reload_if_running()
+            except Exception as exc:
+                rollback_error: Exception | None = None
+                try:
+                    self._rollback_os_config_after_hostname_sync_failure(
+                        previous_data=previous.data,
+                        failed_version=updated.version,
+                        updated_by=username,
+                    )
+                except Exception as rb_exc:
+                    rollback_error = rb_exc
+
+                if rollback_error is not None:
+                    raise RuntimeError(
+                        f"{exc}. Also failed to rollback avahi_hostname in OS config: {rollback_error}"
+                    ) from exc
+                raise
 
         return updated
 
@@ -258,6 +275,21 @@ class ConfigService:
 
         return VersionedConfig(
             data=data, version=new_version, updated_at=now, updated_by=updated_by
+        )
+
+    def _rollback_os_config_after_hostname_sync_failure(
+        self,
+        *,
+        previous_data: dict[str, Any],
+        failed_version: int,
+        updated_by: str,
+    ) -> None:
+        rollback_data = dict(previous_data)
+        self._write_versioned(
+            OS_CONFIG_PATH,
+            rollback_data,
+            expected_version=failed_version,
+            updated_by=updated_by,
         )
 
     def _resolve_app_config_read_path(self, app_id: str, app_version: str) -> Path | None:

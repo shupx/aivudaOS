@@ -9,6 +9,9 @@ from core.paths import CADDY_BIN_PATH, CADDYFILE_PATH, CADDYFILE_TEMPLATE_PATH
 
 
 class CaddyRuntimeService:
+    '''
+    For modifying https domain in Caddyfile according to the avahi hostname (mDNS)
+    '''
     _https_site_re = re.compile(
         r"(?m)^(?P<indent>\s*)https://(?:\{\$AVAHI_HOSTNAME\}|__AVAHI_HOSTNAME__|[a-z0-9][a-z0-9-]{0,62})\.local(?P<port>:\d+)?\s*\{"
     )

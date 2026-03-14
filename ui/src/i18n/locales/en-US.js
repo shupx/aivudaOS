@@ -102,10 +102,8 @@ export default {
     osSaveFailed: 'Failed to save OS parameters',
     osInvalidValue: 'Invalid OS parameter value',
     osOptionNotAllowed: 'This runtime option is temporarily unavailable',
-    avahiRestartConfirm: 'The avahi_hostname has changed. Restart avahi-daemon now?',
-    avahiRestartPending: 'Hostname updated. Please restart avahi-daemon later to apply mDNS changes.',
-    avahiRestartSuccess: 'avahi-daemon restarted successfully',
-    avahiRestartFailed: 'Failed to restart avahi-daemon',
+    avahiHostnameChangeConfirm: 'Updating avahi_hostname requires reopening the new domain URL in your browser and refreshing the page. Continue?',
+    avahiHostnameChangeCanceled: 'avahi_hostname update is canceled.',
   },
   store: {
     title: 'Online App Store',

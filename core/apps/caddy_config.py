@@ -21,6 +21,9 @@ class _ActiveCaddyConfig:
 
 
 class CaddyConfigService:
+    '''
+    For importing app caddy config into the main Caddyfile
+    '''
     _BEGIN_MARKER = "# BEGIN AIVUDA APP IMPORTS"
     _END_MARKER = "# END AIVUDA APP IMPORTS"
 

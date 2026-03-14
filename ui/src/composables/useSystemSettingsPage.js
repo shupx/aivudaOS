@@ -5,7 +5,6 @@ import { logout } from '../services/core/auth'
 import {
   fetchOsConfig,
   fetchSudoNopasswdSetting,
-  triggerAvahiRestart,
   triggerRelogin,
   updateOsConfig,
   updateSudoNopasswdSetting,
@@ -157,6 +156,15 @@ export function useSystemSettingsPage() {
 
     const beforeData = deepClone(osDraftData.value || {})
     const beforeValue = nestedGet(beforeData, row.path)
+    if (row.path === 'avahi_hostname' && !isValueEqual(beforeValue, nextValue)) {
+      const confirmed = window.confirm(t('systemSettings.avahiHostnameChangeConfirm'))
+      if (!confirmed) {
+        osDraftData.value = beforeData
+        success.value = t('systemSettings.avahiHostnameChangeCanceled')
+        return
+      }
+    }
+
     const nextData = deepClone(osDraftData.value || {})
     nestedSet(nextData, row.path, nextValue)
     osDraftData.value = nextData
@@ -176,28 +184,11 @@ export function useSystemSettingsPage() {
       osVersion.value = Number(resp?.version || osVersion.value || 0)
       osOriginalData.value = deepClone(nextData)
       success.value = t('systemSettings.osSaveSuccess')
-
-      if (row.path === 'avahi_hostname' && !isValueEqual(beforeValue, nextValue)) {
-        await maybeRestartAvahi()
-      }
     } catch (err) {
+      const message = String(err?.message || err || t('systemSettings.osSaveFailed'))
       osDraftData.value = beforeData
-      error.value = String(err?.message || err || t('systemSettings.osSaveFailed'))
-    }
-  }
-
-  async function maybeRestartAvahi() {
-    const confirmed = window.confirm(t('systemSettings.avahiRestartConfirm'))
-    if (!confirmed) {
-      success.value = t('systemSettings.avahiRestartPending')
-      return
-    }
-
-    try {
-      await triggerAvahiRestart()
-      success.value = t('systemSettings.avahiRestartSuccess')
-    } catch (err) {
-      error.value = String(err?.message || err || t('systemSettings.avahiRestartFailed'))
+      await load()
+      error.value = message
     }
   }
 
