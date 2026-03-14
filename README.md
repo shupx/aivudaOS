@@ -2,7 +2,7 @@
 
 aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 aivudaAppStore 安装和运行应用。
 
-一个部署在云服务器上的示例：https://39.102.60.150:8443（手动允许证书）
+一个部署在云服务器上的示例：https://39.102.60.150:443（手动允许证书）
 
 ## 目录结构
 
@@ -53,12 +53,12 @@ cd ui && npm install && cd ..
 
 说明：`--dev` 模式下会持续监听后端与前端变更并自动重载；按 `Ctrl+C` 会统一停止后端、前端 watch 和 caddy。
 
-caddy代理的入口：http://localhost:80, https://avahi-hostname:8443 (avahi-hostname填/etc/avahi/avahi-daemon.conf里的hostname，如果没设置就是本机的hostname，终端直接打hostname查看)
+caddy代理的入口：http://127.0.0.1:80（仅本机）, https://avahi-hostname:443 (avahi-hostname填/etc/avahi/avahi-daemon.conf里的hostname，如果没设置就是本机的hostname，终端直接打hostname查看)
 
 `scripts/install_user_services.sh` 会将解析到的 `avahi_hostname` 同步写入：
 
 - `/etc/avahi/avahi-daemon.conf` 的 `[server]` 块 `host-name=<value>`
-- `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点 `https://<value>.local:8443`
+- `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点 `https://<value>.local:443`
 
 并在 hostname 发生变化时执行 caddy reload。
 
@@ -77,22 +77,22 @@ cd ui && npm install && npm run build && cd ..
 PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker gateway.main:app -b 127.0.0.1:8000
 ```
 
-打开 [http://<IP>:80]()  或者 [https://<avahi_hostname>.local:8443]()
+打开 [http://127.0.0.1:80]()（仅本机） 或者 [https://<avahi_hostname>.local:443]()
 
-其中http的设备IP可以填具体IP也可以填`<avahi_hostname>.local`，https则必须填`avahi hostname`
+其中 HTTP 仅支持本机地址 `127.0.0.1:80`，远端访问请使用 HTTPS 的 `https://<avahi_hostname>.local:443`
 
 ```bash
 # 用下方的命令查看avahi用的hostname，优先看/etc/avahi/avahi-daemon.conf里的host-name=，如果没有设置就是本机hostname
 HOST=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "$HOST" ] && echo ${HOST} || hostname
 ```
 
-比如上方指令如果输出`robot-2b5`，那么远端可以访问 [http://robot-2b5.local:80](http://robot-2b5.local:80) 或者 [https://robot-2b5.local:8443](htpps://robot-2b5.local:8443)
+比如上方指令如果输出`robot-2b5`，那么远端可以访问 [https://robot-2b5.local:443](https://robot-2b5.local:443)
 
-本地可以用http://localhost:80 
+本地可以用 [http://127.0.0.1:80](http://127.0.0.1:80)
 
 ## Caddy 配置说明
 
-Caddy 托管前端静态文件并反代 `/aivuda_os/api`，支持 HTTP 80 + `tls internal` 的 HTTPS 8443 部署，详见 [`docs/deploy-caddy.md`](docs/deploy-caddy.md)。
+Caddy 托管前端静态文件并反代 `/aivuda_os/api`，其中 HTTP 仅监听 `127.0.0.1:80`，并通过 `tls internal` 提供 HTTPS 443，详见 [`docs/deploy-caddy.md`](docs/deploy-caddy.md)。
 
 ## App 运行模式（systemd / popen）
 
@@ -163,7 +163,7 @@ App 启动时会注入配置路径相关环境变量：
 - `POST /aivuda_os/api/config/system/relogin`（注销并重启 `user@UID.service`，用于用户组变更后重登录）
 - `POST /aivuda_os/api/config/system/avahi/restart`（重启 `avahi-daemon.service`）
 
-说明：当 `avahi_hostname` 通过 OS 参数更新后，后端会立即同步修改运行时 `Caddyfile` 的 HTTPS 域名为 `https://<avahi_hostname>.local:8443`，若 Caddy 正在运行会尝试自动 reload。
+说明：当 `avahi_hostname` 通过 OS 参数更新后，后端会立即同步修改运行时 `Caddyfile` 的 HTTPS 域名为 `https://<avahi_hostname>.local:443`，若 Caddy 正在运行会尝试自动 reload。
 
 ### 应用管理
 - `POST /aivuda_os/api/apps/repo/sync` — 从仓库同步应用目录

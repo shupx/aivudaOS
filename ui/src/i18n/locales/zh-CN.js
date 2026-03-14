@@ -102,8 +102,10 @@ export default {
     osSaveFailed: 'OS参数保存失败',
     osInvalidValue: 'OS参数值格式错误',
     osOptionNotAllowed: '该运行时选项暂不可用',
+    sudoNopasswdHint: '提示：请先开启 sudo 免密（NOPASSWD）后再操作。',
     avahiHostnameChangeConfirm: '修改 avahi_hostname 后，浏览器需要重新输入新的域名地址并刷新页面。是否继续更新？',
     avahiHostnameChangeCanceled: '已取消更新 avahi_hostname。',
+    avahiHostnameUpdatedNotice: '请改用新网址登录并刷新（HTTPS 需更新证书信任，HTTP 仅本机 127.0.0.1:80）：',
   },
   store: {
     title: '在线应用商店',

@@ -102,8 +102,10 @@ export default {
     osSaveFailed: 'Failed to save OS parameters',
     osInvalidValue: 'Invalid OS parameter value',
     osOptionNotAllowed: 'This runtime option is temporarily unavailable',
+    sudoNopasswdHint: 'Tip: enable passwordless sudo (NOPASSWD) first, then retry.',
     avahiHostnameChangeConfirm: 'Updating avahi_hostname requires reopening the new domain URL in your browser and refreshing the page. Continue?',
     avahiHostnameChangeCanceled: 'avahi_hostname update is canceled.',
+    avahiHostnameUpdatedNotice: 'Please sign in again via the new URL and refresh (update HTTPS certificate trust; HTTP is localhost-only at 127.0.0.1:80):',
   },
   store: {
     title: 'Online App Store',

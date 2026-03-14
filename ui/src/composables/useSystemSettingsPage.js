@@ -19,6 +19,7 @@ export function useSystemSettingsPage() {
   const reloginPending = ref(false)
   const error = ref('')
   const success = ref('')
+  const successLinks = ref([])
   const username = ref('')
   const enabled = ref(false)
   const osDraftData = ref({})
@@ -38,6 +39,7 @@ export function useSystemSettingsPage() {
     loading.value = true
     error.value = ''
     success.value = ''
+    successLinks.value = []
     try {
       const [data, osData] = await Promise.all([fetchSudoNopasswdSetting(), fetchOsConfig()])
       username.value = String(data?.username || '')
@@ -72,6 +74,7 @@ export function useSystemSettingsPage() {
     saving.value = true
     error.value = ''
     success.value = ''
+    successLinks.value = []
     try {
       if (!sudoPassword.value.trim()) {
         error.value = t('systemSettings.sudoPasswordRequired')
@@ -99,6 +102,7 @@ export function useSystemSettingsPage() {
     reloginPending.value = true
     error.value = ''
     success.value = ''
+    successLinks.value = []
 
     try {
       await triggerRelogin()
@@ -161,6 +165,7 @@ export function useSystemSettingsPage() {
       if (!confirmed) {
         osDraftData.value = beforeData
         success.value = t('systemSettings.avahiHostnameChangeCanceled')
+        successLinks.value = []
         return
       }
     }
@@ -178,17 +183,30 @@ export function useSystemSettingsPage() {
 
     error.value = ''
     success.value = ''
+    successLinks.value = []
 
     try {
       const resp = await updateOsConfig(deepClone(nextData), Number(osVersion.value || 0))
       osVersion.value = Number(resp?.version || osVersion.value || 0)
       osOriginalData.value = deepClone(nextData)
-      success.value = t('systemSettings.osSaveSuccess')
+      const saveSuccess = buildOsSaveSuccessResult({
+        row,
+        beforeValue,
+        nextValue,
+        nextData,
+        t,
+      })
+      success.value = saveSuccess.message
+      successLinks.value = saveSuccess.links
     } catch (err) {
-      const message = String(err?.message || err || t('systemSettings.osSaveFailed'))
+      const message = appendSudoHintIfNeeded({
+        message: String(err?.message || err || t('systemSettings.osSaveFailed')),
+        t,
+      })
       osDraftData.value = beforeData
       await load()
       error.value = message
+      successLinks.value = []
     }
   }
 
@@ -202,6 +220,7 @@ export function useSystemSettingsPage() {
     reloginPending,
     error,
     success,
+    successLinks,
     username,
     enabled,
     toggleEnabled,
@@ -399,4 +418,46 @@ function isRecord(value) {
 
 function cellErrorKey(row) {
   return `os:${row.path}`
+}
+
+function appendSudoHintIfNeeded({ message, t }) {
+  const text = String(message || '')
+  const lowered = text.toLowerCase()
+  const hasSudo = lowered.includes('sudo')
+  const hasPasswordIssue =
+    lowered.includes('password') ||
+    lowered.includes('a password is required') ||
+    lowered.includes('sudo:')
+
+  if (!hasSudo || !hasPasswordIssue) {
+    return text
+  }
+
+  const hint = String(t('systemSettings.sudoNopasswdHint') || '').trim()
+  if (!hint || text.includes(hint)) {
+    return text
+  }
+  return `${text} ${hint}`
+}
+
+function buildOsSaveSuccessResult({ row, beforeValue, nextValue, nextData, t }) {
+  const base = String(t('systemSettings.osSaveSuccess') || 'OS parameters saved')
+  if (row?.path !== 'avahi_hostname' || isValueEqual(beforeValue, nextValue)) {
+    return { message: base, links: [] }
+  }
+
+  const hostname = String(nestedGet(nextData || {}, 'avahi_hostname') || '')
+    .trim()
+    .toLowerCase()
+  if (!hostname) {
+    return { message: base, links: [] }
+  }
+
+  return {
+    message: `${base} ${t('systemSettings.avahiHostnameUpdatedNotice')}`,
+    links: [
+      { url: `https://${hostname}.local`, label: `https://${hostname}.local` },
+      { url: 'http://127.0.0.1:80', label: 'http://127.0.0.1:80' },
+    ],
+  }
 }

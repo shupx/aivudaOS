@@ -10,6 +10,7 @@ const {
   reloginPending,
   error,
   success,
+  successLinks,
   username,
   enabled,
   toggleEnabled,
@@ -43,7 +44,18 @@ const {
     </header>
 
     <p v-if="error" class="error-text">{{ error }}</p>
-    <p v-if="success" class="ok-text">{{ success }}</p>
+    <p v-if="success" class="ok-text">
+      <span>{{ success }}</span>
+      <template v-if="successLinks.length">
+        <span
+          v-for="(link, index) in successLinks"
+          :key="`success-link-${link.url}`"
+        >
+          <span>{{ index === 0 ? ' ' : ' / ' }}</span>
+          <a :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
+        </span>
+      </template>
+    </p>
 
     <article class="actions-panel">
       <div class="setting-row">

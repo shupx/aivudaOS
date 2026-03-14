@@ -1,8 +1,3 @@
-{
-  auto_https disable_redirects
-}
-
-
 (aivudaos_common_route) {
   @api path /aivuda_os/api*
 
@@ -23,11 +18,11 @@
   }
 }
 
-http://:80 {
+http://127.0.0.1:80 {
   import aivudaos_common_route
 }
 
-https://__AVAHI_HOSTNAME__.local:8443 {
+https://__AVAHI_HOSTNAME__.local:443 {
   tls internal
   import aivudaos_common_route
 }

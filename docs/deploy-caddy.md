@@ -4,7 +4,7 @@
 
 - Caddy 托管前端静态文件（`ui/dist`）
 - Caddy 反向代理后端 API（`127.0.0.1:8000`）
-- 对外暴露 HTTP `80` 与 HTTPS `8443`
+- 对外暴露 HTTP `80` 与 HTTPS `443`
 
 > 本项目用caddy而不是nginx，是因为caddy配置https tls证书和websocket反代更简单，caddyfile比nginx config好写
 
@@ -50,8 +50,8 @@ bash scripts/run_aivudaos_stack.sh
 
 默认监听：
 
-- HTTP: `http://<host>:80`
-- HTTPS: `https://<avahi_hostname>.local:8443`（当前 `tls internal`，浏览器可能提示证书不受信任）
+- HTTP: `http://127.0.0.1:80`（仅本机）
+- HTTPS: `https://<avahi_hostname>.local:443`（当前 `tls internal`，浏览器可能提示证书不受信任）
 
 ## 4. 用户自启动（backend + caddy 一起）
 
@@ -67,7 +67,7 @@ bash scripts/install_user_services.sh
 - 为当前用户配置 sudo 免密（`/etc/sudoers.d/$USER`，幂等）
 - 从 `~/aivudaOS_ws/config/os.yaml` 的 `avahi_hostname` 读取主机名，若不存在则自动生成 `robot-xxx`
 - 将主机名写入 `/etc/avahi/avahi-daemon.conf` 的 `[server]` 块 `host-name=<value>` 并重启 `avahi-daemon.service`
-- 将 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点写成具体 `https://<hostname>.local:8443`（不使用环境变量占位）
+- 将 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点写成具体 `https://<hostname>.local:443`（不使用环境变量占位）
 - 当主机名变更导致 Caddyfile 内容变化时，自动执行一次 caddy reload
 
 脚本会创建并启用单个 `systemd --user` 服务：
@@ -102,6 +102,7 @@ journalctl --user -u aivudaos.service -f
 
 说明：
 
+- HTTP 站点仅绑定 `127.0.0.1:80`，不对外网/局域网暴露。
 - `/aivuda_os/api/apps/operations/{operation_id}/events`（SSE）与
   `/aivuda_os/api/apps/operations/{operation_id}/interactive/ws`（WebSocket）
   均通过 Caddy 转发到后端。
