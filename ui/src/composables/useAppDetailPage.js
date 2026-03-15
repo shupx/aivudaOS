@@ -124,6 +124,7 @@ export function useAppDetailPage() {
     return new Promise((resolve, reject) => {
       let settled = false
       let interactiveSocket = null
+      const handledConfirmSeq = new Set()
 
       function finish(callback) {
         if (settled) return
@@ -182,6 +183,26 @@ export function useAppDetailPage() {
 
           if (event.type === 'status') {
             actionLiveStatus.value = event.message || event.phase || event.status || actionLiveStatus.value
+
+            if (
+              event.phase === 'pre_uninstall'
+              && event.status === 'awaiting_confirmation'
+              && !handledConfirmSeq.has(Number(event.seq || 0))
+            ) {
+              handledConfirmSeq.add(Number(event.seq || 0))
+              const confirmed = window.confirm(
+                t('appDetail.uninstallHookFailedContinueConfirm', {
+                  error: event.error || '-',
+                }),
+              )
+              if (interactiveSocket && interactiveSocket.isOpen()) {
+                try {
+                  interactiveSocket.sendInput(confirmed ? 'y' : 'n')
+                } catch (err) {
+                  actionError.value = String(err?.message || err || t('apps.interactiveSendFailed'))
+                }
+              }
+            }
           }
           if (event.type === 'log') {
             if (typeof event.chunk === 'string') {

@@ -220,6 +220,7 @@ export default {
     switchFailed: 'Failed to switch version',
     uninstallCurrentSuccess: 'Current version uninstalled',
     uninstallFailed: 'Uninstall failed',
+    uninstallHookFailedContinueConfirm: 'pre_uninstall script failed:\n{error}\n\nContinue uninstall?',
     updateScriptSuccess: 'Update script completed',
     updateScriptFailed: 'Failed to run update script',
     operationFailed: 'Operation failed',

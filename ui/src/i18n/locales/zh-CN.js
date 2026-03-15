@@ -220,6 +220,7 @@ export default {
     switchFailed: '切换版本失败',
     uninstallCurrentSuccess: '卸载当前版本成功',
     uninstallFailed: '卸载失败',
+    uninstallHookFailedContinueConfirm: '卸载前脚本执行失败：\n{error}\n\n是否继续卸载？',
     updateScriptSuccess: '更新脚本执行成功',
     updateScriptFailed: '执行更新脚本失败',
     operationFailed: '操作失败',

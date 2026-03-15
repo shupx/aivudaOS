@@ -567,6 +567,14 @@ class RuntimeService:
             if event_cb:
                 event_cb(event_type, payload)
 
+        def _parse_confirmation(value: str | None) -> bool | None:
+            raw = str(value or "").strip().lower()
+            if raw in {"y", "yes", "1", "true", "continue", "ok", "继续", "是"}:
+                return True
+            if raw in {"n", "no", "0", "false", "cancel", "停止", "否"}:
+                return False
+            return None
+
         def run_pre_uninstall_hook(manifest: AppManifest, target_version: str) -> None:
             try:
                 self._run_manifest_hook(
@@ -580,6 +588,7 @@ class RuntimeService:
                     cancel_requested=cancel_requested,
                 )
             except AppRuntimeError as exc:
+                error_message = str(exc)
                 emit(
                     "status",
                     phase="pre_uninstall",
@@ -587,8 +596,56 @@ class RuntimeService:
                     message="pre_uninstall 执行失败，继续卸载",
                     app_id=app_id,
                     version=target_version,
-                    error=str(exc),
+                    error=error_message,
                 )
+
+                if not interactive or read_input is None:
+                    return
+
+                emit(
+                    "status",
+                    phase="pre_uninstall",
+                    status="awaiting_confirmation",
+                    message="pre_uninstall 失败，请确认是否继续卸载",
+                    app_id=app_id,
+                    version=target_version,
+                    error=error_message,
+                    confirm_input_hint="输入 y 继续，输入 n 取消",
+                )
+
+                while True:
+                    if cancel_requested and cancel_requested():
+                        raise OperationCanceledError("Operation canceled by user")
+
+                    user_input = read_input(1.0)
+                    decision = _parse_confirmation(user_input)
+                    if decision is True:
+                        emit(
+                            "status",
+                            phase="pre_uninstall",
+                            status="warning",
+                            message="已确认继续卸载",
+                            app_id=app_id,
+                            version=target_version,
+                        )
+                        return
+
+                    if decision is False:
+                        raise OperationCanceledError(
+                            "Uninstall canceled by user after pre_uninstall failure"
+                        )
+
+                    if user_input is None:
+                        continue
+
+                    emit(
+                        "status",
+                        phase="pre_uninstall",
+                        status="awaiting_confirmation",
+                        message="无效输入，请输入 y 继续，输入 n 取消",
+                        app_id=app_id,
+                        version=target_version,
+                    )
 
         runtime_state = self.get_runtime_state(app_id)
         emit("status", phase="prepare", status="running", message="准备卸载", app_id=app_id)
