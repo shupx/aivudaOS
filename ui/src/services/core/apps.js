@@ -7,7 +7,7 @@ export async function fetchInstalledApps() {
 }
 
 export function buildAppBuiltInUiEntryUrl(appId) {
-  return buildAuthUrl(`/api/apps/${encodeURIComponent(appId)}/ui/`)
+  return `/${encodeURIComponent(appId)}/ui/`
 }
 
 export async function fetchActiveAppConfigs() {

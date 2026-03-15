@@ -141,7 +141,7 @@ export default {
     emptyVersions: '没有可下载的已发布版本',
     loadFailed: '加载商店失败',
     addressLabel: '商店后端地址',
-    addressPlaceholder: '例如：http://127.0.0.1:9001',
+    addressPlaceholder: '例如：https://127.0.0.1:8580',
     addressConnectionHint: '该地址是由浏览器所在主机直接连接，不是 aivudaOS 所在机器去连接。',
     addressManualCheckHint: '如果该地址无法 fetch，请点击在浏览器中打开，检查是否可连通或是否需要手动信任/安装证书：',
     saveAddress: '保存地址',

@@ -567,6 +567,29 @@ class RuntimeService:
             if event_cb:
                 event_cb(event_type, payload)
 
+        def run_pre_uninstall_hook(manifest: AppManifest, target_version: str) -> None:
+            try:
+                self._run_manifest_hook(
+                    app_id=app_id,
+                    manifest=manifest,
+                    hook_name="pre_uninstall",
+                    root_dir=self._versioning.version_dir(app_id, target_version),
+                    event_cb=event_cb,
+                    interactive=interactive,
+                    read_input=read_input,
+                    cancel_requested=cancel_requested,
+                )
+            except AppRuntimeError as exc:
+                emit(
+                    "status",
+                    phase="pre_uninstall",
+                    status="warning",
+                    message="pre_uninstall 执行失败，继续卸载",
+                    app_id=app_id,
+                    version=target_version,
+                    error=str(exc),
+                )
+
         runtime_state = self.get_runtime_state(app_id)
         emit("status", phase="prepare", status="running", message="准备卸载", app_id=app_id)
 
@@ -581,16 +604,7 @@ class RuntimeService:
                 hook_version = all_versions[0]
             if hook_version is not None:
                 manifest = self._get_manifest(app_id, hook_version)
-                self._run_manifest_hook(
-                    app_id=app_id,
-                    manifest=manifest,
-                    hook_name="pre_uninstall",
-                    root_dir=self._versioning.version_dir(app_id, hook_version),
-                    event_cb=event_cb,
-                    interactive=interactive,
-                    read_input=read_input,
-                    cancel_requested=cancel_requested,
-                )
+                run_pre_uninstall_hook(manifest, hook_version)
 
             emit("status", phase="remove", status="running", message="删除应用目录", app_id=app_id)
             self._versioning.remove_app_entirely(app_id)
@@ -604,16 +618,7 @@ class RuntimeService:
         else:
             # Uninstall specific version
             manifest = self._get_manifest(app_id, version)
-            self._run_manifest_hook(
-                app_id=app_id,
-                manifest=manifest,
-                hook_name="pre_uninstall",
-                root_dir=self._versioning.version_dir(app_id, version),
-                event_cb=event_cb,
-                interactive=interactive,
-                read_input=read_input,
-                cancel_requested=cancel_requested,
-            )
+            run_pre_uninstall_hook(manifest, version)
 
             active = self._versioning.active_version(app_id)
             if active == version and runtime_state.running:

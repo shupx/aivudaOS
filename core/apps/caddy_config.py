@@ -5,12 +5,13 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from core.apps.models import AppManifest
 from core.apps.versioning import VersioningService
 from core.db.connection import db_conn
 from core.errors import InvalidConfigError
-from core.paths import CADDY_BIN_PATH, CADDYFILE_PATH
+from core.paths import APP_CADDY_GEN_DIR, CADDY_BIN_PATH, CADDYFILE_PATH
 
 
 @dataclass
@@ -57,8 +58,105 @@ class CaddyConfigService:
     def sync_and_reload(self) -> None:
         active_configs = self._collect_active_configs()
         self._ensure_no_active_route_conflicts(active_configs)
-        self._rewrite_top_level_caddyfile([entry.config_path for entry in active_configs])
+        ui_caddy_paths = self._sync_ui_caddy_files()
+        import_paths = [entry.config_path for entry in active_configs] + ui_caddy_paths
+        self._rewrite_top_level_caddyfile(import_paths)
         self._reload_caddy()
+
+    def _sync_ui_caddy_files(self) -> list[Path]:
+        APP_CADDY_GEN_DIR.mkdir(parents=True, exist_ok=True)
+
+        active_ui_files: list[Path] = []
+        for app_id, manifest, install_path in self._iter_active_manifests():
+            raw_ui_index = str(manifest.ui_index_path or "").strip()
+            if not raw_ui_index:
+                continue
+
+            ui_entry = self._resolve_manifest_relative_file(
+                install_path,
+                manifest,
+                relative_path=raw_ui_index,
+                field_name="ui_index_path",
+                required=True,
+            )
+            if ui_entry is None:
+                continue
+
+            ui_root = ui_entry.parent.resolve()
+            caddy_path = self._ui_caddy_path(app_id)
+            content = self._render_ui_caddy(app_id, ui_root)
+
+            current = caddy_path.read_text("utf-8") if caddy_path.exists() else None
+            if current != content:
+                caddy_path.write_text(content, encoding="utf-8")
+
+            active_ui_files.append(caddy_path)
+
+        active_set = {path.resolve() for path in active_ui_files}
+        for stale in APP_CADDY_GEN_DIR.glob("*.ui.caddy"):
+            try:
+                if stale.resolve() not in active_set:
+                    stale.unlink()
+            except FileNotFoundError:
+                continue
+
+        active_ui_files.sort(key=lambda p: p.name)
+        return active_ui_files
+
+    def _iter_active_manifests(self) -> list[tuple[str, AppManifest, Path]]:
+        with db_conn() as conn:
+            rows = conn.execute("SELECT DISTINCT app_id FROM app_installation").fetchall()
+
+        active: list[tuple[str, AppManifest, Path]] = []
+        for row in rows:
+            app_id = str(row["app_id"])
+            active_version = self._versioning.active_version(app_id)
+            if not active_version:
+                continue
+
+            with db_conn() as conn:
+                manifest_row = conn.execute(
+                    "SELECT manifest FROM app_installation WHERE app_id = ? AND version = ?",
+                    (app_id, active_version),
+                ).fetchone()
+            if not manifest_row or not manifest_row["manifest"]:
+                continue
+
+            install_path = self._versioning.active_install_path(app_id)
+            if install_path is None:
+                continue
+
+            manifest = AppManifest.from_dict(app_id, json.loads(manifest_row["manifest"]))
+            active.append((app_id, manifest, install_path))
+
+        active.sort(key=lambda item: item[0])
+        return active
+
+    @staticmethod
+    def _ui_caddy_path(app_id: str) -> Path:
+        return APP_CADDY_GEN_DIR / f"{app_id}.ui.caddy"
+
+    @staticmethod
+    def _safe_matcher_name(app_id: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9_-]", "_", app_id)
+        normalized = normalized.strip("_")
+        return normalized or "app"
+
+    @classmethod
+    def _render_ui_caddy(cls, app_id: str, ui_root: Path) -> str:
+        encoded_app_id = quote(app_id, safe="")
+        ui_base = f"/{encoded_app_id}/ui"
+        matcher = f"{cls._safe_matcher_name(app_id)}_ui"
+        escaped_root = cls._escape_caddy_string(str(ui_root))
+        return (
+            f"@{matcher} path {ui_base} {ui_base}/*\n"
+            f"handle @{matcher} {{\n"
+            f"  uri strip_prefix {ui_base}\n"
+            f"  root * \"{escaped_root}\"\n"
+            f"  try_files {{path}} /index.html\n"
+            f"  file_server\n"
+            f"}}\n"
+        )
 
     def _collect_active_configs(self) -> list[_ActiveCaddyConfig]:
         with db_conn() as conn:
@@ -207,6 +305,35 @@ class CaddyConfigService:
             raise InvalidConfigError("manifest.caddyfile_config_path escapes install root")
         if not resolved.exists() or not resolved.is_file():
             raise InvalidConfigError(f"manifest.caddyfile_config_path does not exist: {raw}")
+        return resolved
+
+    @staticmethod
+    def _resolve_manifest_relative_file(
+        install_path: Path,
+        manifest: AppManifest,
+        *,
+        relative_path: str,
+        field_name: str,
+        required: bool,
+    ) -> Path | None:
+        raw = str(relative_path or "").strip()
+        if not raw:
+            if required:
+                raise InvalidConfigError(
+                    f"App {manifest.app_id}@{manifest.version} missing {field_name}"
+                )
+            return None
+
+        relative = Path(raw)
+        if relative.is_absolute():
+            raise InvalidConfigError(f"manifest.{field_name} must be a relative path")
+
+        root = install_path.resolve()
+        resolved = (root / relative).resolve()
+        if root != resolved and root not in resolved.parents:
+            raise InvalidConfigError(f"manifest.{field_name} escapes install root")
+        if not resolved.exists() or not resolved.is_file():
+            raise InvalidConfigError(f"manifest.{field_name} does not exist: {raw}")
         return resolved
 
     @staticmethod

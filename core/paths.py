@@ -30,6 +30,7 @@ OS_CONFIG_PATH = CONFIG_DIR / "os.yaml"
 SYS_CONFIG_PATH = CONFIG_DIR / "sys.yaml"
 USERS_CONFIG_PATH = CONFIG_DIR / "users.yaml"
 APP_CONFIG_DIR = CONFIG_DIR / "apps"
+APP_CADDY_GEN_DIR = CONFIG_DIR / "caddy"
 MAGNET_CONFIG_PATH = CONFIG_DIR / "magnets.yaml"
 
 # App installations (multi-version with symlinks)
@@ -87,6 +88,7 @@ def ensure_dirs() -> None:
         RUNTIME_ROOT,
         CONFIG_DIR,
         APP_CONFIG_DIR,
+        APP_CADDY_GEN_DIR,
         APPS_DIR,
         DATA_DIR,
         APP_RUNTIME_DATA_DIR,

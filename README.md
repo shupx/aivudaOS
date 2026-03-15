@@ -102,6 +102,11 @@ PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker gateway.m
 
 Caddy 托管前端静态文件并反代 `/aivuda_os/api`，其中 HTTP 仅监听 `127.0.0.1:80`，并通过 `tls internal` 提供 HTTPS 443，详见 [`docs/deploy-caddy.md`](docs/deploy-caddy.md)。
 
+另外，App 内置 UI（`/{app_id}/ui/`）也由 Caddy 直接托管：
+
+- 后端会根据各 app active 版本的 `manifest.ui_index_path` 自动生成 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/caddy/{app_id}.ui.caddy`
+- 在安装、卸载、切换版本时会自动重写顶层 Caddyfile 的 import 区块并 reload Caddy
+
 ## App 运行模式（systemd / popen）
 
 应用生命周期支持两种后端：
@@ -204,8 +209,8 @@ App 启动时会注入配置路径相关环境变量：
 - `POST /aivuda_os/api/apps/operations/{operation_id}/cancel` — 请求取消运行中的操作（如上传安装）
 - `WS /aivuda_os/api/apps/operations/{operation_id}/interactive/ws` — 安装交互输入通道（query 带 `token`）
 - `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
-- `GET /aivuda_os/api/apps/{app_id}/ui/` — 获取应用内置 UI 首页（manifest `ui_index_path`，可选）
-- `GET /aivuda_os/api/apps/{app_id}/ui/{asset_path}` — 获取内置 UI 静态资源
+- `GET /{app_id}/ui/` — 获取应用内置 UI 首页（由 Caddy 静态托管，manifest `ui_index_path` 可选）
+- `GET /{app_id}/ui/{asset_path}` — 获取内置 UI 静态资源（由 Caddy 静态托管）
 - `GET /aivuda_os/api/apps/configs/active` — 获取所有已安装 app 的 active 配置、schema 与约束（统一参数页使用）
 - `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置（可选 query: `app_version`）
 - `PUT  /aivuda_os/api/apps/{app_id}/config` — 更新应用配置（body 可带 `app_version`）

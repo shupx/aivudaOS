@@ -51,12 +51,6 @@ def _require_auth(token: str) -> SessionInfo:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-def _optional_auth(token: str) -> None:
-    if not str(token or "").strip():
-        return
-    _require_auth(token)
-
-
 def _sse_event(event: str, payload: dict[str, Any]) -> str:
     body = json.dumps(payload, ensure_ascii=False)
     return f"event: {event}\ndata: {body}\n\n"
@@ -227,31 +221,6 @@ async def get_app_icon(app_id: str) -> FileResponse:
     icon_path = runtime.get_app_icon_path(app_id)
     media_type = "image/png" if icon_path.suffix.lower() == ".png" else "image/svg+xml"
     return FileResponse(str(icon_path), media_type=media_type)
-
-
-@router.get("/{app_id}/ui")
-@router.get("/{app_id}/ui/")
-async def get_app_builtin_ui_entry(app_id: str, token: str = "") -> FileResponse:
-    _optional_auth(token)
-    runtime = get_runtime_service()
-    entry_path = runtime.get_app_ui_entry_path(app_id)
-    if entry_path is None:
-        raise HTTPException(status_code=404, detail="Built-in UI entry not found")
-    return FileResponse(str(entry_path), media_type="text/html")
-
-
-@router.get("/{app_id}/ui/{asset_path:path}")
-async def get_app_builtin_ui_asset(
-    app_id: str,
-    asset_path: str,
-    token: str = "",
-) -> FileResponse:
-    _optional_auth(token)
-    runtime = get_runtime_service()
-    asset = runtime.get_app_ui_asset_path(app_id, asset_path)
-    if asset is None:
-        raise HTTPException(status_code=404, detail="Built-in UI asset not found")
-    return FileResponse(str(asset))
 
 
 @router.get("/{app_id}/logs")
