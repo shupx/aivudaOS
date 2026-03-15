@@ -185,6 +185,7 @@ ensure_user_linger_enabled
 AVAHI_HOSTNAME="$(resolve_avahi_hostname_from_os_config "${RUNTIME_OS_CONFIG}")"
 if [[ -z "${AVAHI_HOSTNAME}" ]]; then
   AVAHI_HOSTNAME="$(generate_robot_hostname)"
+  echo "No valid avahi_hostname found in ${RUNTIME_OS_CONFIG}, generated random hostname: ${AVAHI_HOSTNAME}"
 fi
 
 log "Resolved AVAHI_HOSTNAME=${AVAHI_HOSTNAME}"
@@ -238,8 +239,12 @@ echo "Done. Current status:"
 systemctl --user --no-pager --full status aivudaos.service || true
 
 echo ""
-echo "Manage commands:"
+echo "aivudaos.service is started and enabled to start at boot. You can manage it with:"
 echo "  systemctl --user restart aivudaos.service"
 echo "  systemctl --user stop aivudaos.service"
 echo "  systemctl --user status aivudaos.service"
 echo "  journalctl --user -u aivudaos.service -f"
+
+echo ""
+echo "domain: ${AVAHI_HOSTNAME}.local"
+echo -e "Open \e[32mhttps://${AVAHI_HOSTNAME}.local\e[0m in your remote browser or or \e[32mhttp://127.0.0.1\e[0m in the local browser to access AivudaOS UI."
