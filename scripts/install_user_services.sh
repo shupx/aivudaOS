@@ -247,4 +247,4 @@ echo "  journalctl --user -u aivudaos.service -f"
 
 echo ""
 echo "domain: ${AVAHI_HOSTNAME}.local"
-echo -e "Open \e[32mhttps://${AVAHI_HOSTNAME}.local\e[0m in your remote browser or or \e[32mhttp://127.0.0.1\e[0m in the local browser to access AivudaOS UI."
+echo -e "Open \e[32mhttps://${AVAHI_HOSTNAME}.local\e[0m in your remote browser or \e[32mhttp://127.0.0.1\e[0m in the local browser to access AivudaOS UI."

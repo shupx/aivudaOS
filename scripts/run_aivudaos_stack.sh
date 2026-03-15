@@ -97,6 +97,10 @@ fi
 "${CADDY_BIN}" run --config "${CADDY_CONFIG}" &
 caddy_pid=$!
 
+sleep 2.5
+AVAHI_HOSTNAME=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "$AVAHI_HOSTNAME" ] && echo ${AVAHI_HOSTNAME} || hostname
+echo -e "Open \e[32mhttps://${AVAHI_HOSTNAME}.local\e[0m in your remote browser or \e[32mhttp://127.0.0.1\e[0m in the local browser to access AivudaOS UI."
+
 shutdown() {
   kill "${backend_pid}" >/dev/null 2>&1 || true
   kill "${caddy_pid}" >/dev/null 2>&1 || true
