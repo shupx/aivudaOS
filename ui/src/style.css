@@ -897,7 +897,7 @@ input {
 }
 
 .switch-item-autostart .switch input:checked + .slider {
-  background: #16a34a;
+  background: #1d4ed8;
 }
 
 .switch input:checked + .slider::before {
