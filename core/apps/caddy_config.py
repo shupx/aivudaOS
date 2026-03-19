@@ -151,6 +151,7 @@ class CaddyConfigService:
         return (
             f"@{matcher} path {ui_base} {ui_base}/*\n"
             f"handle @{matcher} {{\n"
+            f"  encode zstd gzip\n"
             f"  uri strip_prefix {ui_base}\n"
             f"  root * \"{escaped_root}\"\n"
             f"  try_files {{path}} /index.html\n"

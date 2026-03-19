@@ -3,7 +3,6 @@
 
   route {
     handle @api {
-      encode zstd gzip
       reverse_proxy 127.0.0.1:8000
     }
 
@@ -11,6 +10,7 @@
     # END AIVUDA APP IMPORTS
 
     handle {
+      encode zstd gzip
       root * ./ui/dist
       try_files {path} /index.html
       file_server
