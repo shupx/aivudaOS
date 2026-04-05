@@ -63,7 +63,7 @@ fi
 if grep -Eq 'https://(\{\$AVAHI_HOSTNAME\}|__AVAHI_HOSTNAME__)\.local(:[0-9]+)?' "${CADDY_CONFIG}"; then
   echo "Caddy config has unresolved AVAHI_HOSTNAME placeholder: ${CADDY_CONFIG}" >&2
   echo "Run: ./scripts/install_user_services.sh to sync Avahi hostname into Caddy config." >&2
-  exit 1
+  # exit 1
 fi
 if [[ "${DEV_MODE}" -eq 0 && ! -d "${FRONTEND_DIST}" ]]; then
   echo "Frontend dist not found: ${FRONTEND_DIST}" >&2

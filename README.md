@@ -4,7 +4,9 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 
 ## Install 
 
-
+```bash
+./scripts/install_aivudaos.sh
+```
 
 ## Usage
 

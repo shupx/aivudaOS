@@ -5,12 +5,72 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INSTALL_DIR="${REPO_DIR}/.tools/caddy"
 FORCE="${FORCE:-0}"
-SOURCE="${1:-}"
+SOURCE=""
+OUTPUT="${INSTALL_DIR}/caddy"
 
-if [[ "$#" -gt 1 ]]; then
-  echo "Usage: $0 [SOURCE_PATH_OR_URL]" >&2
+usage() {
+  cat <<EOF
+Usage: $0 [--source SOURCE_PATH_OR_URL] [--output OUTPUT_PATH]
+
+Options:
+  --source, -s   Download source URL or local file path for caddy binary/archive
+  --output, -o   Output path for installed caddy binary (default: ${OUTPUT})
+
+Environment:
+  FORCE=1        Reinstall even if output binary already exists
+EOF
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --source|-s)
+      if [[ "$#" -lt 2 ]]; then
+        echo "Missing value for $1" >&2
+        usage >&2
+        exit 1
+      fi
+      SOURCE="$2"
+      shift 2
+      ;;
+    --output|-o)
+      if [[ "$#" -lt 2 ]]; then
+        echo "Missing value for $1" >&2
+        usage >&2
+        exit 1
+      fi
+      OUTPUT="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ -z "${SOURCE}" && "$#" -eq 1 ]]; then
+        # Backward compatibility for previous positional source argument.
+        SOURCE="$1"
+        shift
+      else
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "${OUTPUT}" ]]; then
+  echo "Output path cannot be empty." >&2
   exit 1
 fi
+
+if [[ -d "${OUTPUT}" || "${OUTPUT}" == */ ]]; then
+  bin_path="${OUTPUT%/}/caddy"
+else
+  bin_path="${OUTPUT}"
+fi
+
+mkdir -p "$(dirname "${bin_path}")"
 
 uname_s="$(uname -s | tr '[:upper:]' '[:lower:]')"
 uname_m="$(uname -m | tr '[:upper:]' '[:lower:]')"
@@ -33,16 +93,13 @@ case "${uname_m}" in
     ;;
 esac
 
-mkdir -p "${INSTALL_DIR}"
-
-bin_path="${INSTALL_DIR}/caddy"
 if [[ -x "${bin_path}" && "${FORCE}" != "1" ]]; then
   echo "Caddy already installed: ${bin_path}"
   echo "Set FORCE=1 to reinstall."
   exit 0
 fi
 
-archive="${INSTALL_DIR}/caddy.tar.gz"
+archive="$(dirname "${bin_path}")/caddy.tar.gz"
 default_url="https://github.com/caddyserver/caddy/releases/latest/download/caddy_2_${os}_${arch}.tar.gz"
 
 case "${os}/${arch}" in

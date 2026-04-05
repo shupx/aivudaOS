@@ -180,3 +180,8 @@ def _ensure_default_runtime_files() -> None:
 
     if not CADDYFILE_PATH.exists() and CADDYFILE_TEMPLATE_PATH.exists():
         shutil.copy2(CADDYFILE_TEMPLATE_PATH, CADDYFILE_PATH)
+    
+    import core.config.caddy_runtime as caddy_runtime
+    caddy_service = caddy_runtime.CaddyRuntimeService()
+    caddy_service.sync_https_hostname(str(os_raw.get("avahi_hostname") or ""))
+    caddy_service.reload_if_running()
