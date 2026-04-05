@@ -1,0 +1,8 @@
+include README.md
+include requirements.txt
+include Caddyfile_template
+recursive-include scripts *.sh *.py
+recursive-include ui/dist *
+prune ui/node_modules
+prune ui/src
+exclude ui/package-lock.json

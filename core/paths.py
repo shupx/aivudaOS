@@ -3,13 +3,33 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+from importlib.resources import files
 
 import yaml
 
 from core.config.avahi import AvahiService
 
-# PROJECT_ROOT is the aivudaOS/ directory itself
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def _project_root() -> Path:
+    source_root = Path(__file__).resolve().parent.parent
+    if (source_root / "Caddyfile_template").exists():
+        return source_root
+
+    from_env = os.environ.get("AIVUDAOS_PACKAGE_ROOT", "").strip()
+    if from_env:
+        candidate = Path(from_env).expanduser().resolve()
+        if (candidate / "Caddyfile_template").exists():
+            return candidate
+
+    packaged_root = Path(str(files("aivudaos").joinpath("resources"))).resolve()
+    if (packaged_root / "Caddyfile_template").exists():
+        return packaged_root
+
+    return source_root
+
+
+# PROJECT_ROOT is the aivudaOS/ directory itself in source layout,
+# or the packaged resource root in wheel installation layout.
+PROJECT_ROOT = _project_root()
 CADDYFILE_TEMPLATE_PATH = PROJECT_ROOT / "Caddyfile_template"
 
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 start_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${start_script_dir}/helpers/_aivudaos_systemd_common.sh"
-source "${start_script_dir}/helpers/_get_avahi_hostname.sh"
+source "${start_script_dir}/_get_avahi_hostname.sh"
 
 ensure_systemctl_user_available
 ensure_stack_unit_exists

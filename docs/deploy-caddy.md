@@ -13,7 +13,7 @@
 推荐在仓库根目录执行：
 
 ```bash
-bash scripts/helpers/_download_caddy.sh
+bash scripts/_download_caddy.sh
 ```
 
 安装完成后验证：
