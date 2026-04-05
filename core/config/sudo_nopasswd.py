@@ -6,10 +6,11 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 
 class SudoNopasswdService:
-    def __init__(self, sudoers_dir: Path | None = None) -> None:
+    def __init__(self, sudoers_dir: Optional[Path] = None) -> None:
         self._sudoers_dir = sudoers_dir or Path('/etc/sudoers.d')
         self._username_re = re.compile(r'^[a-z_][a-z0-9_-]*[$]?$', re.IGNORECASE)
 
@@ -32,7 +33,7 @@ class SudoNopasswdService:
             'enabled': self._is_passwordless_sudo_enabled(username),
         }
 
-    def set_enabled(self, enabled: bool, sudo_password: str | None = None) -> dict[str, object]:
+    def set_enabled(self, enabled: bool, sudo_password: Optional[str] = None) -> dict[str, object]:
         username = self.resolve_target_user()
         self._set_passwordless_sudo(username, bool(enabled), sudo_password)
         return {
@@ -64,8 +65,8 @@ class SudoNopasswdService:
         self,
         args: list[str],
         *,
-        sudo_password: str | None = None,
-        input_text: str | None = None,
+        sudo_password: Optional[str] = None,
+        input_text: Optional[str] = None,
     ) -> None:
         cmd = list(args)
         stdin_text = input_text
@@ -89,7 +90,7 @@ class SudoNopasswdService:
             message = (exc.stderr or exc.stdout or str(exc)).strip()
             raise RuntimeError(message or 'Failed to update sudoers') from exc
 
-    def _set_passwordless_sudo(self, username: str, enabled: bool, sudo_password: str | None = None) -> None:
+    def _set_passwordless_sudo(self, username: str, enabled: bool, sudo_password: Optional[str] = None) -> None:
         sudoers_file = self._sudoers_file_for_user(username)
         if not enabled:
             self._run_privileged(['rm', '-f', str(sudoers_file)], sudo_password=sudo_password)
@@ -97,7 +98,7 @@ class SudoNopasswdService:
 
         self._sudoers_dir.mkdir(parents=True, exist_ok=True)
         line = f'{username} ALL=(ALL) NOPASSWD:ALL\n'
-        tmp_path: str | None = None
+        tmp_path: Optional[str] = None
         try:
             with tempfile.NamedTemporaryFile('w', delete=False, encoding='utf-8') as tmp:
                 tmp.write(line)

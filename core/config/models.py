@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 
 @dataclass
@@ -10,8 +10,8 @@ class VersionedConfig:
 
     data: dict[str, Any]
     version: int = 0
-    updated_at: int | None = None
-    updated_by: str | None = None
+    updated_at: Optional[int] = None
+    updated_by: Optional[str] = None
 
 
 @dataclass

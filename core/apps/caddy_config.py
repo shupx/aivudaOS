@@ -5,6 +5,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote
 
 from core.apps.models import AppManifest
@@ -208,7 +209,7 @@ class CaddyConfigService:
     def _collect_active_route_owners(
         self,
         *,
-        exclude_app_ids: set[str] | None = None,
+        exclude_app_ids: Optional[set[str]] = None,
     ) -> dict[str, str]:
         route_owners: dict[str, str] = {}
         for entry in self._collect_active_configs():
@@ -287,7 +288,7 @@ class CaddyConfigService:
         manifest: AppManifest,
         *,
         required: bool,
-    ) -> Path | None:
+    ) -> Optional[Path]:
         raw = str(manifest.caddyfile_config_path or "").strip()
         if not raw:
             if required:
@@ -316,7 +317,7 @@ class CaddyConfigService:
         relative_path: str,
         field_name: str,
         required: bool,
-    ) -> Path | None:
+    ) -> Optional[Path]:
         raw = str(relative_path or "").strip()
         if not raw:
             if required:
@@ -375,7 +376,7 @@ class CaddyConfigService:
         return routes
 
     @staticmethod
-    def _normalize_route_token(token: str) -> str | None:
+    def _normalize_route_token(token: str) -> Optional[str]:
         value = token.strip().rstrip("{").strip()
         if not value or not value.startswith("/"):
             return None

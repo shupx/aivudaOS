@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Optional
 
 from core.errors import InvalidConfigError
 
@@ -28,7 +28,7 @@ SUPPORTED_SCHEMA_KEYS = {
 }
 
 
-def validate_config_data(data: Any, schema: dict[str, Any] | None, *, context: str = "config") -> None:
+def validate_config_data(data: Any, schema: Optional[dict[str, Any]], *, context: str = "config") -> None:
     if schema is None:
         return
     if not isinstance(schema, dict):
@@ -162,7 +162,7 @@ def _is_type_match(value: Any, expected: Any) -> bool:
     return True
 
 
-def normalize_config_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
+def normalize_config_schema(schema: Optional[dict[str, Any]]) -> dict[str, Any]:
     if not isinstance(schema, dict):
         return {}
     return _normalize_schema_node(schema)

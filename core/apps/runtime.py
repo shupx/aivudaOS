@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from core.apps.caddy_config import CaddyConfigService
 from core.apps.config_validation import validate_config_data
@@ -53,7 +53,7 @@ class RuntimeService:
     #  Manifest from DB
     # ------------------------------------------------------------------ #
 
-    def _get_manifest(self, app_id: str, version: str | None = None) -> AppManifest:
+    def _get_manifest(self, app_id: str, version: Optional[str] = None) -> AppManifest:
         """Load the manifest for a specific (or active) version from DB."""
         if version is None:
             version = self._versioning.active_version(app_id)
@@ -148,7 +148,7 @@ class RuntimeService:
         cfg = self._config.get_app_config(app_id, active_ver) if active_ver else None
 
         # Include manifest for the active version
-        manifest_info: dict[str, Any] | None = None
+        manifest_info: Optional[dict[str, Any]] = None
         try:
             m = self._get_manifest(app_id, active_ver)
             manifest_info = m.to_dict()
@@ -490,10 +490,10 @@ class RuntimeService:
         self,
         app_id: str,
         version: str,
-        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
         interactive: bool = False,
-        read_input: Callable[[float], str | None] | None = None,
-        cancel_requested: Callable[[], bool] | None = None,
+        read_input: Optional[Callable[[float], Optional[str]]] = None,
+        cancel_requested: Optional[Callable[[], bool]] = None,
     ) -> dict[str, Any]:
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:
@@ -555,19 +555,19 @@ class RuntimeService:
     def uninstall(
         self,
         app_id: str,
-        version: str | None = None,
+        version: Optional[str] = None,
         purge: bool = False,
-        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
         interactive: bool = False,
-        read_input: Callable[[float], str | None] | None = None,
-        cancel_requested: Callable[[], bool] | None = None,
+        read_input: Optional[Callable[[float], Optional[str]]] = None,
+        cancel_requested: Optional[Callable[[], bool]] = None,
     ) -> dict[str, Any]:
         """Uninstall a specific version or the entire app."""
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:
                 event_cb(event_type, payload)
 
-        def _parse_confirmation(value: str | None) -> bool | None:
+        def _parse_confirmation(value: Optional[str]) -> Optional[bool]:
             raw = str(value or "").strip().lower()
             if raw in {"y", "yes", "1", "true", "continue", "ok", "继续", "是"}:
                 return True
@@ -829,7 +829,7 @@ class RuntimeService:
             return "user"
         return scope
 
-    def _should_use_systemd(self, scope: str | None = None) -> bool:
+    def _should_use_systemd(self, scope: Optional[str] = None) -> bool:
         mode = self._runtime_mode()
         selected_scope = scope or self._systemd_scope()
 
@@ -864,7 +864,7 @@ class RuntimeService:
         app_version: str,
         manifest: AppManifest,
         *,
-        install_path: Path | None = None,
+        install_path: Optional[Path] = None,
     ) -> dict[str, str]:
         self._ensure_version_config_ready(app_id, app_version, manifest)
         cfg = self._config.get_app_config(app_id, app_version)
@@ -978,7 +978,7 @@ class RuntimeService:
             return default_icon
         return PROJECT_ROOT / "ui" / "public" / "vite.svg"
 
-    def get_app_ui_entry_path(self, app_id: str) -> Path | None:
+    def get_app_ui_entry_path(self, app_id: str) -> Optional[Path]:
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             return None
@@ -993,7 +993,7 @@ class RuntimeService:
             manifest.ui_index_path,
         )
 
-    def get_app_ui_asset_path(self, app_id: str, asset_relative_path: str) -> Path | None:
+    def get_app_ui_asset_path(self, app_id: str, asset_relative_path: str) -> Optional[Path]:
         entry_path = self.get_app_ui_entry_path(app_id)
         if entry_path is None:
             return None
@@ -1021,7 +1021,7 @@ class RuntimeService:
     def _resolve_manifest_relative_file(
         install_path: Path,
         relative_path: str,
-    ) -> Path | None:
+    ) -> Optional[Path]:
         raw = (relative_path or "").strip()
         if not raw:
             return None
@@ -1061,7 +1061,7 @@ class RuntimeService:
         self._mark_stopped_if_pid_matches(app_id, proc.pid, stopped_at)
 
     def _mark_stopped_if_pid_matches(
-        self, app_id: str, pid: int | None, stopped_at: int
+        self, app_id: str, pid: Optional[int], stopped_at: int
     ) -> None:
         if pid is None:
             return
@@ -1080,10 +1080,10 @@ class RuntimeService:
         app_id: str,
         *,
         running: bool,
-        pid: int | None,
+        pid: Optional[int],
         autostart: bool,
-        last_started_at: int | None = None,
-        last_stopped_at: int | None = None,
+        last_started_at: Optional[int] = None,
+        last_stopped_at: Optional[int] = None,
     ) -> None:
         with db_conn() as conn:
             conn.execute(
@@ -1168,10 +1168,10 @@ class RuntimeService:
         manifest: AppManifest,
         hook_name: str,
         root_dir: Path,
-        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
         interactive: bool = False,
-        read_input: Callable[[float], str | None] | None = None,
-        cancel_requested: Callable[[], bool] | None = None,
+        read_input: Optional[Callable[[float], Optional[str]]] = None,
+        cancel_requested: Optional[Callable[[], bool]] = None,
     ) -> bool:
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -20,8 +20,8 @@ class ConfigService:
 
     def __init__(
         self,
-        avahi_service: AvahiService | None = None,
-        caddy_service: CaddyRuntimeService | None = None,
+        avahi_service: Optional[AvahiService] = None,
+        caddy_service: Optional[CaddyRuntimeService] = None,
     ) -> None:
         self._avahi = avahi_service or AvahiService()
         self._caddy = caddy_service or CaddyRuntimeService()
@@ -53,7 +53,7 @@ class ConfigService:
                 if caddy_changed:
                     self._caddy.reload_if_running()
             except Exception as exc:
-                rollback_error: Exception | None = None
+                rollback_error: Optional[Exception] = None
                 try:
                     self._rollback_os_config_after_hostname_sync_failure(
                         previous_data=previous.data,
@@ -107,7 +107,7 @@ class ConfigService:
         self,
         app_id: str,
         app_version: str,
-        fallback: dict[str, Any] | None = None,
+        fallback: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         path = self.app_default_config_path(app_id, app_version)
         if not path.exists():
@@ -156,7 +156,7 @@ class ConfigService:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._write_versioned(path, default_data, expected_version=0, updated_by="system")
 
-    def delete_app_config(self, app_id: str, app_version: str | None = None) -> None:
+    def delete_app_config(self, app_id: str, app_version: Optional[str] = None) -> None:
         if app_version is None:
             app_dir = APP_CONFIG_DIR / app_id
             if app_dir.exists() and app_dir.is_dir():
@@ -218,7 +218,7 @@ class ConfigService:
                 yaml.dump(raw, default_flow_style=False, allow_unicode=True),
             )
 
-    def find_user(self, username: str) -> UserRecord | None:
+    def find_user(self, username: str) -> Optional[UserRecord]:
         users = self.get_users()
         for u in users.users:
             if u.username == username:
@@ -292,7 +292,7 @@ class ConfigService:
             updated_by=updated_by,
         )
 
-    def _resolve_app_config_read_path(self, app_id: str, app_version: str) -> Path | None:
+    def _resolve_app_config_read_path(self, app_id: str, app_version: str) -> Optional[Path]:
         active = self.app_config_path(app_id, app_version)
         if active.exists():
             return active

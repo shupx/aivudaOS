@@ -7,14 +7,15 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
 
 class AvahiService:
-    def __init__(self, config_path: Path | None = None) -> None:
+    def __init__(self, config_path: Optional[Path] = None) -> None:
         self._config_path = config_path or Path("/etc/avahi/avahi-daemon.conf")
         self._hostname_re = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
-    def generate_hostname(self, *, retries: int = 8, existing: set[str] | None = None) -> str:
+    def generate_hostname(self, *, retries: int = 8, existing: Optional[set[str]] = None) -> str:
         occupied = {str(item).strip().lower() for item in (existing or set()) if str(item).strip()}
         rand = random.SystemRandom()
         for _ in range(max(1, retries)):
@@ -37,7 +38,7 @@ class AvahiService:
             raise ValueError("Avahi hostname must contain only lowercase letters, digits, and hyphens")
         return value
 
-    def write_hostname(self, hostname: str, sudo_password: str | None = None) -> None:
+    def write_hostname(self, hostname: str, sudo_password: Optional[str] = None) -> None:
         normalized = self.normalize_hostname(hostname)
         current_text = self._read_config_text(sudo_password=sudo_password)
         updated_text = self._upsert_server_hostname(current_text, normalized)
@@ -114,14 +115,14 @@ class AvahiService:
         lines.append(f"host-name={hostname}{newline}")
         return "".join(lines)
 
-    def restart(self, sudo_password: str | None = None) -> None:
+    def restart(self, sudo_password: Optional[str] = None) -> None:
         self._run_privileged(["systemctl", "restart", "avahi-daemon.service"], sudo_password=sudo_password)
 
-    def write_and_restart(self, hostname: str, sudo_password: str | None = None) -> None:
+    def write_and_restart(self, hostname: str, sudo_password: Optional[str] = None) -> None:
         self.write_hostname(hostname, sudo_password=sudo_password)
         self.restart(sudo_password=sudo_password)
 
-    def _read_config_text(self, sudo_password: str | None = None) -> str:
+    def _read_config_text(self, sudo_password: Optional[str] = None) -> str:
         if self._config_path.exists():
             try:
                 if os.geteuid() == 0:
@@ -158,10 +159,10 @@ class AvahiService:
         self,
         args: list[str],
         *,
-        sudo_password: str | None = None,
+        sudo_password: Optional[str] = None,
     ) -> None:
         cmd = list(args)
-        stdin_text: str | None = None
+        stdin_text: Optional[str] = None
 
         if os.geteuid() != 0:
             if sudo_password:

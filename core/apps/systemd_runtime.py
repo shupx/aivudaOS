@@ -6,13 +6,14 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass
 class SystemdState:
     running: bool
     enabled: bool
-    pid: int | None
+    pid: Optional[int]
 
 
 class SystemdRuntimeBackend:
@@ -62,7 +63,7 @@ class SystemdRuntimeBackend:
         working_dir: Path,
         log_path: Path,
         description: str,
-        environment: dict[str, str] | None = None,
+        environment: Optional[dict[str, str]] = None,
     ) -> Path:
         unit_path = self.unit_file_path(app_id, scope)
         unit_path.parent.mkdir(parents=True, exist_ok=True)

@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from importlib.resources import files
 
 import yaml
 
 from core.config.avahi import AvahiService
+import aivudaos
 
 def _project_root() -> Path:
     source_root = Path(__file__).resolve().parent.parent
@@ -20,7 +20,7 @@ def _project_root() -> Path:
         if (candidate / "Caddyfile_template").exists():
             return candidate
 
-    packaged_root = Path(str(files("aivudaos").joinpath("resources"))).resolve()
+    packaged_root = (Path(aivudaos.__file__).resolve().parent / "resources").resolve()
     if (packaged_root / "Caddyfile_template").exists():
         return packaged_root
 

@@ -9,7 +9,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from core.paths import OS_LOG_DIR
 
@@ -43,7 +43,7 @@ class ScriptHookRunner:
         hook_name: str,
         script_path: str,
         root_dir: Path,
-        on_output: Callable[[str], None] | None = None,
+        on_output: Optional[Callable[[str], None]] = None,
     ) -> ScriptHookRunResult:
         script = self._resolve_script(script_path, root_dir)
         self._ensure_executable(script)
@@ -106,9 +106,9 @@ class ScriptHookRunner:
         hook_name: str,
         script_path: str,
         root_dir: Path,
-        on_output: Callable[[str], None] | None = None,
-        read_input: Callable[[float], str | None] | None = None,
-        cancel_requested: Callable[[], bool] | None = None,
+        on_output: Optional[Callable[[str], None]] = None,
+        read_input: Optional[Callable[[float], Optional[str]]] = None,
+        cancel_requested: Optional[Callable[[], bool]] = None,
     ) -> ScriptHookRunResult:
         script = self._resolve_script(script_path, root_dir)
         self._ensure_executable(script)
@@ -118,7 +118,7 @@ class ScriptHookRunner:
         output_parts: list[str] = []
 
         master_fd, slave_fd = pty.openpty()
-        proc: subprocess.Popen[str] | None = None
+        proc: Optional[subprocess.Popen[str]] = None
 
         with self._log_path.open("ab") as log_file:
             header = (

@@ -7,6 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 from .filelock import get_lock
 
@@ -32,8 +33,8 @@ class AptSourcesService:
     def __init__(
         self,
         *,
-        sources_path: Path | None = None,
-        backup_dir: Path | None = None,
+        sources_path: Optional[Path] = None,
+        backup_dir: Optional[Path] = None,
     ) -> None:
         self._sources_path = sources_path or Path("/etc/apt/sources.list")
         self._backup_dir = backup_dir or Path("/var/backups/aivudaos/apt-sources")
@@ -76,7 +77,7 @@ class AptSourcesService:
         self,
         content: str,
         *,
-        sudo_password: str | None = None,
+        sudo_password: Optional[str] = None,
     ) -> dict[str, object]:
         text = str(content or "")
         lock = get_lock(self._sources_path)
@@ -106,7 +107,7 @@ class AptSourcesService:
         self,
         backup_id: str,
         *,
-        sudo_password: str | None = None,
+        sudo_password: Optional[str] = None,
     ) -> dict[str, object]:
         target_id = str(backup_id or "").strip()
         if not target_id:
@@ -142,7 +143,7 @@ class AptSourcesService:
             },
         }
 
-    def _create_backup(self, *, sudo_password: str | None = None) -> Path:
+    def _create_backup(self, *, sudo_password: Optional[str] = None) -> Path:
         self._ensure_backup_dir(sudo_password=sudo_password)
         backup_id = datetime.now(self._TZ_SHANGHAI).strftime("%Y%m%dT%H%M%S%f%z")
         backup_path = self._backup_dir / f"sources.list.{backup_id}.bak"
@@ -165,7 +166,7 @@ class AptSourcesService:
 
         return backup_path
 
-    def _write_text_with_privilege(self, path: Path, content: str, *, sudo_password: str | None = None) -> None:
+    def _write_text_with_privilege(self, path: Path, content: str, *, sudo_password: Optional[str] = None) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
             tmp.write(content)
@@ -179,7 +180,7 @@ class AptSourcesService:
             except OSError:
                 pass
 
-    def _read_text_with_privilege(self, path: Path, *, sudo_password: str | None = None) -> str:
+    def _read_text_with_privilege(self, path: Path, *, sudo_password: Optional[str] = None) -> str:
         if path.exists():
             if os.geteuid() == 0:
                 try:
@@ -220,7 +221,7 @@ class AptSourcesService:
 
         return ""
 
-    def _run_apt_update(self, *, sudo_password: str | None = None) -> str:
+    def _run_apt_update(self, *, sudo_password: Optional[str] = None) -> str:
         cmd = ["apt", "update"]
         run_cmd = cmd
 
@@ -258,9 +259,9 @@ class AptSourcesService:
         except FileNotFoundError as exc:
             raise AptSourcesError("MISSING_COMMAND", f"Missing command: {exc.filename}") from exc
 
-    def _run_privileged(self, args: list[str], *, sudo_password: str | None = None) -> None:
+    def _run_privileged(self, args: list[str], *, sudo_password: Optional[str] = None) -> None:
         cmd = list(args)
-        stdin_text: str | None = None
+        stdin_text: Optional[str] = None
 
         if os.geteuid() != 0:
             if sudo_password:
@@ -291,7 +292,7 @@ class AptSourcesService:
             raise AptSourcesError("BACKUP_NOT_FOUND", f"Backup not found: {backup_id}")
         return candidate
 
-    def _ensure_backup_dir(self, *, sudo_password: str | None = None) -> None:
+    def _ensure_backup_dir(self, *, sudo_password: Optional[str] = None) -> None:
         if self._backup_dir.exists():
             return
 
@@ -304,7 +305,7 @@ class AptSourcesService:
         except OSError as exc:
             raise AptSourcesError("BACKUP_DIR_FAILED", f"Failed to prepare backup directory: {exc}") from exc
 
-    def _backup_id_from_path(self, path: Path | None) -> str:
+    def _backup_id_from_path(self, path: Optional[Path]) -> str:
         if not path:
             return ""
         name = path.name

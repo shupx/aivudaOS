@@ -102,7 +102,7 @@ setup(
     description="AivudaOS packaged for pip installation and PyPI publishing.",
     long_description=(SOURCE_ROOT / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
-    python_requires=">=3.10",
+    python_requires=">=3.8",
     package_dir={"": "."},
     packages=find_packages(where="."),
     include_package_data=True,

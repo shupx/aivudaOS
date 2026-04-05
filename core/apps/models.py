@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 
 @dataclass
@@ -11,10 +11,10 @@ class AppManifest:
     description: str
     version: str
     run: dict[str, Any]
-    icon: str | None = None
-    pre_install: str | None = None
-    pre_uninstall: str | None = None
-    update_this_version: str | None = None
+    icon: Optional[str] = None
+    pre_install: Optional[str] = None
+    pre_uninstall: Optional[str] = None
+    update_this_version: Optional[str] = None
     ui_index_path: str = ""
     caddyfile_config_path: str = ""
     default_config_path: str = ""
@@ -83,9 +83,8 @@ class AppRuntimeState:
     app_id: str
     running: bool
     autostart: bool
-    pid: int | None
-    last_started_at: int | None
-    last_stopped_at: int | None
-
+    pid: Optional[int]
+    last_started_at: Optional[int]
+    last_stopped_at: Optional[int]
 
 

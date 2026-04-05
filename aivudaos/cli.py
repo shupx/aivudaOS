@@ -4,7 +4,8 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from importlib.resources import files
+from pathlib import Path
+from typing import Optional
 
 from aivudaos import __version__
 
@@ -76,7 +77,7 @@ COMMANDS: dict[str, CommandSpec] = {
 
 
 def _resource_root() -> str:
-    return str(files("aivudaos").joinpath("resources"))
+    return str((Path(__file__).resolve().parent / "resources").resolve())
 
 
 def _script_path(command: CommandSpec) -> str:
@@ -120,7 +121,7 @@ def _run_shell_script(command: CommandSpec, forwarded_args: list[str]) -> int:
     return completed.returncode
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
 
     if not args:

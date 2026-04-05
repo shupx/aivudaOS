@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
@@ -626,7 +626,7 @@ async def stream_operation_events(
 
 
 @router.get("/{app_id}/config")
-async def get_app_config(app_id: str, token: str, app_version: str | None = None) -> dict[str, Any]:
+async def get_app_config(app_id: str, token: str, app_version: Optional[str] = None) -> dict[str, Any]:
     """Get config for an installed app.
 
     Reads default config from runtime default file, with manifest fallback.

@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -49,10 +49,10 @@ class InstallerService:
         file_data: bytes,
         filename: str,
         overwrite: bool = False,
-        event_cb: Callable[[str, dict[str, Any]], None] | None = None,
+        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
         interactive: bool = False,
-        read_input: Callable[[float], str | None] | None = None,
-        cancel_requested: Callable[[], bool] | None = None,
+        read_input: Optional[Callable[[float], Optional[str]]] = None,
+        cancel_requested: Optional[Callable[[], bool]] = None,
     ) -> dict[str, Any]:
         """Install an app from an uploaded package file (.tar.gz / .zip).
 
@@ -288,7 +288,7 @@ class InstallerService:
             conn.commit()
 
     @staticmethod
-    def _find_manifest(extract_dir: Path) -> Path | None:
+    def _find_manifest(extract_dir: Path) -> Optional[Path]:
         """Find manifest.yaml in extracted directory (root or one level deep)."""
         for name in ("manifest.yaml", "manifest.yml"):
             p = extract_dir / name
@@ -359,5 +359,4 @@ class InstallerService:
         if not isinstance(parsed, dict):
             raise PackageFormatError(f"{field_name} 必须解析为 YAML object")
         return parsed
-
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -205,7 +205,7 @@ class MagnetService:
     def _pick_value(
         self,
         entries: list[dict[str, Any]],
-        previous_group: dict[str, Any] | None,
+        previous_group: Optional[dict[str, Any]],
     ) -> Any:
         if previous_group and "value" in previous_group:
             return previous_group.get("value")

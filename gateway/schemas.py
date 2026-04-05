@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -28,23 +28,23 @@ class MagnetUpdateRequest(BaseModel):
 
 class SudoNopasswdUpdateRequest(BaseModel):
     enabled: bool
-    sudo_password: str | None = None
+    sudo_password: Optional[str] = None
 
 
 class AptSourcesWriteRequest(BaseModel):
     content: str
-    sudo_password: str | None = None
+    sudo_password: Optional[str] = None
 
 
 class AptSourcesRestoreRequest(BaseModel):
     backup_id: str
-    sudo_password: str | None = None
+    sudo_password: Optional[str] = None
 
 
 class AppConfigUpdateRequest(BaseModel):
     version: int
     data: dict[str, Any]
-    app_version: str | None = None
+    app_version: Optional[str] = None
 
 
 class AppAutostartUpdateRequest(BaseModel):
@@ -53,7 +53,7 @@ class AppAutostartUpdateRequest(BaseModel):
 
 class AppUninstallRequest(BaseModel):
     purge: bool = False
-    version: str | None = None
+    version: Optional[str] = None
 
 
 class AppSwitchVersionRequest(BaseModel):

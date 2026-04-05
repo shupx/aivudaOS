@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from core.errors import AppOperationConflictError, NotFoundError
 
@@ -13,22 +13,22 @@ from core.errors import AppOperationConflictError, NotFoundError
 class OperationRecord:
     operation_id: str
     operation_type: str
-    app_id: str | None
+    app_id: Optional[str]
     status: str
     started_at: int
-    ended_at: int | None = None
-    error: str | None = None
-    result: dict[str, Any] | None = None
+    ended_at: Optional[int] = None
+    error: Optional[str] = None
+    result: Optional[dict[str, Any]] = None
     seq: int = 0
     done: bool = False
     events: list[dict[str, Any]] = field(default_factory=list)
     condition: threading.Condition = field(default_factory=threading.Condition)
     interactive_enabled: bool = False
     interactive_open: bool = False
-    interactive_closed_reason: str | None = None
+    interactive_closed_reason: Optional[str] = None
     interactive_inputs: list[str] = field(default_factory=list)
     cancel_requested: bool = False
-    cancel_reason: str | None = None
+    cancel_reason: Optional[str] = None
     cancel_handlers: list[Callable[[], None]] = field(default_factory=list)
 
 
@@ -43,7 +43,7 @@ class AppOperationManager:
     def start_operation(
         self,
         operation_type: str,
-        app_id: str | None,
+        app_id: Optional[str],
         *,
         interactive_enabled: bool = False,
     ) -> OperationRecord:
@@ -122,7 +122,7 @@ class AppOperationManager:
             phase="running",
         )
 
-    def mark_completed(self, operation_id: str, result: dict[str, Any] | None = None) -> None:
+    def mark_completed(self, operation_id: str, result: Optional[dict[str, Any]] = None) -> None:
         record = self._require_record(operation_id)
         record.status = "completed"
         record.done = True
@@ -276,7 +276,7 @@ class AppOperationManager:
         self,
         operation_id: str,
         timeout: float = 0.2,
-    ) -> str | None:
+    ) -> Optional[str]:
         record = self._require_record(operation_id)
         with record.condition:
             if not record.interactive_inputs and record.interactive_open:
