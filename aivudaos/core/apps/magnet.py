@@ -7,14 +7,14 @@ from typing import Any, Optional
 
 import yaml
 
-from core.apps.config_validation import validate_config_data
-from core.apps.versioning import VersioningService
-from core.config.filelock import atomic_write_text, get_lock
-from core.config.models import VersionedConfig
-from core.config.service import ConfigService
-from core.db.connection import db_conn
-from core.errors import ConfigVersionConflictError, InvalidConfigError, NotFoundError
-from core.paths import MAGNET_CONFIG_PATH
+from aivudaos.core.apps.config_validation import validate_config_data
+from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.config.filelock import atomic_write_text, get_lock
+from aivudaos.core.config.models import VersionedConfig
+from aivudaos.core.config.service import ConfigService
+from aivudaos.core.db.connection import db_conn
+from aivudaos.core.errors import ConfigVersionConflictError, InvalidConfigError, NotFoundError
+from aivudaos.core.paths import MAGNET_CONFIG_PATH
 
 
 class MagnetService:

@@ -8,10 +8,10 @@ from pathlib import Path
 
 import bcrypt
 
-from core.auth.models import SessionInfo
-from core.config.service import ConfigService
-from core.errors import AuthenticationError
-from core.paths import SESSIONS_DIR
+from aivudaos.core.auth.models import SessionInfo
+from aivudaos.core.config.service import ConfigService
+from aivudaos.core.errors import AuthenticationError
+from aivudaos.core.paths import SESSIONS_DIR
 
 
 class AuthService:

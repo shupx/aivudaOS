@@ -4,12 +4,12 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from core.auth.models import SessionInfo
-from core.auth.service import AuthService
-from core.config.service import ConfigService
-from core.errors import AuthenticationError, ConfigVersionConflictError
-from core.errors import InvalidConfigError, NotFoundError
-from gateway.deps import (
+from aivudaos.core.auth.models import SessionInfo
+from aivudaos.core.auth.service import AuthService
+from aivudaos.core.config.service import ConfigService
+from aivudaos.core.errors import AuthenticationError, ConfigVersionConflictError
+from aivudaos.core.errors import InvalidConfigError, NotFoundError
+from aivudaos.gateway.deps import (
     get_apt_sources_service,
     get_auth_service,
     get_config_service,
@@ -17,7 +17,7 @@ from gateway.deps import (
     get_relogin_service,
     get_sudo_nopasswd_service,
 )
-from gateway.schemas import (
+from aivudaos.gateway.schemas import (
     AptSourcesRestoreRequest,
     AptSourcesWriteRequest,
     ConfigUpdateRequest,

@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from core.paths import CADDY_BIN_PATH, CADDYFILE_PATH, CADDYFILE_TEMPLATE_PATH
+from aivudaos.core.paths import CADDY_BIN_PATH, CADDYFILE_PATH, CADDYFILE_TEMPLATE_PATH
 
 
 class CaddyRuntimeService:

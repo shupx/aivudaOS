@@ -10,24 +10,24 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from core.apps.caddy_config import CaddyConfigService
-from core.apps.config_validation import validate_config_data
-from core.apps.magnet import MagnetService
-from core.apps.models import AppManifest, AppRuntimeState
-from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
-from core.apps.systemd_runtime import SystemdRuntimeBackend
-from core.apps.versioning import VersioningService
-from core.config.service import ConfigService
-from core.db.connection import db_conn
-from core.errors import (
+from aivudaos.core.apps.caddy_config import CaddyConfigService
+from aivudaos.core.apps.config_validation import validate_config_data
+from aivudaos.core.apps.magnet import MagnetService
+from aivudaos.core.apps.models import AppManifest, AppRuntimeState
+from aivudaos.core.apps.script_hooks import ScriptHookError, ScriptHookRunner
+from aivudaos.core.apps.systemd_runtime import SystemdRuntimeBackend
+from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.config.service import ConfigService
+from aivudaos.core.db.connection import db_conn
+from aivudaos.core.errors import (
     AppNotInstalledError,
     InvalidConfigError,
     AppRuntimeError,
     NotFoundError,
     OperationCanceledError,
 )
-from core.paths import APP_LOG_DIR
-from core.paths import PROJECT_ROOT
+from aivudaos.core.paths import APP_LOG_DIR
+from aivudaos.core.paths import PROJECT_ROOT
 
 
 class RuntimeService:

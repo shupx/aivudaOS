@@ -9,20 +9,20 @@ from typing import Any, Callable, Optional
 
 import yaml
 
-from core.apps.caddy_config import CaddyConfigService
-from core.apps.config_validation import validate_config_data
-from core.apps.magnet import MagnetService
-from core.apps.models import AppManifest
-from core.apps.script_hooks import ScriptHookError, ScriptHookRunner
-from core.apps.versioning import VersioningService
-from core.config.service import ConfigService
-from core.db.connection import db_conn
-from core.errors import (
+from aivudaos.core.apps.caddy_config import CaddyConfigService
+from aivudaos.core.apps.config_validation import validate_config_data
+from aivudaos.core.apps.magnet import MagnetService
+from aivudaos.core.apps.models import AppManifest
+from aivudaos.core.apps.script_hooks import ScriptHookError, ScriptHookRunner
+from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.config.service import ConfigService
+from aivudaos.core.db.connection import db_conn
+from aivudaos.core.errors import (
     InvalidConfigError,
     OperationCanceledError,
     PackageFormatError,
 )
-from core.paths import UPLOAD_TEMP_DIR
+from aivudaos.core.paths import UPLOAD_TEMP_DIR
 
 
 class InstallerService:

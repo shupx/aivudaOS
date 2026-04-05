@@ -32,6 +32,12 @@ aivudaos install
 
 This will install all the dependencies and start aivudaOS and make aivudaOS autostart.
 
+The following port is used by aivudaOS:
+
+- `127.0.0.1:8000`: internal backend, reverse proxy by caddy;
+- `http://127.0.0.1:80`: expose the service by caddy for http;
+- `https://<avahi_hostname>.local:443 ` expose the service by caddy for https.
+
 ## Usage
 
 Visit  [http://127.0.0.1:80](http://127.0.0.1:80) on the local browser, or vist  [https://<avahi_hostname>.local:443]() on a remote browser, where the `<avahi_hostname>` can be get by

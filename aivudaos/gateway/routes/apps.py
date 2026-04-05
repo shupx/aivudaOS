@@ -8,11 +8,11 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
-from core.apps.config_validation import normalize_config_schema, validate_config_data
-from core.auth.models import SessionInfo
-from core.auth.service import AuthService
-from core.db.connection import db_conn
-from core.errors import (
+from aivudaos.core.apps.config_validation import normalize_config_schema, validate_config_data
+from aivudaos.core.auth.models import SessionInfo
+from aivudaos.core.auth.service import AuthService
+from aivudaos.core.db.connection import db_conn
+from aivudaos.core.errors import (
     AppOperationConflictError,
     AppNotInstalledError,
     AppRuntimeError,
@@ -23,7 +23,7 @@ from core.errors import (
     OperationCanceledError,
     PackageFormatError,
 )
-from gateway.deps import (
+from aivudaos.gateway.deps import (
     get_app_operation_manager,
     get_auth_service,
     get_config_service,
@@ -32,7 +32,7 @@ from gateway.deps import (
     get_runtime_service,
     get_versioning_service,
 )
-from gateway.schemas import (
+from aivudaos.gateway.schemas import (
     AppAutostartUpdateRequest,
     AppConfigUpdateRequest,
     AppSwitchVersionRequest,

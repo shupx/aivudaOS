@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from core.auth.service import AuthService
-from core.errors import AuthenticationError
-from gateway.deps import get_auth_service
-from gateway.schemas import LoginRequest, LoginResponse
+from aivudaos.core.auth.service import AuthService
+from aivudaos.core.errors import AuthenticationError
+from aivudaos.gateway.deps import get_auth_service
+from aivudaos.gateway.schemas import LoginRequest, LoginResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

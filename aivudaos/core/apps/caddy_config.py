@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-from core.apps.models import AppManifest
-from core.apps.versioning import VersioningService
-from core.db.connection import db_conn
-from core.errors import InvalidConfigError
-from core.paths import APP_CADDY_GEN_DIR, CADDY_BIN_PATH, CADDYFILE_PATH
+from aivudaos.core.apps.models import AppManifest
+from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.db.connection import db_conn
+from aivudaos.core.errors import InvalidConfigError
+from aivudaos.core.paths import APP_CADDY_GEN_DIR, CADDY_BIN_PATH, CADDYFILE_PATH
 
 
 @dataclass

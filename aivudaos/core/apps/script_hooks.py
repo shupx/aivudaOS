@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from core.paths import OS_LOG_DIR
+from aivudaos.core.paths import OS_LOG_DIR
 
 
 class ScriptHookError(Exception):

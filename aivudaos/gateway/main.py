@@ -5,11 +5,11 @@ import logging
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from core.db.schema import init_db
-from core.paths import UI_DIST_DIR, ensure_dirs
-from core.config.caddy_runtime import CaddyRuntimeService
-from gateway.deps import get_magnet_service, get_runtime_service
-from gateway.routes import apps, auth, config
+from aivudaos.core.db.schema import init_db
+from aivudaos.core.paths import UI_DIST_DIR, ensure_dirs
+from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
+from aivudaos.gateway.deps import get_magnet_service, get_runtime_service
+from aivudaos.gateway.routes import apps, auth, config
 
 
 logger = logging.getLogger(__name__)

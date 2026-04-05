@@ -7,12 +7,12 @@ from typing import Any, Optional
 
 import yaml
 
-from core.config.avahi import AvahiService
-from core.config.caddy_runtime import CaddyRuntimeService
-from core.config.filelock import atomic_write_text, get_lock
-from core.config.models import UserRecord, UsersConfig, VersionedConfig
-from core.errors import ConfigVersionConflictError
-from core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
+from aivudaos.core.config.avahi import AvahiService
+from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
+from aivudaos.core.config.filelock import atomic_write_text, get_lock
+from aivudaos.core.config.models import UserRecord, UsersConfig, VersionedConfig
+from aivudaos.core.errors import ConfigVersionConflictError
+from aivudaos.core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
 
 
 class ConfigService:

@@ -5,9 +5,9 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from core.db.connection import db_conn
-from core.errors import NotFoundError
-from core.paths import APPS_DIR, APP_RUNTIME_DATA_DIR
+from aivudaos.core.db.connection import db_conn
+from aivudaos.core.errors import NotFoundError
+from aivudaos.core.paths import APPS_DIR, APP_RUNTIME_DATA_DIR
 
 
 class VersioningService:

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from core.apps.installer import InstallerService
-from core.apps.magnet import MagnetService
-from core.apps.operations import AppOperationManager
-from core.apps.runtime import RuntimeService
-from core.apps.versioning import VersioningService
-from core.auth.relogin import ReloginService
-from core.auth.service import AuthService
-from core.config.apt_sources import AptSourcesService
-from core.config.avahi import AvahiService
-from core.config.service import ConfigService
-from core.config.sudo_nopasswd import SudoNopasswdService
+from aivudaos.core.apps.installer import InstallerService
+from aivudaos.core.apps.magnet import MagnetService
+from aivudaos.core.apps.operations import AppOperationManager
+from aivudaos.core.apps.runtime import RuntimeService
+from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.auth.relogin import ReloginService
+from aivudaos.core.auth.service import AuthService
+from aivudaos.core.config.apt_sources import AptSourcesService
+from aivudaos.core.config.avahi import AvahiService
+from aivudaos.core.config.service import ConfigService
+from aivudaos.core.config.sudo_nopasswd import SudoNopasswdService
 
 
 @lru_cache

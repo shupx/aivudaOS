@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from core.errors import AppOperationConflictError, NotFoundError
+from aivudaos.core.errors import AppOperationConflictError, NotFoundError
 
 
 @dataclass

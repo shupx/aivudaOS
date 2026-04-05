@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from core.paths import DB_PATH
+from aivudaos.core.paths import DB_PATH
 
 
 def db_conn() -> sqlite3.Connection:

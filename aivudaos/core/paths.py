@@ -6,11 +6,11 @@ from pathlib import Path
 
 import yaml
 
-from core.config.avahi import AvahiService
+from aivudaos.core.config.avahi import AvahiService
 import aivudaos
 
 def _project_root() -> Path:
-    source_root = Path(__file__).resolve().parent.parent
+    source_root = Path(__file__).resolve().parents[2]
     if (source_root / "Caddyfile_template").exists():
         return source_root
 
@@ -27,7 +27,7 @@ def _project_root() -> Path:
     return source_root
 
 
-# PROJECT_ROOT is the aivudaOS/ directory itself in source layout,
+# PROJECT_ROOT is the repository root in source layout,
 # or the packaged resource root in wheel installation layout.
 PROJECT_ROOT = _project_root()
 CADDYFILE_TEMPLATE_PATH = PROJECT_ROOT / "Caddyfile_template"
@@ -201,7 +201,7 @@ def _ensure_default_runtime_files() -> None:
     if not CADDYFILE_PATH.exists() and CADDYFILE_TEMPLATE_PATH.exists():
         shutil.copy2(CADDYFILE_TEMPLATE_PATH, CADDYFILE_PATH)
     
-    import core.config.caddy_runtime as caddy_runtime
+    import aivudaos.core.config.caddy_runtime as caddy_runtime
     caddy_service = caddy_runtime.CaddyRuntimeService()
     caddy_service.sync_https_hostname(str(os_raw.get("avahi_hostname") or ""))
     caddy_service.reload_if_running()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.db.connection import db_conn
+from aivudaos.core.db.connection import db_conn
 
 
 def init_db() -> None:

@@ -78,9 +78,9 @@ cd "${REPO_DIR}"
 
 # Backend process: uvicorn reload in dev, gunicorn in production-like mode.
 if [[ "${DEV_MODE}" -eq 1 ]]; then
-  PYTHONPATH=. /usr/bin/env python3 -m uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir gateway --reload-dir core &
+  PYTHONPATH=. /usr/bin/env python3 -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir aivudaos/gateway --reload-dir aivudaos/core &
 else
-  PYTHONPATH=. /usr/bin/env python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker gateway.main:app -b 127.0.0.1:8000 &
+  PYTHONPATH=. /usr/bin/env python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000 &
 fi
 backend_pid=$!
 

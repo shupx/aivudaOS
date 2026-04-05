@@ -104,7 +104,7 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.8",
     package_dir={"": "."},
-    packages=find_packages(where="."),
+    packages=find_packages(where=".", include=["aivudaos", "aivudaos.*"]),
     include_package_data=True,
     install_requires=read_requirements(),
     entry_points={"console_scripts": ["aivudaos=aivudaos.cli:main"]},

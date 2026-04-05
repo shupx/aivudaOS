@@ -52,7 +52,7 @@ HOST=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "
 
 `scripts/run_aivudaos_stack.sh --dev` 会同时启动：
 
-- 后端：`python3 -m uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir gateway --reload-dir core`
+- 后端：`python3 -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir aivudaos/gateway --reload-dir aivudaos/core`
 - 前端：`cd ui && npm exec vite build -- --watch`
 - 代理：`cd ~ && ./aivudaOS_ws/.tools/caddy/caddy run --config ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`
 
@@ -79,7 +79,7 @@ cd ui && npm install && npm run build && cd ..
 ./scripts/run_aivudaos_stack.sh
 
 # 或仅启动后端（gunicorn + uvicorn worker）注意：保持 `-w 1`。安装任务状态存于进程内存，多 worker 会导致任务查询 404。
-PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker gateway.main:app -b 127.0.0.1:8000
+PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000
 ```
 
 #### 开机自启动：

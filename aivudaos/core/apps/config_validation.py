@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from core.errors import InvalidConfigError
+from aivudaos.core.errors import InvalidConfigError
 
 
 SUPPORTED_SCHEMA_KEYS = {
