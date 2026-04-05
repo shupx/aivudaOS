@@ -4,13 +4,13 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 
 ## Install 
 
-- Install from PyPI:
+- Install from PyPI (may not be the newest):
 
 ```bash
 pip install aivudaos
 ```
 
-- Install from a wheel:
+- Install from a provided wheel:
 
 ```bash
 pip install aivudaos-1.0.0.dev2026040501-py3-none-any.whl
@@ -21,10 +21,10 @@ pip install aivudaos-1.0.0.dev2026040501-py3-none-any.whl
 ```bash
 git clone https://gitee.com/buaa_iooda/aivudaOS.git
 cd aivudaOS/
-pip install .
+pip install . # need dated npm and node installed
 ```
 
-After install the wheel, you must init aivudaos first:
+**After install the wheel, you need to install aivudaOS dependencies first:**
 
 ```bash
 aivudaos install
@@ -43,9 +43,10 @@ The following port is used by aivudaOS:
 Visit  [http://127.0.0.1:80](http://127.0.0.1:80) on the local browser, or vist  [https://<avahi_hostname>.local:443]() on a remote browser, where the `<avahi_hostname>` can be get by
 ```bash
 aivudaos get-avahi-hostname
+aivudaos get-avahi-hostname --debug
 ```
 
-Each robot has a randomly generated and unique avahi_hostname on install, which can be also changed on the system setting of the aivudaOS panel.
+> Each robot has a randomly generated and unique avahi_hostname on install, which can also be changed in the system setting of the aivudaOS panel.
 
 After installation, you can use the unified CLI:
 
@@ -59,6 +60,7 @@ aivudaos restart
 aivudaos enable-autostart
 aivudaos disable-autostart
 aivudaos download-caddy
+aivudaos uninstall
 ```
 
 ## Build wheel

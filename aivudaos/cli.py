@@ -25,6 +25,12 @@ COMMANDS: dict[str, CommandSpec] = {
         summary="Install or update the AivudaOS user service.",
         usage="aivudaos install",
     ),
+    "uninstall": CommandSpec(
+        name="uninstall",
+        script_relpath="scripts/uninstall_aivudaos.sh",
+        summary="Uninstall the AivudaOS user service.",
+        usage="aivudaos uninstall",
+    ),
     "start": CommandSpec(
         name="start",
         script_relpath="scripts/_start_aivudaos_service.sh",

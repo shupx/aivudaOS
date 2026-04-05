@@ -56,6 +56,7 @@ def ensure_ui_dist() -> None:
     if npm_cmd is None:
         raise RuntimeError("npm is required to build ui/dist before packaging")
 
+    subprocess.run([npm_cmd, "install"], cwd=ui_dir, check=True)
     subprocess.run([npm_cmd, "run", "build"], cwd=ui_dir, check=True)
 
 
