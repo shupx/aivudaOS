@@ -13,13 +13,14 @@
 推荐在仓库根目录执行：
 
 ```bash
-bash scripts/install_caddy_local.sh
+bash scripts/helpers/_download_caddy.sh
 ```
 
 安装完成后验证：
 
 ```bash
-./.tools/caddy/caddy version
+cd ~
+./aivudaOS_ws/.tools/caddy/caddy -v
 ```
 
 ## 2. 构建前端
@@ -39,13 +40,13 @@ npm run build
 在仓库根目录执行：
 
 ```bash
-bash scripts/run_aivudaos_stack.sh
+bash scripts/_run_aivudaos_stack.sh
 ```
 
 可选：先校验配置再启动。
 
 ```bash
-./.tools/caddy/caddy validate --config "${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile" --adapter caddyfile
+./aivudaOS_ws/.tools/caddy/caddy validate --config "${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile" --adapter caddyfile
 ```
 
 默认监听：
@@ -55,7 +56,7 @@ bash scripts/run_aivudaos_stack.sh
 
 ## 4. 用户自启动（backend + caddy 一起）
 
-确保已构建前端后，在仓库根目录执行：
+确保已构建前端后，在仓库根目录执行:
 
 ```bash
 bash scripts/install_user_services.sh
@@ -77,7 +78,7 @@ bash scripts/install_user_services.sh
 由于 `80` 是特权端口，脚本会调用：
 
 ```bash
-sudo setcap cap_net_bind_service=+ep ./.tools/caddy/caddy
+sudo setcap cap_net_bind_service=+ep ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/.tools/caddy/caddy
 ```
 
 并自动执行“未登录也自启动”配置（需管理员权限）：

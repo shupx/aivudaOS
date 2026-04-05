@@ -10,7 +10,6 @@ from core.config.avahi import AvahiService
 
 # PROJECT_ROOT is the aivudaOS/ directory itself
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CADDY_BIN_PATH = PROJECT_ROOT / ".tools" / "caddy" / "caddy"
 CADDYFILE_TEMPLATE_PATH = PROJECT_ROOT / "Caddyfile_template"
 
 
@@ -22,6 +21,7 @@ def _runtime_root() -> Path:
 
 
 RUNTIME_ROOT = _runtime_root()
+CADDY_BIN_PATH = RUNTIME_ROOT / ".tools" / "caddy" / "caddy"
 
 # Config files (YAML)
 CONFIG_DIR = RUNTIME_ROOT / "config"

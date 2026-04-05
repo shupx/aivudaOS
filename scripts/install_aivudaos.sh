@@ -12,7 +12,7 @@ USER_SYSTEMD_DIR="${HOME}/.config/systemd/user"
 RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
 
 STACK_UNIT="${USER_SYSTEMD_DIR}/aivudaos.service"
-CADDY_BIN="${REPO_DIR}/.tools/caddy/caddy"
+CADDY_BIN="${RUNTIME_ROOT}/.tools/caddy/caddy"
 CADDY_TEMPLATE="${REPO_DIR}/Caddyfile_template"
 CADDY_CONFIG="${RUNTIME_ROOT}/config/Caddyfile"
 FRONTEND_DIST="${REPO_DIR}/ui/dist"

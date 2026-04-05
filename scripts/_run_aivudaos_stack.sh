@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-CADDY_BIN="${REPO_DIR}/.tools/caddy/caddy"
+CADDY_BIN="${RUNTIME_ROOT}/.tools/caddy/caddy"
 CADDY_TEMPLATE="${REPO_DIR}/Caddyfile_template"
 CADDY_CONFIG="${RUNTIME_ROOT}/config/Caddyfile"
 FRONTEND_DIST="${REPO_DIR}/ui/dist"

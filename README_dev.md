@@ -54,7 +54,7 @@ HOST=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "
 
 - 后端：`python3 -m uvicorn gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir gateway --reload-dir core`
 - 前端：`cd ui && npm exec vite build -- --watch`
-- 代理：`./.tools/caddy/caddy run --config ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`
+- 代理：`cd ~ && ./aivudaOS_ws/.tools/caddy/caddy run --config ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`
 
 ```bash
 cd aivudaOS/

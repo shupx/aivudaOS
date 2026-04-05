@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-INSTALL_DIR="${REPO_DIR}/.tools/caddy"
+INSTALL_DIR="${RUNTIME_ROOT}/.tools/caddy"
 FORCE="${FORCE:-0}"
 SOURCE=""
 OUTPUT="${INSTALL_DIR}/caddy"
