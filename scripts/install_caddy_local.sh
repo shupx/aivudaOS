@@ -5,6 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INSTALL_DIR="${REPO_DIR}/.tools/caddy"
 FORCE="${FORCE:-0}"
+SOURCE="${1:-}"
+
+if [[ "$#" -gt 1 ]]; then
+  echo "Usage: $0 [SOURCE_PATH_OR_URL]" >&2
+  exit 1
+fi
 
 uname_s="$(uname -s | tr '[:upper:]' '[:lower:]')"
 uname_m="$(uname -m | tr '[:upper:]' '[:lower:]')"
@@ -39,38 +45,73 @@ fi
 archive="${INSTALL_DIR}/caddy.tar.gz"
 default_url="https://github.com/caddyserver/caddy/releases/latest/download/caddy_2_${os}_${arch}.tar.gz"
 
-resolve_release_url() {
-  local api_url
-  api_url="https://api.github.com/repos/caddyserver/caddy/releases/latest"
-  curl -fsSL "${api_url}" \
-    | grep -Eo 'https://[^"[:space:]]+/caddy_[^"[:space:]]+_'"${os}"'_'"${arch}"'\.tar\.gz' \
-    | head -n 1
-}
+case "${os}/${arch}" in
+  linux/amd64)
+    download_url="https://caddyserver.com/api/download?os=linux&arch=amd64"
+    ;;
+  linux/arm64)
+    download_url="https://caddyserver.com/api/download?os=linux&arch=arm64"
+    ;;
+  *)
+    download_url="${default_url}"
+    ;;
+esac
 
-download_url="${default_url}"
-echo "Downloading Caddy from: ${download_url}"
-if ! curl -fL "${download_url}" -o "${archive}"; then
-  echo "Default URL failed, resolving latest release asset URL from GitHub API..."
-  download_url="$(resolve_release_url || true)"
-  if [[ -z "${download_url}" ]]; then
-    echo "Failed to resolve latest Caddy release URL for ${os}/${arch}." >&2
+install_from_archive() {
+  local archive_path="$1"
+  local tmp_dir
+
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "${tmp_dir}"' EXIT
+
+  tar -xzf "${archive_path}" -C "${tmp_dir}"
+  if [[ ! -f "${tmp_dir}/caddy" ]]; then
+    echo "Archive does not contain caddy binary." >&2
     exit 1
   fi
+
+  install -m 755 "${tmp_dir}/caddy" "${bin_path}"
+}
+
+install_from_binary() {
+  local bin_source="$1"
+  install -m 755 "${bin_source}" "${bin_path}"
+}
+
+if [[ -n "${SOURCE}" ]]; then
+  if [[ "${SOURCE}" =~ ^https?:// ]]; then
+    echo "Downloading Caddy from custom URL: ${SOURCE}"
+    curl -fL "${SOURCE}" -o "${archive}"
+    if tar -tzf "${archive}" >/dev/null 2>&1; then
+      install_from_archive "${archive}"
+    else
+      install_from_binary "${archive}"
+    fi
+    rm -f "${archive}"
+  else
+    if [[ ! -f "${SOURCE}" ]]; then
+      echo "Custom source file not found: ${SOURCE}" >&2
+      exit 1
+    fi
+
+    echo "Installing Caddy from local source: ${SOURCE}"
+    if tar -tzf "${SOURCE}" >/dev/null 2>&1; then
+      install_from_archive "${SOURCE}"
+    else
+      install_from_binary "${SOURCE}"
+    fi
+  fi
+else
   echo "Downloading Caddy from: ${download_url}"
-  curl -fL "${download_url}" -o "${archive}"
+  if [[ "${download_url}" == https://caddyserver.com/api/download* ]]; then
+    curl -fL "${download_url}" -o "${bin_path}"
+    chmod 755 "${bin_path}"
+  else
+    curl -fL "${download_url}" -o "${archive}"
+    install_from_archive "${archive}"
+    rm -f "${archive}"
+  fi
 fi
-
-tmp_dir="$(mktemp -d)"
-trap 'rm -rf "${tmp_dir}"' EXIT
-
-tar -xzf "${archive}" -C "${tmp_dir}"
-if [[ ! -f "${tmp_dir}/caddy" ]]; then
-  echo "Downloaded archive does not contain caddy binary." >&2
-  exit 1
-fi
-
-install -m 755 "${tmp_dir}/caddy" "${bin_path}"
-rm -f "${archive}"
 
 echo "Installed Caddy to: ${bin_path}"
 "${bin_path}" version
