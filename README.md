@@ -4,16 +4,11 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 
 ## Install 
 
-- Install from gitee/github repository release:
-
-```bash
-pip install git+https://github.com/shupx/aivudaOS.git@nightly
-```
-
 - Install from PyPI (may not be the newest):
 
 ```bash
 pip install aivudaos
+# pip install aivudaos==1.0.0.dev2026040602  # for a certain version
 ```
 
 - Install from a provided wheel:
