@@ -1,0 +1,293 @@
+name: nightly-build
+
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Force rebuild and republish even when HEAD matches the last successful nightly run
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: nightly-build
+  cancel-in-progress: false
+
+jobs:
+  check-changes:
+    name: Check nightly source changes
+    runs-on: ubuntu-24.04
+    outputs:
+      should_build: ${{ steps.release-check.outputs.should_build }}
+      build_date: ${{ steps.meta.outputs.build_date }}
+      build_seq: ${{ steps.meta.outputs.build_seq }}
+      head_sha: ${{ steps.meta.outputs.head_sha }}
+      trigger_mode: ${{ steps.meta.outputs.trigger_mode }}
+      forced_build: ${{ steps.meta.outputs.forced_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Compute build metadata
+        id: meta
+        shell: bash
+        env:
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force || false }}
+        run: |
+          echo "build_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "build_seq=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "trigger_mode=${GITHUB_EVENT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "forced_build=${FORCE_BUILD}" >> "$GITHUB_OUTPUT"
+
+      - name: Compare against latest successful nightly run
+        id: release-check
+        uses: actions/github-script@v7
+        env:
+          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
+          FORCE_BUILD: ${{ steps.meta.outputs.forced_build }}
+        with:
+          script: |
+            let shouldBuild = true;
+            const workflowId = '.github/workflows/nightly-build.yml';
+            const forceBuild = String(process.env.FORCE_BUILD || '').toLowerCase() === 'true';
+
+            if (forceBuild) {
+              core.info('Force rebuild requested for workflow_dispatch; skipping prior-run SHA comparison.');
+              core.setOutput('should_build', 'true');
+              return;
+            }
+
+            try {
+              const branch = context.ref.startsWith('refs/heads/')
+                ? context.ref.replace('refs/heads/', '')
+                : undefined;
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowId,
+                ...(branch ? { branch } : {}),
+                status: 'success',
+                per_page: 10,
+              });
+
+              const currentRunId = Number(process.env.GITHUB_RUN_ID || '0');
+              const previousSuccessfulRun = (data.workflow_runs || []).find(
+                (run) => run.id !== currentRunId
+              );
+              const lastSha = previousSuccessfulRun?.head_sha || '';
+
+              core.info(`Current HEAD: ${process.env.HEAD_SHA}`);
+              core.info(`Previous successful nightly SHA: ${lastSha || 'not found'}`);
+
+              if (lastSha === process.env.HEAD_SHA) {
+                shouldBuild = false;
+              }
+            } catch (error) {
+              core.warning(`Unable to inspect prior nightly runs: ${error.message}`);
+            }
+
+            core.setOutput('should_build', shouldBuild ? 'true' : 'false');
+
+      - name: Write summary
+        shell: bash
+        run: |
+          {
+            echo "## Nightly build decision"
+            echo
+            echo "- Trigger mode: \`${{ steps.meta.outputs.trigger_mode }}\`"
+            echo "- Forced build: \`${{ steps.meta.outputs.forced_build }}\`"
+            echo "- HEAD SHA: \`${{ steps.meta.outputs.head_sha }}\`"
+            echo "- Should build: \`${{ steps.release-check.outputs.should_build }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build Python distributions
+    needs: check-changes
+    if: needs.check-changes.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: aivudaOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: aivudaOS/ui/package-lock.json
+
+      - name: Install Python build tool
+        shell: bash
+        run: python -m pip install --upgrade build
+
+      - name: Build UI assets
+        shell: bash
+        working-directory: aivudaOS/ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Clean previous Python distributions
+        shell: bash
+        run: rm -rf dist build aivudaos.egg-info
+
+      - name: Build wheel and sdist
+        shell: bash
+        env:
+          AIVUDAOS_BUILD_DATE: ${{ needs.check-changes.outputs.build_date }}
+          AIVUDAOS_BUILD_SEQ: ${{ needs.check-changes.outputs.build_seq }}
+        run: python -m build
+
+      - name: Verify distributions
+        shell: bash
+        run: |
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          sdists=(dist/*.tar.gz)
+          test "${#wheels[@]}" -gt 0
+          test "${#sdists[@]}" -gt 0
+          printf '%s\n' "${wheels[@]}" "${sdists[@]}" | sort
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-dist
+          path: |
+            aivudaOS/dist/*.whl
+            aivudaOS/dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish nightly release
+    needs:
+      - check-changes
+      - build
+    if: needs.check-changes.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download built distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-dist
+          path: dist
+
+      - name: Show distribution files
+        shell: bash
+        run: find dist -maxdepth 1 -type f | sort
+
+      - name: Remove existing nightly assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: 'nightly',
+              });
+
+              for (const asset of release.assets) {
+                core.info(`Deleting asset ${asset.name} (${asset.id})`);
+                await github.rest.repos.deleteReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: asset.id,
+                });
+              }
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+      - name: Move nightly tag to current commit
+        uses: actions/github-script@v7
+        env:
+          HEAD_SHA: ${{ needs.check-changes.outputs.head_sha }}
+        with:
+          script: |
+            try {
+              await github.rest.git.updateRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'tags/nightly',
+                sha: process.env.HEAD_SHA,
+                force: true,
+              });
+              core.info(`Updated tag nightly to ${process.env.HEAD_SHA}`);
+            } catch (error) {
+              if (
+                error.status === 404 ||
+                (error.status === 422 && /Reference does not exist/i.test(error.message || ''))
+              ) {
+                await github.rest.git.createRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: 'refs/tags/nightly',
+                  sha: process.env.HEAD_SHA,
+                });
+                core.info(`Created tag nightly at ${process.env.HEAD_SHA}`);
+              } else {
+                throw error;
+              }
+            }
+
+      - name: Publish nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly Build
+          prerelease: true
+          make_latest: false
+          target_commitish: ${{ needs.check-changes.outputs.head_sha }}
+          body: |
+            Automated nightly build for commit `${{ needs.check-changes.outputs.head_sha }}`.
+
+            Build date: `${{ needs.check-changes.outputs.build_date }}`
+            Build sequence: `${{ needs.check-changes.outputs.build_seq }}`
+            Trigger mode: `${{ needs.check-changes.outputs.trigger_mode }}`
+            Forced build: `${{ needs.check-changes.outputs.forced_build }}`
+
+            <!-- nightly-source-sha: ${{ needs.check-changes.outputs.head_sha }} -->
+          files: |
+            dist/*
+          overwrite_files: true
+
+  publish-pypi:
+    name: Publish nightly package to PyPI
+    needs:
+      - check-changes
+      - build
+    if: needs.check-changes.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+    steps:
+      - name: Download built distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-dist
+          path: dist
+
+      - name: Publish to PyPI with trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
