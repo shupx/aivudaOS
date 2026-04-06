@@ -7,6 +7,10 @@ triggers:
     branches:
       include:
         - main
+variables:
+  global:
+    - ENABLE_PYPI_UPLOAD
+    - PYPI_TOKEN
 stages:
   - name: build
     displayName: Build Python distributions
