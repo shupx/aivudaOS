@@ -96,6 +96,8 @@ AIVUDAOS_BUILD_SEQ=01 \
 ./publish_aivudaos_pypi.sh --skip-upload
 ```
 
+The automated workflow is activated at https://github.com/shupx/aivudaOS/actions/workflows/nightly-build.yml, which deploys a check every night and build and publish wheels to PyPi if there is a update.
+
 ## Develop
 
 Refer to [README_dev.md](README_dev.md) 
