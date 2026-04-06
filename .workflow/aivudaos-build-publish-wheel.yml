@@ -18,39 +18,42 @@ stages:
         displayName: Build and optionally publish AivudaOS
         pythonVersion: 3.8
         commands:
-          - |
-            set -euo pipefail
-
-            # export NVM_DIR="${HOME}/.nvm"
-            # if [ ! -s "${NVM_DIR}/nvm.sh" ]; then
-            #   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-            # fi
-            # . "${NVM_DIR}/nvm.sh"
-            # nvm install 20
-            # nvm use 20
-
-            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-            apt install -y nodejs
-
-            python --version
-            node --version
-            npm --version
-
-            export AIVUDAOS_BUILD_DATE="$(date -u +%Y%m%d)"
-            export AIVUDAOS_BUILD_SEQ="${GITEE_PIPELINE_BUILD_ID:-${PIPELINE_BUILD_ID:-${BUILD_ID:-$(date -u +%H%M%S)}}}"
-
-            if [ -n "${TWINE_USERNAME:-}" ] && [ -n "${TWINE_PASSWORD:-}" ]; then
-              export TWINE_NON_INTERACTIVE=1
-              ./publish_aivudaos_pypi.sh
-            else
-              ./publish_aivudaos_pypi.sh --skip-upload
-            fi
-
-            ls -lah dist
+          - set -euo pipefail
+          - ''
+          - '# export NVM_DIR="${HOME}/.nvm"'
+          - '# if [ ! -s "${NVM_DIR}/nvm.sh" ]; then'
+          - '#   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'
+          - '# fi'
+          - '# . "${NVM_DIR}/nvm.sh"'
+          - '# nvm install 20'
+          - '# nvm use 20'
+          - ''
+          - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          - apt install -y nodejs
+          - ''
+          - python --version
+          - node --version
+          - npm --version
+          - ''
+          - pip install --default-timeout=100 -i https://pypi.tuna.tsinghua.edu.cn/simple build twine
+          - ''
+          - export AIVUDAOS_BUILD_DATE="$(date -u +%Y%m%d)"
+          - export AIVUDAOS_BUILD_SEQ="${GITEE_PIPELINE_BUILD_ID:-${PIPELINE_BUILD_ID:-${BUILD_ID:-$(date -u +%H%M%S)}}}"
+          - ''
+          - if [ -n "${TWINE_USERNAME:-}" ] && [ -n "${TWINE_PASSWORD:-}" ]; then
+          - '  export TWINE_NON_INTERACTIVE=1'
+          - '  ./publish_aivudaos_pypi.sh'
+          - else
+          - '  ./publish_aivudaos_pypi.sh --skip-upload'
+          - fi
+          - ''
+          - ls -lah dist
+          - ''
         artifacts:
           - name: BUILD_ARTIFACT
             path:
               - ./dist
+        strategy: {}
       - step: publish@general_artifacts
         name: publish_general_artifacts
         displayName: Upload nightly distributions
