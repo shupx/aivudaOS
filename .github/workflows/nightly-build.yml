@@ -114,9 +114,6 @@ jobs:
     needs: check-changes
     if: needs.check-changes.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: aivudaOS
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,7 +128,7 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: aivudaOS/ui/package-lock.json
+          cache-dependency-path: ui/package-lock.json
 
       - name: Install Python build tool
         shell: bash
@@ -139,7 +136,7 @@ jobs:
 
       - name: Build UI assets
         shell: bash
-        working-directory: aivudaOS/ui
+        working-directory: ui
         run: |
           npm ci
           npm run build
@@ -170,8 +167,8 @@ jobs:
         with:
           name: nightly-dist
           path: |
-            aivudaOS/dist/*.whl
-            aivudaOS/dist/*.tar.gz
+            dist/*.whl
+            dist/*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
