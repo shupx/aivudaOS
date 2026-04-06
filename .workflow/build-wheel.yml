@@ -1,5 +1,5 @@
 version: '1.0'
-name: nightly-build
+name: build-wheel
 displayName: AivudaOS Nightly Build
 
 triggers:
