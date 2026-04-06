@@ -28,14 +28,14 @@ stages:
           - '# nvm install 20'
           - '# nvm use 20'
           - ''
-          - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
           - apt install -y nodejs
           - ''
           - python --version
           - node --version
           - npm --version
           - ''
-          - pip install --default-timeout=100 -i https://pypi.tuna.tsinghua.edu.cn/simple build twine
+          - '# pip install --default-timeout=100 -i https://pypi.tuna.tsinghua.edu.cn/simple build twine'
           - ''
           - export AIVUDAOS_BUILD_DATE="$(date -u +%Y%m%d)"
           - export AIVUDAOS_BUILD_SEQ="${GITEE_PIPELINE_BUILD_ID:-${PIPELINE_BUILD_ID:-${BUILD_ID:-$(date -u +%H%M%S)}}}"
