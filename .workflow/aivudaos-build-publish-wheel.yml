@@ -37,10 +37,10 @@ stages:
           - ''
           - if [ "${PYPI_UPLOAD}" = "true" ] && [ -n "${TWINE_PASSWORD:-}" ]; then
           - '  export TWINE_NON_INTERACTIVE=1'
-          - '  echo "enable uploading pypi, since PYPI_UPLOAD = true && TWINE_PASSWORD is set"'
+          - '  echo -e "\e[32menable uploading pypi, since PYPI_UPLOAD = true && TWINE_PASSWORD is set\e[0m"'
           - '  ./publish_aivudaos_pypi.sh'
           - else
-          - '  echo "disable uploading pypi, since PYPI_UPLOAD = false or TWINE_PASSWORD is not set"'
+          - '  echo -e "\e[32mdisable uploading pypi, since PYPI_UPLOAD = false or TWINE_PASSWORD is not set\e[0m"'
           - '  ./publish_aivudaos_pypi.sh --skip-upload'
           - fi
           - ''
@@ -53,7 +53,25 @@ stages:
         strategy: {}
       - step: publish@general_artifacts
         name: publish_general_artifacts
-        displayName: Upload nightly distributions
+        displayName: 上传制品
         dependArtifact: BUILD_ARTIFACT
-        artifactName: aivudaos-nightly-dist
+        artifactName: aivudaos-latest-dist
+        notify: []
+        strategy:
+          retry: '0'
         dependsOn: build_python_package
+  - name: stage-2adb8f4b
+    displayName: release
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: publish@release_artifacts
+        name: publish_release_artifacts
+        displayName: 发布
+        dependArtifact: aivudaos-latest-dist
+        version: 1.0.0.0
+        autoIncrement: true
+        notify: []
+        strategy:
+          retry: '0'
