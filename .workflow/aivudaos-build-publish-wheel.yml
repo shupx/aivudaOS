@@ -26,7 +26,8 @@ stages:
           - node --version
           - npm --version
           - ''
-          - '# pip install --default-timeout=100 -i https://pypi.tuna.tsinghua.edu.cn/simple build twine'
+          - export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+          - export PIP_DEFAULT_TIMEOUT=100
           - ''
           - export AIVUDAOS_BUILD_DATE="$(date -u +%Y%m%d)"
           - export AIVUDAOS_BUILD_SEQ="${GITEE_PIPELINE_BUILD_NUMBER}"
