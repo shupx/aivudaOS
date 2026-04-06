@@ -31,11 +31,16 @@ stages:
           - ''
           - export AIVUDAOS_BUILD_DATE="$(date -u +%Y%m%d)"
           - export AIVUDAOS_BUILD_SEQ="${GITEE_PIPELINE_BUILD_NUMBER}"
+          - export TWINE_USERNAME=__token__
+          - export TWINE_PASSWORD="${PYPI_TOKEN:-}"
+          - export PYPI_UPLOAD="${ENABLE_PYPI_UPLOAD:-false}"
           - ''
-          - if [ -n "${TWINE_USERNAME:-}" ] && [ -n "${TWINE_PASSWORD:-}" ]; then
+          - if [ "${PYPI_UPLOAD}" = "true" ] && [ -n "${TWINE_PASSWORD:-}" ]; then
           - '  export TWINE_NON_INTERACTIVE=1'
+          - '  echo "enable uploading pypi, since PYPI_UPLOAD = true && TWINE_PASSWORD is set"'
           - '  ./publish_aivudaos_pypi.sh'
           - else
+          - '  echo "disable uploading pypi, since PYPI_UPLOAD = false or TWINE_PASSWORD is not set"'
           - '  ./publish_aivudaos_pypi.sh --skip-upload'
           - fi
           - ''
