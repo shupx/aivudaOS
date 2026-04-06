@@ -289,6 +289,7 @@ jobs:
             Build sequence: `${{ needs.check-changes.outputs.build_seq }}`
             Trigger mode: `${{ needs.check-changes.outputs.trigger_mode }}`
             Forced build: `${{ needs.check-changes.outputs.forced_build }}`
+            Upload PyPI: `${{ needs.check-changes.outputs.upload_pypi }}`
 
             <!-- nightly-source-sha: ${{ needs.check-changes.outputs.head_sha }} -->
           files: |
