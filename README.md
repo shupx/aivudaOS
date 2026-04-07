@@ -75,14 +75,6 @@ aivudaos get-avahi-hostname --debug
 
 > Each robot has a randomly generated and unique avahi_hostname on install, which can also be changed in the system setting of the aivudaOS panel.
 
-The `System Settings` page in the web UI can also manage the AivudaOS service itself:
-
-- stop service
-- restart service
-- uninstall service
-- enable/disable autostart
-- passwordless sudo, relogin, and APT sources management
-
 After installation, you can use the unified CLI:
 
 ```bash
