@@ -85,7 +85,7 @@ gateway 启动后自动检测 `aivudaos/resources/ui/dist/`，将前端静态文
 打包规则：
 
 - wheel 仅包含 `aivudaos/resources/ui/dist/`
-- sdist 保留 `aivudaos/resources/ui/` 下的非 `dist` 前端源码，便于重新构建
+- sdist 不包含 `aivudaos/resources/ui/dist/` 和 `node_modules/`，只保留前端源码，便于重新构建
 
 ```bash
 # 构建前端静态文件

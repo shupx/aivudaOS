@@ -2,5 +2,8 @@ include README.md
 include requirements.txt
 recursive-include aivudaos/resources *
 prune aivudaos/resources/ui/node_modules
+prune aivudaos/resources/ui/dist
 prune aivudaos/resources/ui/.vite
 prune aivudaos/resources/ui/.vite-temp
+global-exclude __pycache__
+global-exclude *.py[cod]

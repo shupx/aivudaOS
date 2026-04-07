@@ -14,6 +14,28 @@ from setuptools.command.sdist import sdist as _sdist
 ROOT = Path(__file__).resolve().parent
 SOURCE_ROOT = ROOT
 BASE_VERSION = "1.0.0"
+SDIST_EXCLUDED_PATHS = (
+    Path("aivudaos/resources/ui/node_modules"),
+    Path("aivudaos/resources/ui/dist"),
+    Path("aivudaos/resources/ui/.vite"),
+    Path("aivudaos/resources/ui/.vite-temp"),
+)
+
+
+def _is_relative_to(path: Path, other: Path) -> bool:
+    try:
+        path.relative_to(other)
+        return True
+    except ValueError:
+        return False
+
+
+def _should_exclude_from_sdist(path: Path) -> bool:
+    normalized = Path(*path.parts)
+    for excluded in SDIST_EXCLUDED_PATHS:
+        if normalized == excluded or _is_relative_to(normalized, excluded):
+            return True
+    return False
 
 
 def build_version() -> str:
@@ -98,6 +120,25 @@ class sdist(_sdist):
     def run(self) -> None:
         ensure_ui_dist()
         super().run()
+
+    def make_release_tree(self, base_dir: str, files: list[str]) -> None:
+        filtered_files = [
+            file_path
+            for file_path in files
+            if not _should_exclude_from_sdist(Path(file_path))
+        ]
+        super().make_release_tree(base_dir, filtered_files)
+        self._prune_release_tree(Path(base_dir))
+
+    def _prune_release_tree(self, base_dir: Path) -> None:
+        for excluded in SDIST_EXCLUDED_PATHS:
+            target = base_dir / excluded
+            if not target.exists():
+                continue
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
 
 
 setup(

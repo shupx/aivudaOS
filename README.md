@@ -94,7 +94,7 @@ aivudaos uninstall
 
 Build release artifacts locally:
 
-> Wheel artifacts include only `aivudaos/resources/ui/dist` for the frontend. The source distribution keeps the non-`dist` UI source files for development and rebuilding.
+> Wheel artifacts include only `aivudaos/resources/ui/dist` for the frontend. The source distribution excludes `dist` and `node_modules`, while keeping the UI source files for development and rebuilding.
 
 ```bash
 cd aivudaOS/
