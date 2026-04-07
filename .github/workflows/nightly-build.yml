@@ -137,7 +137,7 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: ui/package-lock.json
+          cache-dependency-path: aivudaos/resources/ui/package-lock.json
 
       - name: Install Python build tool
         shell: bash
@@ -145,7 +145,7 @@ jobs:
 
       - name: Build UI assets
         shell: bash
-        working-directory: ui
+        working-directory: aivudaos/resources/ui
         run: |
           npm ci
           npm run build
