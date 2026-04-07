@@ -44,6 +44,13 @@ pip uninstall aivudaos
 
 ## Usage
 
+Add python local path first:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
 **After install the wheel, you need to install aivudaOS dependencies first:**
 
 ```bash
