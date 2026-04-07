@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
@@ -18,7 +18,7 @@ class LoginResponse(BaseModel):
 
 class ConfigUpdateRequest(BaseModel):
     version: int
-    data: dict[str, Any]
+    data: Dict[str, Any]
 
 
 class MagnetUpdateRequest(BaseModel):
@@ -43,7 +43,7 @@ class AptSourcesRestoreRequest(BaseModel):
 
 class AppConfigUpdateRequest(BaseModel):
     version: int
-    data: dict[str, Any]
+    data: Dict[str, Any]
     app_version: Optional[str] = None
 
 

@@ -43,6 +43,8 @@ npm run build
 bash aivudaos/resources/scripts/_run_aivudaos_stack.sh
 ```
 
+后端 Python 代码需要保持 Python 3.8 兼容
+
 可选：先校验配置再启动。
 
 ```bash
