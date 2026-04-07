@@ -16,6 +16,7 @@ SOURCE_ROOT=""
 if [[ -f "${SOURCE_ROOT_CANDIDATE}/setup.py" ]]; then
   SOURCE_ROOT="${SOURCE_ROOT_CANDIDATE}"
 fi
+PYTHONPATH_PREFIX="${PYTHONPATH:-}"
 RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
 DEV_MODE=0
 
@@ -84,6 +85,11 @@ if [[ "${DEV_MODE}" -eq 1 ]]; then
     echo "Dev mode is only supported from a source checkout." >&2
     exit 1
   fi
+  if [[ -n "${PYTHONPATH_PREFIX}" ]]; then
+    PYTHONPATH_PREFIX="${SOURCE_ROOT}:${PYTHONPATH_PREFIX}"
+  else
+    PYTHONPATH_PREFIX="${SOURCE_ROOT}"
+  fi
   mkdir -p "${FRONTEND_DIST}"
 fi
 
@@ -91,9 +97,9 @@ cd "${RUNTIME_ROOT}"
 
 # Backend process: uvicorn reload in dev, gunicorn in production-like mode.
 if [[ "${DEV_MODE}" -eq 1 ]]; then
-  /usr/bin/env python3 -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "${SOURCE_ROOT}/aivudaos/gateway" --reload-dir "${SOURCE_ROOT}/aivudaos/core" &
+  env PYTHONPATH="${PYTHONPATH_PREFIX}" /usr/bin/env python3 -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "${SOURCE_ROOT}/aivudaos/gateway" --reload-dir "${SOURCE_ROOT}/aivudaos/core" &
 else
-  /usr/bin/env python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000 &
+  env PYTHONPATH="${PYTHONPATH_PREFIX}" /usr/bin/env python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000 &
 fi
 backend_pid=$!
 
