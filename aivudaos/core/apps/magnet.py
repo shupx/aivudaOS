@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -24,7 +24,7 @@ class MagnetService:
         self._config = config_service
         self._versioning = versioning_service
 
-    def list_groups(self) -> dict[str, Any]:
+    def list_groups(self) -> Dict[str, Any]:
         cfg = self._read_registry()
         data = cfg.data
         return {
@@ -35,9 +35,9 @@ class MagnetService:
             "updated_by": cfg.updated_by,
         }
 
-    def readonly_paths_for_app(self, app_id: str, app_version: str) -> set[str]:
+    def readonly_paths_for_app(self, app_id: str, app_version: str) -> Set[str]:
         groups = self.list_groups().get("items") or []
-        readonly: set[str] = set()
+        readonly: Set[str] = set()
         for group in groups:
             if not isinstance(group, dict):
                 continue
@@ -54,9 +54,9 @@ class MagnetService:
                         readonly.add(path)
         return readonly
 
-    def readonly_paths_for_sys(self) -> set[str]:
+    def readonly_paths_for_sys(self) -> Set[str]:
         groups = self.list_groups().get("items") or []
-        readonly: set[str] = set()
+        readonly: Set[str] = set()
         for group in groups:
             if not isinstance(group, dict):
                 continue
@@ -73,10 +73,10 @@ class MagnetService:
         self,
         app_id: str,
         app_version: str,
-        before_data: dict[str, Any],
-        after_data: dict[str, Any],
-    ) -> list[str]:
-        blocked: list[str] = []
+        before_data: Dict[str, Any],
+        after_data: Dict[str, Any],
+    ) -> List[str]:
+        blocked: List[str] = []
         for path in sorted(self.readonly_paths_for_app(app_id, app_version)):
             if _nested_get(before_data, path) != _nested_get(after_data, path):
                 blocked.append(path)
@@ -84,16 +84,16 @@ class MagnetService:
 
     def blocked_paths_for_sys_update(
         self,
-        before_data: dict[str, Any],
-        after_data: dict[str, Any],
-    ) -> list[str]:
-        blocked: list[str] = []
+        before_data: Dict[str, Any],
+        after_data: Dict[str, Any],
+    ) -> List[str]:
+        blocked: List[str] = []
         for path in sorted(self.readonly_paths_for_sys()):
             if _nested_get(before_data, path) != _nested_get(after_data, path):
                 blocked.append(path)
         return blocked
 
-    def recompute(self, updated_by: str = "system") -> dict[str, Any]:
+    def recompute(self, updated_by: str = "system") -> Dict[str, Any]:
         current = self._read_registry()
         previous_groups = {
             str(g.get("path")): g
@@ -102,8 +102,8 @@ class MagnetService:
         }
 
         discovered = self._collect_candidates()
-        next_groups: list[dict[str, Any]] = []
-        conflicts: list[dict[str, Any]] = []
+        next_groups: List[Dict[str, Any]] = []
+        conflicts: List[Dict[str, Any]] = []
 
         for path, entries in sorted(discovered.items(), key=lambda item: item[0]):
             if len(entries) < 2:
@@ -160,7 +160,7 @@ class MagnetService:
         value: Any,
         expected_version: int,
         updated_by: str,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         current = self._read_registry()
         groups = list(current.data.get("groups") or [])
 
@@ -204,8 +204,8 @@ class MagnetService:
 
     def _pick_value(
         self,
-        entries: list[dict[str, Any]],
-        previous_group: Optional[dict[str, Any]],
+        entries: List[Dict[str, Any]],
+        previous_group: Optional[Dict[str, Any]],
     ) -> Any:
         if previous_group and "value" in previous_group:
             return previous_group.get("value")
@@ -216,8 +216,8 @@ class MagnetService:
 
         return entries[0].get("value")
 
-    def _collect_candidates(self) -> dict[str, list[dict[str, Any]]]:
-        discovered: dict[str, list[dict[str, Any]]] = {}
+    def _collect_candidates(self) -> Dict[str, List[Dict[str, Any]]]:
+        discovered: Dict[str, List[Dict[str, Any]]] = {}
 
         sys_cfg = self._config.get_sys_config().data
         sys_schema_map = _read_sys_schema_map(sys_cfg)
@@ -263,7 +263,7 @@ class MagnetService:
 
         return discovered
 
-    def _apply_group_value(self, group: dict[str, Any], updated_by: str) -> None:
+    def _apply_group_value(self, group: Dict[str, Any], updated_by: str) -> None:
         path = str(group.get("path") or "").strip()
         value = group.get("value")
         if not path:
@@ -345,7 +345,7 @@ class MagnetService:
 
     def _write_registry(
         self,
-        data: dict[str, Any],
+        data: Dict[str, Any],
         expected_version: int,
         updated_by: str,
     ) -> VersionedConfig:
@@ -389,27 +389,27 @@ class MagnetService:
             updated_by=updated_by,
         )
 
-    def _list_active_apps(self) -> list[tuple[str, str]]:
+    def _list_active_apps(self) -> List[Tuple[str, str]]:
         with db_conn() as conn:
             rows = conn.execute(
                 "SELECT app_id, version FROM app_installation ORDER BY app_id, installed_at DESC"
             ).fetchall()
 
-        latest_by_app: dict[str, str] = {}
+        latest_by_app: Dict[str, str] = {}
         for row in rows:
             app_id = str(row["app_id"])
             if app_id in latest_by_app:
                 continue
             latest_by_app[app_id] = str(row["version"])
 
-        active: list[tuple[str, str]] = []
+        active: List[Tuple[str, str]] = []
         for app_id, fallback in latest_by_app.items():
             ver = self._versioning.active_version(app_id) or fallback
             if ver:
                 active.append((app_id, ver))
         return active
 
-    def _get_manifest(self, app_id: str, app_version: str) -> dict[str, Any]:
+    def _get_manifest(self, app_id: str, app_version: str) -> Dict[str, Any]:
         with db_conn() as conn:
             row = conn.execute(
                 "SELECT manifest FROM app_installation WHERE app_id = ? AND version = ? LIMIT 1",
@@ -420,13 +420,13 @@ class MagnetService:
         return json.loads(str(row["manifest"]))
 
 
-def _flatten_schema_leaves(schema: Any, parent: str = "") -> dict[str, dict[str, Any]]:
+def _flatten_schema_leaves(schema: Any, parent: str = "") -> Dict[str, Dict[str, Any]]:
     if not isinstance(schema, dict):
         return {}
 
     schema_type = schema.get("type")
     props = schema.get("properties")
-    output: dict[str, dict[str, Any]] = {}
+    output: Dict[str, Dict[str, Any]] = {}
 
     if (schema_type == "object" or isinstance(props, dict)) and isinstance(props, dict):
         for key, child in props.items():
@@ -441,11 +441,11 @@ def _flatten_schema_leaves(schema: Any, parent: str = "") -> dict[str, dict[str,
     return output
 
 
-def _flatten_leaf_paths(data: Any, parent: str = "") -> list[str]:
+def _flatten_leaf_paths(data: Any, parent: str = "") -> List[str]:
     if not isinstance(data, dict):
         return [parent] if parent else []
 
-    paths: list[str] = []
+    paths: List[str] = []
     for key, value in data.items():
         if str(key).startswith("_"):
             continue
@@ -469,12 +469,12 @@ def _nested_get(data: Any, dotted_path: str) -> Any:
     return current
 
 
-def _nested_set(data: dict[str, Any], dotted_path: str, value: Any) -> None:
+def _nested_set(data: Dict[str, Any], dotted_path: str, value: Any) -> None:
     parts = [part.strip() for part in str(dotted_path).split(".") if part.strip()]
     if not parts:
         return
 
-    cursor: dict[str, Any] = data
+    cursor: Dict[str, Any] = data
     for part in parts[:-1]:
         item = cursor.get(part)
         if not isinstance(item, dict):
@@ -484,7 +484,7 @@ def _nested_set(data: dict[str, Any], dotted_path: str, value: Any) -> None:
     cursor[parts[-1]] = value
 
 
-def _is_compatible(items: list[dict[str, Any]]) -> tuple[bool, str]:
+def _is_compatible(items: List[Dict[str, Any]]) -> Tuple[bool, str]:
     types = {str(item.get("type_name") or "unknown") for item in items}
     if len(types) <= 1:
         return True, ""
@@ -524,7 +524,7 @@ def _infer_type_name(value: Any) -> str:
     return "unknown"
 
 
-def _binding_of(item: dict[str, Any]) -> dict[str, Any]:
+def _binding_of(item: Dict[str, Any]) -> Dict[str, Any]:
     kind = str(item.get("kind") or "")
     path = str(item.get("path") or "")
     if kind == "sys":
@@ -542,12 +542,12 @@ def _stable_group_id(path: str) -> str:
     return f"magnet__{safe}"
 
 
-def _read_sys_schema_map(sys_cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _read_sys_schema_map(sys_cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     raw = sys_cfg.get("_sys_schema")
     if not isinstance(raw, dict):
         return {}
 
-    output: dict[str, dict[str, Any]] = {}
+    output: Dict[str, Dict[str, Any]] = {}
     for key, value in raw.items():
         if not isinstance(key, str):
             continue

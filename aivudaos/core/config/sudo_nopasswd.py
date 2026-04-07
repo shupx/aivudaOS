@@ -6,7 +6,7 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 
 class SudoNopasswdService:
@@ -26,14 +26,14 @@ class SudoNopasswdService:
             raise ValueError(f'Invalid system username: {candidate}')
         return candidate
 
-    def get_status(self) -> dict[str, object]:
+    def get_status(self) -> Dict[str, object]:
         username = self.resolve_target_user()
         return {
             'username': username,
             'enabled': self._is_passwordless_sudo_enabled(username),
         }
 
-    def set_enabled(self, enabled: bool, sudo_password: Optional[str] = None) -> dict[str, object]:
+    def set_enabled(self, enabled: bool, sudo_password: Optional[str] = None) -> Dict[str, object]:
         username = self.resolve_target_user()
         self._set_passwordless_sudo(username, bool(enabled), sudo_password)
         return {
@@ -63,7 +63,7 @@ class SudoNopasswdService:
 
     def _run_privileged(
         self,
-        args: list[str],
+        args: List[str],
         *,
         sudo_password: Optional[str] = None,
         input_text: Optional[str] = None,

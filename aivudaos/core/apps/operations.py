@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from aivudaos.core.errors import AppOperationConflictError, NotFoundError
 
@@ -18,18 +18,18 @@ class OperationRecord:
     started_at: int
     ended_at: Optional[int] = None
     error: Optional[str] = None
-    result: Optional[dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
     seq: int = 0
     done: bool = False
-    events: list[dict[str, Any]] = field(default_factory=list)
+    events: List[Dict[str, Any]] = field(default_factory=list)
     condition: threading.Condition = field(default_factory=threading.Condition)
     interactive_enabled: bool = False
     interactive_open: bool = False
     interactive_closed_reason: Optional[str] = None
-    interactive_inputs: list[str] = field(default_factory=list)
+    interactive_inputs: List[str] = field(default_factory=list)
     cancel_requested: bool = False
     cancel_reason: Optional[str] = None
-    cancel_handlers: list[Callable[[], None]] = field(default_factory=list)
+    cancel_handlers: List[Callable[[], None]] = field(default_factory=list)
 
 
 class AppOperationManager:
@@ -37,8 +37,8 @@ class AppOperationManager:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._records: dict[str, OperationRecord] = {}
-        self._app_running: dict[str, str] = {}
+        self._records: Dict[str, OperationRecord] = {}
+        self._app_running: Dict[str, str] = {}
 
     def start_operation(
         self,
@@ -122,7 +122,7 @@ class AppOperationManager:
             phase="running",
         )
 
-    def mark_completed(self, operation_id: str, result: Optional[dict[str, Any]] = None) -> None:
+    def mark_completed(self, operation_id: str, result: Optional[Dict[str, Any]] = None) -> None:
         record = self._require_record(operation_id)
         record.status = "completed"
         record.done = True
@@ -185,7 +185,7 @@ class AppOperationManager:
         )
         self._release_app(record)
 
-    def get_operation(self, operation_id: str) -> dict[str, Any]:
+    def get_operation(self, operation_id: str) -> Dict[str, Any]:
         record = self._require_record(operation_id)
         return {
             "operation_id": record.operation_id,
@@ -206,7 +206,7 @@ class AppOperationManager:
 
     def request_cancel(self, operation_id: str, reason: str = "Canceled by user") -> None:
         record = self._require_record(operation_id)
-        handlers: list[Callable[[], None]] = []
+        handlers: List[Callable[[], None]] = []
         with record.condition:
             if record.done:
                 raise AppOperationConflictError(
@@ -299,7 +299,7 @@ class AppOperationManager:
         operation_id: str,
         since_seq: int,
         timeout: float = 15.0,
-    ) -> tuple[list[dict[str, Any]], bool]:
+    ) -> Tuple[List[Dict[str, Any]], bool]:
         record = self._require_record(operation_id)
         with record.condition:
             if not record.done and record.seq <= since_seq:

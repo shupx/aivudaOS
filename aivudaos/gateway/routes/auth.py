@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Dict
+
 from fastapi import APIRouter, HTTPException
 
 from aivudaos.core.auth.service import AuthService
@@ -21,7 +23,7 @@ async def login(payload: LoginRequest) -> LoginResponse:
 
 
 @router.get("/me")
-async def me(token: str) -> dict[str, str]:
+async def me(token: str) -> Dict[str, str]:
     auth: AuthService = get_auth_service()
     try:
         session = auth.validate_token(token)

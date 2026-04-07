@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
@@ -51,7 +51,7 @@ def _require_auth(token: str) -> SessionInfo:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-def _sse_event(event: str, payload: dict[str, Any]) -> str:
+def _sse_event(event: str, payload: Dict[str, Any]) -> str:
     body = json.dumps(payload, ensure_ascii=False)
     return f"event: {event}\ndata: {body}\n\n"
 
@@ -86,7 +86,7 @@ async def upload_app(
     file: UploadFile = File(...),
     overwrite: bool = False,
     token: str = "",
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Upload an app package (.tar.gz / .zip) and install it.
 
     The package must contain a ``manifest.yaml`` at the root (or one level
@@ -104,13 +104,13 @@ async def upload_app(
         interactive_enabled=True,
     )
 
-    def emit(event_type: str, payload: dict[str, Any]) -> None:
+    def emit(event_type: str, payload: Dict[str, Any]) -> None:
         app_id = payload.get("app_id")
         if app_id:
             operations.bind_app_id(record.operation_id, str(app_id))
         operations.publish(record.operation_id, event_type, **payload)
 
-    def task() -> dict[str, Any]:
+    def task() -> Dict[str, Any]:
         try:
             return installer.install_from_upload(
                 file_data,
@@ -147,19 +147,19 @@ async def upload_app(
 
 
 @router.get("/installed")
-async def get_installed(token: str) -> dict[str, Any]:
+async def get_installed(token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     return {"items": runtime.get_installed_list()}
 
 
 @router.get("/configs/active")
-async def get_active_configs(token: str) -> dict[str, Any]:
+async def get_active_configs(token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     config = get_config_service()
     magnet = get_magnet_service()
-    items: list[dict[str, Any]] = []
+    items: List[Dict[str, Any]] = []
 
     for app in runtime.get_installed_list():
         app_id = str(app.get("app_id") or "")
@@ -206,7 +206,7 @@ async def get_active_configs(token: str) -> dict[str, Any]:
 
 
 @router.get("/{app_id}/status")
-async def get_status(app_id: str, token: str) -> dict[str, Any]:
+async def get_status(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -229,7 +229,7 @@ async def get_logs(
     token: str,
     offset: int = 0,
     limit: int = 65536,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -246,7 +246,7 @@ async def get_logs(
 
 
 @router.post("/{app_id}/start")
-async def start_app(app_id: str, token: str) -> dict[str, Any]:
+async def start_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -258,7 +258,7 @@ async def start_app(app_id: str, token: str) -> dict[str, Any]:
 
 
 @router.post("/{app_id}/stop")
-async def stop_app(app_id: str, token: str) -> dict[str, Any]:
+async def stop_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -270,7 +270,7 @@ async def stop_app(app_id: str, token: str) -> dict[str, Any]:
 
 
 @router.post("/{app_id}/restart")
-async def restart_app(app_id: str, token: str) -> dict[str, Any]:
+async def restart_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -289,7 +289,7 @@ async def restart_app(app_id: str, token: str) -> dict[str, Any]:
 @router.post("/{app_id}/autostart")
 async def set_autostart(
     app_id: str, payload: AppAutostartUpdateRequest, token: str
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -306,7 +306,7 @@ async def set_autostart(
 
 
 @router.get("/{app_id}/versions")
-async def list_versions(app_id: str, token: str) -> dict[str, Any]:
+async def list_versions(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     versioning = get_versioning_service()
     versions = versioning.list_versions(app_id)
@@ -317,7 +317,7 @@ async def list_versions(app_id: str, token: str) -> dict[str, Any]:
 @router.post("/{app_id}/switch-version")
 async def switch_version(
     app_id: str, payload: AppSwitchVersionRequest, token: str
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
@@ -333,7 +333,7 @@ async def switch_version(
 @router.post("/{app_id}/update_this_version", status_code=202)
 async def update_this_version(
     app_id: str, payload: AppUpdateThisVersionRequest, token: str
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     _require_auth(token)
     operations = get_app_operation_manager()
     runtime = get_runtime_service()
@@ -347,10 +347,10 @@ async def update_this_version(
     except AppOperationConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    def emit(event_type: str, event_payload: dict[str, Any]) -> None:
+    def emit(event_type: str, event_payload: Dict[str, Any]) -> None:
         operations.publish(record.operation_id, event_type, **event_payload)
 
-    def task() -> dict[str, Any]:
+    def task() -> Dict[str, Any]:
         return runtime.update_this_version(
             app_id,
             payload.version,
@@ -382,7 +382,7 @@ async def upgrade_app(
     app_id: str,
     file: UploadFile = File(...),
     token: str = "",
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Upload a new version package to upgrade an existing app.
 
     - Installs the new version
@@ -427,7 +427,7 @@ async def upgrade_app(
 @router.post("/{app_id}/uninstall", status_code=202)
 async def uninstall_app(
     app_id: str, payload: AppUninstallRequest, token: str
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     _require_auth(token)
     operations = get_app_operation_manager()
     runtime = get_runtime_service()
@@ -441,10 +441,10 @@ async def uninstall_app(
     except AppOperationConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    def emit(event_type: str, event_payload: dict[str, Any]) -> None:
+    def emit(event_type: str, event_payload: Dict[str, Any]) -> None:
         operations.publish(record.operation_id, event_type, **event_payload)
 
-    def task() -> dict[str, Any]:
+    def task() -> Dict[str, Any]:
         return runtime.uninstall(
             app_id,
             version=payload.version,
@@ -473,7 +473,7 @@ async def uninstall_app(
 
 
 @router.get("/operations/{operation_id}")
-async def get_operation(operation_id: str, token: str) -> dict[str, Any]:
+async def get_operation(operation_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     operations = get_app_operation_manager()
     try:
@@ -483,7 +483,7 @@ async def get_operation(operation_id: str, token: str) -> dict[str, Any]:
 
 
 @router.post("/operations/{operation_id}/cancel")
-async def cancel_operation(operation_id: str, token: str) -> dict[str, Any]:
+async def cancel_operation(operation_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     operations = get_app_operation_manager()
     try:
@@ -626,7 +626,7 @@ async def stream_operation_events(
 
 
 @router.get("/{app_id}/config")
-async def get_app_config(app_id: str, token: str, app_version: Optional[str] = None) -> dict[str, Any]:
+async def get_app_config(app_id: str, token: str, app_version: Optional[str] = None) -> Dict[str, Any]:
     """Get config for an installed app.
 
     Reads default config from runtime default file, with manifest fallback.
@@ -667,7 +667,7 @@ async def get_app_config(app_id: str, token: str, app_version: Optional[str] = N
 @router.put("/{app_id}/config")
 async def put_app_config(
     app_id: str, payload: AppConfigUpdateRequest, token: str
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     session = _require_auth(token)
     config = get_config_service()
     magnet = get_magnet_service()
@@ -749,7 +749,7 @@ async def put_app_config(
 # ================================================================== #
 
 
-def _get_manifest_from_db(app_id: str, app_version: str) -> dict[str, Any]:
+def _get_manifest_from_db(app_id: str, app_version: str) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute(
             "SELECT manifest FROM app_installation WHERE app_id = ? AND version = ? LIMIT 1",
@@ -760,14 +760,14 @@ def _get_manifest_from_db(app_id: str, app_version: str) -> dict[str, Any]:
     return {}
 
 
-def _get_constraints_for_app(app_id: str) -> list[dict[str, Any]]:
+def _get_constraints_for_app(app_id: str) -> List[Dict[str, Any]]:
     config = get_config_service()
     sys_data = config.get_sys_config().data
     constraints = sys_data.get("app_config_equal_constraints")
     if not isinstance(constraints, list):
         return []
 
-    selected: list[dict[str, Any]] = []
+    selected: List[Dict[str, Any]] = []
     for item in constraints:
         if not isinstance(item, dict):
             continue
@@ -783,15 +783,15 @@ def _get_constraints_for_app(app_id: str) -> list[dict[str, Any]]:
 def _validate_equal_constraints(
     editing_app_id: str,
     editing_app_version: str,
-    editing_data: dict[str, Any],
-) -> list[dict[str, Any]]:
+    editing_data: Dict[str, Any],
+) -> List[Dict[str, Any]]:
     constraints = _get_constraints_for_app(editing_app_id)
     if not constraints:
         return []
 
     config = get_config_service()
     versioning = get_versioning_service()
-    violations: list[dict[str, Any]] = []
+    violations: List[Dict[str, Any]] = []
 
     for item in constraints:
         left = item.get("left") if isinstance(item, dict) else None
@@ -832,10 +832,10 @@ def _validate_equal_constraints(
 
 
 def _resolve_endpoint_value(
-    endpoint: dict[str, Any],
+    endpoint: Dict[str, Any],
     editing_app_id: str,
     editing_app_version: str,
-    editing_data: dict[str, Any],
+    editing_data: Dict[str, Any],
     config: Any,
     versioning: Any,
 ) -> Any:

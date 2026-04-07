@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from aivudaos.core.db.connection import db_conn
 from aivudaos.core.errors import NotFoundError
@@ -49,7 +49,7 @@ class VersioningService:
             return None
         return link.resolve()
 
-    def list_versions(self, app_id: str) -> list[str]:
+    def list_versions(self, app_id: str) -> List[str]:
         """List all installed versions for an app from the database."""
         with db_conn() as conn:
             rows = conn.execute(

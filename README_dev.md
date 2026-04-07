@@ -12,6 +12,12 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 - `aivudaos/resources/`: 打包后的运行时资源根目录
 - `aivudaos/resources/scripts/`: 开发态/运维态入口脚本
 
+## Python 兼容性约束
+
+- 后端 Python 代码必须兼容 `Python 3.8`。
+- 类型标注不要使用 `dict[str, Any]`、`list[str]`、`set[str]`、`tuple[int, int]` 这类 3.9+ 内建泛型写法。
+- 统一使用 `typing.Dict`、`typing.List`、`typing.Set`、`typing.Tuple`，避免在 Pydantic 等运行时解析注解时触发兼容性问题。
+
 其中常用运行时资源位置：
 
 - `aivudaos/resources/caddy/Caddyfile_template`

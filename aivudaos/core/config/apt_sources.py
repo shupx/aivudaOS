@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from .filelock import get_lock
 
@@ -39,7 +39,7 @@ class AptSourcesService:
         self._sources_path = sources_path or Path("/etc/apt/sources.list")
         self._backup_dir = backup_dir or Path("/var/backups/aivudaos/apt-sources")
 
-    def read_sources(self) -> dict[str, object]:
+    def read_sources(self) -> Dict[str, object]:
         content = self._read_text_with_privilege(self._sources_path)
         line_count, comment_count = self._summarize_content(content)
         backups = self.list_backups()
@@ -53,7 +53,7 @@ class AptSourcesService:
             "latest_backup": backups[0] if backups else None,
         }
 
-    def list_backups(self) -> list[dict[str, str]]:
+    def list_backups(self) -> List[Dict[str, str]]:
         if not self._backup_dir.exists() and os.geteuid() != 0:
             try:
                 result = subprocess.run(
@@ -78,7 +78,7 @@ class AptSourcesService:
         content: str,
         *,
         sudo_password: Optional[str] = None,
-    ) -> dict[str, object]:
+    ) -> Dict[str, object]:
         text = str(content or "")
         lock = get_lock(self._sources_path)
         with lock:
@@ -108,7 +108,7 @@ class AptSourcesService:
         backup_id: str,
         *,
         sudo_password: Optional[str] = None,
-    ) -> dict[str, object]:
+    ) -> Dict[str, object]:
         target_id = str(backup_id or "").strip()
         if not target_id:
             raise AptSourcesError("BACKUP_ID_REQUIRED", "Backup id is required")
@@ -259,7 +259,7 @@ class AptSourcesService:
         except FileNotFoundError as exc:
             raise AptSourcesError("MISSING_COMMAND", f"Missing command: {exc.filename}") from exc
 
-    def _run_privileged(self, args: list[str], *, sudo_password: Optional[str] = None) -> None:
+    def _run_privileged(self, args: List[str], *, sudo_password: Optional[str] = None) -> None:
         cmd = list(args)
         stdin_text: Optional[str] = None
 
@@ -326,14 +326,14 @@ class AptSourcesService:
         except ValueError:
             return ""
 
-    def _summarize_content(self, content: str) -> tuple[int, int]:
+    def _summarize_content(self, content: str) -> Tuple[int, int]:
         text = str(content or "")
         lines = text.splitlines()
         comment_count = sum(1 for line in lines if self._COMMENT_RE.match(line))
         return len(lines), comment_count
 
-    def _build_backup_items_from_names(self, names: list[str]) -> list[dict[str, str]]:
-        items: list[AptBackupItem] = []
+    def _build_backup_items_from_names(self, names: List[str]) -> List[Dict[str, str]]:
+        items: List[AptBackupItem] = []
         for name in sorted(names, reverse=True):
             backup_id = self._backup_id_from_path(Path(name))
             if not backup_id:

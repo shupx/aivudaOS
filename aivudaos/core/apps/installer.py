@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import yaml
 
@@ -49,11 +49,11 @@ class InstallerService:
         file_data: bytes,
         filename: str,
         overwrite: bool = False,
-        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
+        event_cb: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         interactive: bool = False,
         read_input: Optional[Callable[[float], Optional[str]]] = None,
         cancel_requested: Optional[Callable[[], bool]] = None,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Install an app from an uploaded package file (.tar.gz / .zip).
 
         Package structure:
@@ -333,7 +333,7 @@ class InstallerService:
         relative_path: str,
         *,
         field_name: str,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         raw = str(relative_path or "").strip()
         if not raw:
             raise PackageFormatError(f"manifest 缺少 {field_name}")
@@ -359,4 +359,3 @@ class InstallerService:
         if not isinstance(parsed, dict):
             raise PackageFormatError(f"{field_name} 必须解析为 YAML object")
         return parsed
-

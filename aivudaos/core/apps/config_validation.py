@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from aivudaos.core.errors import InvalidConfigError
 
@@ -28,7 +28,7 @@ SUPPORTED_SCHEMA_KEYS = {
 }
 
 
-def validate_config_data(data: Any, schema: Optional[dict[str, Any]], *, context: str = "config") -> None:
+def validate_config_data(data: Any, schema: Optional[Dict[str, Any]], *, context: str = "config") -> None:
     if schema is None:
         return
     if not isinstance(schema, dict):
@@ -36,7 +36,7 @@ def validate_config_data(data: Any, schema: Optional[dict[str, Any]], *, context
     _validate_value(data, schema, path="$")
 
 
-def _validate_value(value: Any, schema: dict[str, Any], *, path: str) -> None:
+def _validate_value(value: Any, schema: Dict[str, Any], *, path: str) -> None:
     expected_type = schema.get("type")
     if expected_type is not None:
         _validate_type(value, expected_type, path)
@@ -56,7 +56,7 @@ def _validate_value(value: Any, schema: dict[str, Any], *, path: str) -> None:
         _validate_array(value, schema, path)
 
 
-def _validate_object(value: dict[str, Any], schema: dict[str, Any], path: str) -> None:
+def _validate_object(value: Dict[str, Any], schema: Dict[str, Any], path: str) -> None:
     required = schema.get("required") or []
     if isinstance(required, list):
         for key in required:
@@ -79,7 +79,7 @@ def _validate_object(value: dict[str, Any], schema: dict[str, Any], path: str) -
             raise InvalidConfigError(f"{path} has unknown keys: {', '.join(unknown)}")
 
 
-def _validate_array(value: list[Any], schema: dict[str, Any], path: str) -> None:
+def _validate_array(value: List[Any], schema: Dict[str, Any], path: str) -> None:
     min_items = schema.get("minItems")
     if isinstance(min_items, int) and len(value) < min_items:
         raise InvalidConfigError(f"{path} must have at least {min_items} items")
@@ -94,7 +94,7 @@ def _validate_array(value: list[Any], schema: dict[str, Any], path: str) -> None
             _validate_value(item, items_schema, path=f"{path}[{idx}]")
 
 
-def _validate_value_constraints(value: Any, schema: dict[str, Any], path: str) -> None:
+def _validate_value_constraints(value: Any, schema: Dict[str, Any], path: str) -> None:
     if isinstance(value, bool):
         return
 
@@ -162,14 +162,14 @@ def _is_type_match(value: Any, expected: Any) -> bool:
     return True
 
 
-def normalize_config_schema(schema: Optional[dict[str, Any]]) -> dict[str, Any]:
+def normalize_config_schema(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not isinstance(schema, dict):
         return {}
     return _normalize_schema_node(schema)
 
 
-def _normalize_schema_node(schema: dict[str, Any]) -> dict[str, Any]:
-    normalized: dict[str, Any] = {}
+def _normalize_schema_node(schema: Dict[str, Any]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {}
 
     for key in SUPPORTED_SCHEMA_KEYS:
         if key in schema:

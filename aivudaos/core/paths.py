@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+from typing import Dict
 
 import yaml
 
@@ -70,12 +71,12 @@ LOG_DIR = DATA_DIR / "logs"
 OS_LOG_DIR = LOG_DIR / "os"
 APP_LOG_DIR = LOG_DIR / "apps"
 
-DEFAULT_OS_CONFIG: dict[str, object] = {
+DEFAULT_OS_CONFIG: Dict[str, object] = {
     "runtime_process_manager": "auto",
     "runtime_systemd_scope": "user",
 }
 
-DEFAULT_SYS_CONFIG: dict[str, object] = {
+DEFAULT_SYS_CONFIG: Dict[str, object] = {
     "sys": {
         "role": {
             "id": 1,
@@ -83,7 +84,7 @@ DEFAULT_SYS_CONFIG: dict[str, object] = {
     }
 }
 
-DEFAULT_USERS_CONFIG: dict[str, object] = {
+DEFAULT_USERS_CONFIG: Dict[str, object] = {
     "users": [
         {
             "username": "admin",
@@ -93,7 +94,7 @@ DEFAULT_USERS_CONFIG: dict[str, object] = {
     ]
 }
 
-DEFAULT_MAGNETS_CONFIG: dict[str, object] = {
+DEFAULT_MAGNETS_CONFIG: Dict[str, object] = {
     "_version": 0,
     "_updated_at": None,
     "_updated_by": "system",

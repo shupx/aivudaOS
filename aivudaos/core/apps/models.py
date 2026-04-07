@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -10,7 +10,7 @@ class AppManifest:
     name: str
     description: str
     version: str
-    run: dict[str, Any]
+    run: Dict[str, Any]
     icon: Optional[str] = None
     pre_install: Optional[str] = None
     pre_uninstall: Optional[str] = None
@@ -19,11 +19,11 @@ class AppManifest:
     caddyfile_config_path: str = ""
     default_config_path: str = ""
     config_schema_path: str = ""
-    default_config: dict[str, Any] = field(default_factory=dict)
-    config_schema: dict[str, Any] = field(default_factory=dict)
+    default_config: Dict[str, Any] = field(default_factory=dict)
+    config_schema: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, app_id: str, raw: dict[str, Any]) -> AppManifest:
+    def from_dict(cls, app_id: str, raw: Dict[str, Any]) -> AppManifest:
         return cls(
             app_id=app_id,
             name=raw.get("name", app_id),
@@ -42,8 +42,8 @@ class AppManifest:
             config_schema=raw.get("config_schema") or {},
         )
 
-    def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
             "app_id": self.app_id,
             "name": self.name,
             "description": self.description,
@@ -86,5 +86,4 @@ class AppRuntimeState:
     pid: Optional[int]
     last_started_at: Optional[int]
     last_stopped_at: Optional[int]
-
 

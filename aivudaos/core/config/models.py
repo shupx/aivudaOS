@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class VersionedConfig:
     """Wraps config data with version tracking metadata."""
 
-    data: dict[str, Any]
+    data: Dict[str, Any]
     version: int = 0
     updated_at: Optional[int] = None
     updated_by: Optional[str] = None
@@ -23,4 +23,4 @@ class UserRecord:
 
 @dataclass
 class UsersConfig:
-    users: list[UserRecord] = field(default_factory=list)
+    users: List[UserRecord] = field(default_factory=list)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 
@@ -39,7 +39,7 @@ def _require_auth(token: str) -> SessionInfo:
 
 
 @router.get("/system/sudo-nopasswd")
-async def get_sudo_nopasswd(token: str) -> dict[str, Any]:
+async def get_sudo_nopasswd(token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_sudo_nopasswd_service()
     try:
@@ -51,7 +51,7 @@ async def get_sudo_nopasswd(token: str) -> dict[str, Any]:
 
 
 @router.put("/system/sudo-nopasswd")
-async def put_sudo_nopasswd(payload: SudoNopasswdUpdateRequest, token: str) -> dict[str, Any]:
+async def put_sudo_nopasswd(payload: SudoNopasswdUpdateRequest, token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_sudo_nopasswd_service()
     try:
@@ -64,7 +64,7 @@ async def put_sudo_nopasswd(payload: SudoNopasswdUpdateRequest, token: str) -> d
 
 
 @router.post("/system/relogin")
-async def relogin_system_user(token: str) -> dict[str, Any]:
+async def relogin_system_user(token: str) -> Dict[str, Any]:
     _require_auth(token)
 
     auth = get_auth_service()
@@ -80,7 +80,7 @@ async def relogin_system_user(token: str) -> dict[str, Any]:
 
 
 @router.post("/system/avahi/restart")
-async def restart_avahi(token: str) -> dict[str, Any]:
+async def restart_avahi(token: str) -> Dict[str, Any]:
     _require_auth(token)
     config = get_config_service()
     try:
@@ -95,7 +95,7 @@ async def restart_avahi(token: str) -> dict[str, Any]:
 
 
 @router.get("/system/aivudaos-service")
-async def get_aivudaos_service_status(token: str) -> dict[str, Any]:
+async def get_aivudaos_service_status(token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_aivudaos_service_manager()
     try:
@@ -108,7 +108,7 @@ async def get_aivudaos_service_status(token: str) -> dict[str, Any]:
 async def set_aivudaos_service_autostart(
     payload: AppAutostartUpdateRequest,
     token: str,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     _require_auth(token)
     service = get_aivudaos_service_manager()
     try:
@@ -120,7 +120,7 @@ async def set_aivudaos_service_autostart(
 
 
 @router.post("/system/aivudaos-service/{action}")
-async def trigger_aivudaos_service_action(action: str, token: str) -> dict[str, Any]:
+async def trigger_aivudaos_service_action(action: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_aivudaos_service_manager()
     try:
@@ -132,7 +132,7 @@ async def trigger_aivudaos_service_action(action: str, token: str) -> dict[str, 
 
 
 @router.get("/system/apt-sources-list")
-async def get_apt_sources_list(token: str) -> dict[str, Any]:
+async def get_apt_sources_list(token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_apt_sources_service()
     try:
@@ -145,7 +145,7 @@ async def get_apt_sources_list(token: str) -> dict[str, Any]:
 
 
 @router.get("/system/apt-sources-list/backups")
-async def list_apt_sources_backups(token: str) -> dict[str, Any]:
+async def list_apt_sources_backups(token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_apt_sources_service()
     try:
@@ -160,7 +160,7 @@ async def list_apt_sources_backups(token: str) -> dict[str, Any]:
 
 
 @router.put("/system/apt-sources-list")
-async def put_apt_sources_list(payload: AptSourcesWriteRequest, token: str) -> dict[str, Any]:
+async def put_apt_sources_list(payload: AptSourcesWriteRequest, token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_apt_sources_service()
     try:
@@ -173,7 +173,7 @@ async def put_apt_sources_list(payload: AptSourcesWriteRequest, token: str) -> d
 
 
 @router.post("/system/apt-sources-list/restore")
-async def restore_apt_sources_list(payload: AptSourcesRestoreRequest, token: str) -> dict[str, Any]:
+async def restore_apt_sources_list(payload: AptSourcesRestoreRequest, token: str) -> Dict[str, Any]:
     _require_auth(token)
     service = get_apt_sources_service()
     try:
@@ -192,7 +192,7 @@ async def restore_apt_sources_list(payload: AptSourcesRestoreRequest, token: str
 
 
 @router.get("")
-async def get_config(token: str) -> dict[str, Any]:
+async def get_config(token: str) -> Dict[str, Any]:
     _require_auth(token)
     config: ConfigService = get_config_service()
     magnet = get_magnet_service()
@@ -211,7 +211,7 @@ async def get_config(token: str) -> dict[str, Any]:
 
 
 @router.put("")
-async def put_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]:
+async def put_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, Any]:
     user = _require_auth(token)
     config: ConfigService = get_config_service()
     magnet = get_magnet_service()
@@ -252,7 +252,7 @@ async def put_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]
 
 
 @router.get("/os")
-async def get_os_config(token: str) -> dict[str, Any]:
+async def get_os_config(token: str) -> Dict[str, Any]:
     _require_auth(token)
     config: ConfigService = get_config_service()
     cfg = config.get_os_config()
@@ -265,7 +265,7 @@ async def get_os_config(token: str) -> dict[str, Any]:
 
 
 @router.put("/os")
-async def put_os_config(payload: ConfigUpdateRequest, token: str) -> dict[str, Any]:
+async def put_os_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, Any]:
     user = _require_auth(token)
     config: ConfigService = get_config_service()
 
@@ -291,14 +291,14 @@ async def put_os_config(payload: ConfigUpdateRequest, token: str) -> dict[str, A
 
 
 @router.get("/magnets")
-async def list_magnets(token: str) -> dict[str, Any]:
+async def list_magnets(token: str) -> Dict[str, Any]:
     _require_auth(token)
     magnet = get_magnet_service()
     return magnet.list_groups()
 
 
 @router.put("/magnets/{group_id}")
-async def update_magnet(group_id: str, payload: MagnetUpdateRequest, token: str) -> dict[str, Any]:
+async def update_magnet(group_id: str, payload: MagnetUpdateRequest, token: str) -> Dict[str, Any]:
     user = _require_auth(token)
     magnet = get_magnet_service()
 

@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from typing import Dict
 
 import bcrypt
 
@@ -17,7 +18,7 @@ from aivudaos.core.paths import SESSIONS_DIR
 class AuthService:
     def __init__(self, config_service: ConfigService) -> None:
         self._config = config_service
-        self._sessions: dict[str, SessionInfo] = {}
+        self._sessions: Dict[str, SessionInfo] = {}
         self._load_persisted_sessions()
 
     def login(self, username: str, password: str) -> SessionInfo:

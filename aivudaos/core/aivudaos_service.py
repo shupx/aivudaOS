@@ -5,7 +5,7 @@ import shlex
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 from aivudaos.core.paths import PACKAGE_RESOURCES_ROOT
 
@@ -13,7 +13,7 @@ from aivudaos.core.paths import PACKAGE_RESOURCES_ROOT
 class AivudaosServiceManager:
     """Manage the packaged AivudaOS user service lifecycle."""
 
-    def get_status(self) -> dict[str, Any]:
+    def get_status(self) -> Dict[str, Any]:
         installed = self._stack_unit_exists()
         return {
             "ok": True,
@@ -22,7 +22,7 @@ class AivudaosServiceManager:
             "autostart_enabled": installed and self._systemctl_user_quiet(["is-enabled", "aivudaos.service"]),
         }
 
-    def set_autostart(self, enabled: bool) -> dict[str, Any]:
+    def set_autostart(self, enabled: bool) -> Dict[str, Any]:
         script_name = (
             "_enable_autostart_aivudaos_service.sh"
             if enabled
@@ -31,7 +31,7 @@ class AivudaosServiceManager:
         self._run_script_sync(script_name)
         return self.get_status()
 
-    def schedule_action(self, action: str) -> dict[str, Any]:
+    def schedule_action(self, action: str) -> Dict[str, Any]:
         script_map = {
             "stop": "_stop_aivudaos_service.sh",
             "restart": "_restart_aivudaos_service.sh",
@@ -54,7 +54,7 @@ class AivudaosServiceManager:
             raise RuntimeError(f"AivudaOS script not found: {script_path}")
         return script_path
 
-    def _build_script_env(self) -> dict[str, str]:
+    def _build_script_env(self) -> Dict[str, str]:
         env = os.environ.copy()
         env["AIVUDAOS_PACKAGE_ROOT"] = str(PACKAGE_RESOURCES_ROOT)
         return env
@@ -128,7 +128,7 @@ class AivudaosServiceManager:
         )
 
     @staticmethod
-    def _systemctl_user_quiet(args: list[str]) -> bool:
+    def _systemctl_user_quiet(args: List[str]) -> bool:
         try:
             completed = subprocess.run(
                 ["systemctl", "--user", *args],

@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -32,7 +32,7 @@ class ConfigService:
         return self._read_versioned(OS_CONFIG_PATH)
 
     def update_os_config(
-        self, data: dict[str, Any], expected_version: int, username: str
+        self, data: Dict[str, Any], expected_version: int, username: str
     ) -> VersionedConfig:
         normalized_data = dict(data)
         if "avahi_hostname" in normalized_data:
@@ -81,7 +81,7 @@ class ConfigService:
         return self._read_versioned(SYS_CONFIG_PATH)
 
     def update_sys_config(
-        self, data: dict[str, Any], expected_version: int, username: str
+        self, data: Dict[str, Any], expected_version: int, username: str
     ) -> VersionedConfig:
         return self._write_versioned(SYS_CONFIG_PATH, data, expected_version, username)
 
@@ -107,8 +107,8 @@ class ConfigService:
         self,
         app_id: str,
         app_version: str,
-        fallback: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
+        fallback: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         path = self.app_default_config_path(app_id, app_version)
         if not path.exists():
             return dict(fallback or {})
@@ -122,7 +122,7 @@ class ConfigService:
         self,
         app_id: str,
         app_version: str,
-        data: dict[str, Any],
+        data: Dict[str, Any],
         expected_version: int,
         updated_by: str = "system",
     ) -> VersionedConfig:
@@ -137,7 +137,7 @@ class ConfigService:
         self,
         app_id: str,
         app_version: str,
-        default_data: dict[str, Any],
+        default_data: Dict[str, Any],
         *,
         overwrite_default: bool = False,
     ) -> None:
@@ -243,7 +243,7 @@ class ConfigService:
     def _write_versioned(
         self,
         path: Path,
-        data: dict[str, Any],
+        data: Dict[str, Any],
         expected_version: int,
         updated_by: str,
     ) -> VersionedConfig:
@@ -280,7 +280,7 @@ class ConfigService:
     def _rollback_os_config_after_hostname_sync_failure(
         self,
         *,
-        previous_data: dict[str, Any],
+        previous_data: Dict[str, Any],
         failed_version: int,
         updated_by: str,
     ) -> None:
@@ -318,7 +318,7 @@ class ConfigService:
         self,
         app_id: str,
         app_version: str,
-        default_data: dict[str, Any],
+        default_data: Dict[str, Any],
         *,
         overwrite: bool,
     ) -> None:

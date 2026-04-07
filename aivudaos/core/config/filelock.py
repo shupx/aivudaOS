@@ -4,8 +4,9 @@ import os
 import tempfile
 import threading
 from pathlib import Path
+from typing import Dict
 
-_locks: dict[str, threading.Lock] = {}
+_locks: Dict[str, threading.Lock] = {}
 _meta_lock = threading.Lock()
 
 

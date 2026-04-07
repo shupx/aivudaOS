@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -20,7 +20,7 @@ class SystemdRuntimeBackend:
     """Manage app process lifecycle via systemd units."""
 
     UNIT_PREFIX = "aivuda-app"
-    COMMON_RUNTIME_ENV: dict[str, str] = {
+    COMMON_RUNTIME_ENV: Dict[str, str] = {
         "PYTHONUNBUFFERED": "1",
         "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
         "TERM": "xterm-256color",
@@ -60,11 +60,11 @@ class SystemdRuntimeBackend:
         self,
         app_id: str,
         scope: str,
-        command: list[str],
+        command: List[str],
         working_dir: Path,
         log_path: Path,
         description: str,
-        environment: Optional[dict[str, str]] = None,
+        environment: Optional[Dict[str, str]] = None,
     ) -> Path:
         unit_path = self.unit_file_path(app_id, scope)
         unit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -149,7 +149,7 @@ class SystemdRuntimeBackend:
             ],
             check=False,
         )
-        data: dict[str, str] = {}
+        data: Dict[str, str] = {}
         for line in (proc.stdout or "").splitlines():
             if "=" not in line:
                 continue
@@ -176,7 +176,7 @@ class SystemdRuntimeBackend:
     def _run_systemctl(
         self,
         scope: str,
-        args: list[str],
+        args: List[str],
         *,
         check: bool,
     ) -> subprocess.CompletedProcess[str]:

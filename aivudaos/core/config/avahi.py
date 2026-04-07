@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Set
 
 
 class AvahiService:
@@ -15,7 +15,7 @@ class AvahiService:
         self._config_path = config_path or Path("/etc/avahi/avahi-daemon.conf")
         self._hostname_re = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
-    def generate_hostname(self, *, retries: int = 8, existing: Optional[set[str]] = None) -> str:
+    def generate_hostname(self, *, retries: int = 8, existing: Optional[Set[str]] = None) -> str:
         occupied = {str(item).strip().lower() for item in (existing or set()) if str(item).strip()}
         rand = random.SystemRandom()
         for _ in range(max(1, retries)):
@@ -157,7 +157,7 @@ class AvahiService:
 
     def _run_privileged(
         self,
-        args: list[str],
+        args: List[str],
         *,
         sudo_password: Optional[str] = None,
     ) -> None:

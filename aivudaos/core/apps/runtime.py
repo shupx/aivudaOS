@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from aivudaos.core.apps.caddy_config import CaddyConfigService
 from aivudaos.core.apps.config_validation import validate_config_data
@@ -136,7 +136,7 @@ class RuntimeService:
             last_stopped_at=stopped_at,
         )
 
-    def get_detail(self, app_id: str) -> dict[str, Any]:
+    def get_detail(self, app_id: str) -> Dict[str, Any]:
         """Full detail: installation info + runtime state + active version."""
         with db_conn() as conn:
             install_rows = conn.execute(
@@ -151,7 +151,7 @@ class RuntimeService:
         cfg = self._config.get_app_config(app_id, active_ver) if active_ver else None
 
         # Include manifest for the active version
-        manifest_info: Optional[dict[str, Any]] = None
+        manifest_info: Optional[Dict[str, Any]] = None
         try:
             m = self._get_manifest(app_id, active_ver)
             manifest_info = m.to_dict()
@@ -183,7 +183,7 @@ class RuntimeService:
             "has_builtin_ui": built_in_ui_entry is not None,
         }
 
-    def get_installed_list(self) -> list[dict[str, Any]]:
+    def get_installed_list(self) -> List[Dict[str, Any]]:
         """List all installed apps with runtime state and active version."""
         with db_conn() as conn:
             rows = conn.execute(
@@ -198,7 +198,7 @@ class RuntimeService:
             ).fetchall()
 
         # Group by app_id, return one entry per app with version list
-        seen: dict[str, dict] = {}
+        seen: Dict[str, dict] = {}
         for row in rows:
             aid = row["app_id"]
             if aid not in seen:
@@ -235,7 +235,7 @@ class RuntimeService:
     #  Lifecycle: start / stop / restart
     # ------------------------------------------------------------------ #
 
-    def start(self, app_id: str) -> dict[str, Any]:
+    def start(self, app_id: str) -> Dict[str, Any]:
         active_version = self._versioning.active_version(app_id)
         if active_version is None:
             raise AppNotInstalledError(f"{app_id} has no active version")
@@ -318,7 +318,7 @@ class RuntimeService:
 
         return {"ok": True, "app_id": app_id, "running": True}
 
-    def stop(self, app_id: str) -> dict[str, Any]:
+    def stop(self, app_id: str) -> Dict[str, Any]:
         now = int(time.time())
         runtime_state = self.get_runtime_state(app_id)
 
@@ -353,7 +353,7 @@ class RuntimeService:
 
         return {"ok": True, "app_id": app_id, "running": False}
 
-    def restart(self, app_id: str) -> dict[str, Any]:
+    def restart(self, app_id: str) -> Dict[str, Any]:
         """Stop then start an app."""
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
@@ -388,7 +388,7 @@ class RuntimeService:
     #  Autostart
     # ------------------------------------------------------------------ #
 
-    def set_autostart(self, app_id: str, enabled: bool) -> dict[str, Any]:
+    def set_autostart(self, app_id: str, enabled: bool) -> Dict[str, Any]:
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} is not installed")
@@ -442,7 +442,7 @@ class RuntimeService:
 
     def switch_version(
         self, app_id: str, version: str, restart: bool = False
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Switch active version. Optionally stop old and start new."""
         current_active = self._versioning.active_version(app_id)
         runtime_state = self.get_runtime_state(app_id)
@@ -493,11 +493,11 @@ class RuntimeService:
         self,
         app_id: str,
         version: str,
-        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
+        event_cb: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         interactive: bool = False,
         read_input: Optional[Callable[[float], Optional[str]]] = None,
         cancel_requested: Optional[Callable[[], bool]] = None,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:
                 event_cb(event_type, payload)
@@ -560,11 +560,11 @@ class RuntimeService:
         app_id: str,
         version: Optional[str] = None,
         purge: bool = False,
-        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
+        event_cb: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         interactive: bool = False,
         read_input: Optional[Callable[[float], Optional[str]]] = None,
         cancel_requested: Optional[Callable[[], bool]] = None,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Uninstall a specific version or the entire app."""
         def emit(event_type: str, **payload: Any) -> None:
             if event_cb:
@@ -728,7 +728,7 @@ class RuntimeService:
 
         return {"ok": True, "app_id": app_id, "version": version, "purge": purge}
 
-    def start_autostart_apps(self) -> dict[str, Any]:
+    def start_autostart_apps(self) -> Dict[str, Any]:
         # only for popen mode, systemd will manage autostart itself and we skip replay to avoid conflicts
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
@@ -745,9 +745,9 @@ class RuntimeService:
                 "SELECT app_id FROM app_runtime WHERE autostart = 1 ORDER BY app_id"
             ).fetchall()
 
-        started: list[str] = []
-        skipped: list[str] = []
-        failed: list[dict[str, str]] = []
+        started: List[str] = []
+        skipped: List[str] = []
+        failed: List[Dict[str, str]] = []
 
         for row in rows:
             app_id = row["app_id"]
@@ -850,7 +850,7 @@ class RuntimeService:
 
     def _build_exec_command(
         self, manifest: AppManifest, install_path: Path
-    ) -> list[str]:
+    ) -> List[str]:
         entrypoint = manifest.run.get("entrypoint")
         if not entrypoint:
             raise AppRuntimeError("app run.entrypoint 未配置")
@@ -868,7 +868,7 @@ class RuntimeService:
         manifest: AppManifest,
         *,
         install_path: Optional[Path] = None,
-    ) -> dict[str, str]:
+    ) -> Dict[str, str]:
         self._ensure_version_config_ready(app_id, app_version, manifest)
         cfg = self._config.get_app_config(app_id, app_version)
         default_data = self._config.get_app_default_config(
@@ -893,7 +893,7 @@ class RuntimeService:
             app_version,
         )
         helpers_entry_path = (SHELL_HELPERS_DIR / "aivuda_app_helpers.sh").resolve()
-        env: dict[str, str] = {
+        env: Dict[str, str] = {
             "AIVUDA_APP_ID": app_id,
             "AIVUDA_APP_VERSION": app_version,
             "AIVUDA_APP_INSTALL_PATH": str(install_path.resolve()),
@@ -930,7 +930,7 @@ class RuntimeService:
             raise AppRuntimeError(str(exc)) from exc
 
     @staticmethod
-    def _runtime_log_env() -> dict[str, str]:
+    def _runtime_log_env() -> Dict[str, str]:
         return {
             "PYTHONUNBUFFERED": "1",
             "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
@@ -941,7 +941,7 @@ class RuntimeService:
         }
 
     @staticmethod
-    def _decorate_command_for_realtime_logs(command: list[str]) -> list[str]:
+    def _decorate_command_for_realtime_logs(command: List[str]) -> List[str]:
         if not command:
             return command
 
@@ -1107,7 +1107,7 @@ class RuntimeService:
 
     def read_logs(
         self, app_id: str, offset: int = 0, limit: int = 65536
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         if not self._versioning.list_versions(app_id):
             raise AppNotInstalledError(f"{app_id} is not installed")
 
@@ -1168,7 +1168,7 @@ class RuntimeService:
         manifest: AppManifest,
         hook_name: str,
         root_dir: Path,
-        event_cb: Optional[Callable[[str, dict[str, Any]], None]] = None,
+        event_cb: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         interactive: bool = False,
         read_input: Optional[Callable[[float], Optional[str]]] = None,
         cancel_requested: Optional[Callable[[], bool]] = None,

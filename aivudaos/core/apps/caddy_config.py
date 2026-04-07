@@ -5,7 +5,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import quote
 
 from aivudaos.core.apps.models import AppManifest
@@ -19,7 +19,7 @@ from aivudaos.core.paths import APP_CADDY_GEN_DIR, CADDY_BIN_PATH, CADDYFILE_PAT
 class _ActiveCaddyConfig:
     app_id: str
     config_path: Path
-    routes: set[str]
+    routes: Set[str]
 
 
 class CaddyConfigService:
@@ -64,10 +64,10 @@ class CaddyConfigService:
         self._rewrite_top_level_caddyfile(import_paths)
         self._reload_caddy()
 
-    def _sync_ui_caddy_files(self) -> list[Path]:
+    def _sync_ui_caddy_files(self) -> List[Path]:
         APP_CADDY_GEN_DIR.mkdir(parents=True, exist_ok=True)
 
-        active_ui_files: list[Path] = []
+        active_ui_files: List[Path] = []
         for app_id, manifest, install_path in self._iter_active_manifests():
             raw_ui_index = str(manifest.ui_index_path or "").strip()
             if not raw_ui_index:
@@ -104,11 +104,11 @@ class CaddyConfigService:
         active_ui_files.sort(key=lambda p: p.name)
         return active_ui_files
 
-    def _iter_active_manifests(self) -> list[tuple[str, AppManifest, Path]]:
+    def _iter_active_manifests(self) -> List[Tuple[str, AppManifest, Path]]:
         with db_conn() as conn:
             rows = conn.execute("SELECT DISTINCT app_id FROM app_installation").fetchall()
 
-        active: list[tuple[str, AppManifest, Path]] = []
+        active: List[Tuple[str, AppManifest, Path]] = []
         for row in rows:
             app_id = str(row["app_id"])
             active_version = self._versioning.active_version(app_id)
@@ -160,11 +160,11 @@ class CaddyConfigService:
             f"}}\n"
         )
 
-    def _collect_active_configs(self) -> list[_ActiveCaddyConfig]:
+    def _collect_active_configs(self) -> List[_ActiveCaddyConfig]:
         with db_conn() as conn:
             rows = conn.execute("SELECT DISTINCT app_id FROM app_installation").fetchall()
 
-        active_configs: list[_ActiveCaddyConfig] = []
+        active_configs: List[_ActiveCaddyConfig] = []
         for row in rows:
             app_id = str(row["app_id"])
             active_version = self._versioning.active_version(app_id)
@@ -209,9 +209,9 @@ class CaddyConfigService:
     def _collect_active_route_owners(
         self,
         *,
-        exclude_app_ids: Optional[set[str]] = None,
-    ) -> dict[str, str]:
-        route_owners: dict[str, str] = {}
+        exclude_app_ids: Optional[Set[str]] = None,
+    ) -> Dict[str, str]:
+        route_owners: Dict[str, str] = {}
         for entry in self._collect_active_configs():
             if exclude_app_ids and entry.app_id in exclude_app_ids:
                 continue
@@ -219,8 +219,8 @@ class CaddyConfigService:
                 route_owners[route] = entry.app_id
         return route_owners
 
-    def _ensure_no_active_route_conflicts(self, active_configs: list[_ActiveCaddyConfig]) -> None:
-        route_owners: dict[str, str] = {}
+    def _ensure_no_active_route_conflicts(self, active_configs: List[_ActiveCaddyConfig]) -> None:
+        route_owners: Dict[str, str] = {}
         for entry in active_configs:
             for route in entry.routes:
                 owner = route_owners.get(route)
@@ -230,7 +230,7 @@ class CaddyConfigService:
                     )
                 route_owners[route] = entry.app_id
 
-    def _rewrite_top_level_caddyfile(self, import_paths: list[Path]) -> None:
+    def _rewrite_top_level_caddyfile(self, import_paths: List[Path]) -> None:
         if not CADDYFILE_PATH.exists():
             raise InvalidConfigError(f"Caddyfile not found: {CADDYFILE_PATH}")
 
@@ -339,9 +339,9 @@ class CaddyConfigService:
         return resolved
 
     @staticmethod
-    def _extract_routes(caddy_text: str) -> set[str]:
-        routes: set[str] = set()
-        path_matchers: dict[str, set[str]] = {}
+    def _extract_routes(caddy_text: str) -> Set[str]:
+        routes: Set[str] = set()
+        path_matchers: Dict[str, Set[str]] = {}
 
         for raw_line in caddy_text.splitlines():
             line = raw_line.split("#", 1)[0].strip()

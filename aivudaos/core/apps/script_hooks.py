@@ -9,7 +9,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional
 
 from aivudaos.core.paths import OS_LOG_DIR
 
@@ -51,7 +51,7 @@ class ScriptHookRunner:
         OS_LOG_DIR.mkdir(parents=True, exist_ok=True)
         started_at = int(time.time())
 
-        output_lines: list[str] = []
+        output_lines: List[str] = []
 
         with self._log_path.open("ab") as log_file:
             header = (
@@ -115,7 +115,7 @@ class ScriptHookRunner:
 
         OS_LOG_DIR.mkdir(parents=True, exist_ok=True)
         started_at = int(time.time())
-        output_parts: list[str] = []
+        output_parts: List[str] = []
 
         master_fd, slave_fd = pty.openpty()
         proc: Optional[subprocess.Popen[str]] = None
@@ -267,7 +267,7 @@ class ScriptHookRunner:
             raise ScriptHookError(f"设置脚本可执行权限失败: {exc}") from exc
 
     @staticmethod
-    def _build_process_env(*, interactive: bool) -> dict[str, str]:
+    def _build_process_env(*, interactive: bool) -> Dict[str, str]:
         env = os.environ.copy()
 
         # Prevent inheriting VS Code askpass bridge; otherwise git credential

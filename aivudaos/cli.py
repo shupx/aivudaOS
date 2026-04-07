@@ -5,7 +5,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 from aivudaos import __version__
 
@@ -18,7 +18,7 @@ class CommandSpec:
     usage: str
 
 
-COMMANDS: dict[str, CommandSpec] = {
+COMMANDS: Dict[str, CommandSpec] = {
     "install": CommandSpec(
         name="install",
         script_relpath="scripts/install_aivudaos.sh",
@@ -124,7 +124,7 @@ def _print_command_help(command: CommandSpec) -> int:
     return 0
 
 
-def _run_shell_script(command: CommandSpec, forwarded_args: list[str]) -> int:
+def _run_shell_script(command: CommandSpec, forwarded_args: List[str]) -> int:
     script_path = _script_path(command)
     if not os.path.exists(script_path):
         print(f"Packaged script not found: {script_path}", file=sys.stderr)
@@ -139,7 +139,7 @@ def _run_shell_script(command: CommandSpec, forwarded_args: list[str]) -> int:
     return completed.returncode
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
 
     if not args:
