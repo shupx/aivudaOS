@@ -13,7 +13,13 @@ const {
   successLinks,
   username,
   enabled,
+  serviceInstalled,
+  serviceRunning,
+  serviceAutostartEnabled,
+  serviceActionPending,
   toggleEnabled,
+  toggleServiceAutostart,
+  triggerServiceAction,
   showPasswordModal,
   closePasswordModal,
   sudoPassword,
@@ -106,6 +112,68 @@ const {
         <span class="setting-row-label">{{ t('systemSettings.aptSourcesAction') }}</span>
         <button class="btn" :disabled="loading || saving" @click="openAptSourcesModal">
           {{ t('systemSettings.aptSourcesButton') }}
+        </button>
+      </div>
+    </article>
+
+    <article class="actions-panel">
+      <header class="log-header">
+        <h3>{{ t('systemSettings.aivudaosServiceTitle') }}</h3>
+      </header>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.serviceInstalledLabel') }}</span>
+        <span class="muted">
+          {{ serviceInstalled ? t('systemSettings.statusEnabled') : t('systemSettings.statusDisabled') }}
+        </span>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.serviceRunningLabel') }}</span>
+        <span class="muted">
+          {{ serviceRunning ? t('appCard.running') : t('appCard.stopped') }}
+        </span>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.serviceAutostartLabel') }}</span>
+        <SwitchToggle
+          :model-value="serviceAutostartEnabled"
+          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+          @update:model-value="toggleServiceAutostart"
+        />
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.serviceStopLabel') }}</span>
+        <button
+          class="btn danger"
+          :disabled="loading || saving || !serviceInstalled || !serviceRunning || Boolean(serviceActionPending)"
+          @click="triggerServiceAction('stop')"
+        >
+          {{ serviceActionPending === 'stop' ? t('common.processing') : t('systemSettings.serviceStopButton') }}
+        </button>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.serviceRestartLabel') }}</span>
+        <button
+          class="btn"
+          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+          @click="triggerServiceAction('restart')"
+        >
+          {{ serviceActionPending === 'restart' ? t('common.processing') : t('systemSettings.serviceRestartButton') }}
+        </button>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.serviceUninstallLabel') }}</span>
+        <button
+          class="btn danger"
+          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+          @click="triggerServiceAction('uninstall')"
+        >
+          {{ serviceActionPending === 'uninstall' ? t('common.processing') : t('systemSettings.serviceUninstallButton') }}
         </button>
       </div>
     </article>

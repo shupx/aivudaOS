@@ -2,9 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STOP_SCRIPT="${SCRIPT_DIR}/_stop_aivudaos_service.sh"
-START_SCRIPT="${SCRIPT_DIR}/_start_aivudaos_service.sh"
+source "${SCRIPT_DIR}/helpers/_aivudaos_systemd_common.sh"
 
-echo "[aivudaos-systemd] Restarting aivudaos.service via stop -> start..."
-"${STOP_SCRIPT}"
-"${START_SCRIPT}"
+ensure_systemctl_user_available
+ensure_stack_unit_exists
+
+log "Restarting ${STACK_SERVICE_NAME}..."
+systemctl --user restart "${STACK_SERVICE_NAME}"
+log "${STACK_SERVICE_NAME} restarted."

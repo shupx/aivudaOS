@@ -11,6 +11,7 @@ from aivudaos.core.errors import AuthenticationError, ConfigVersionConflictError
 from aivudaos.core.errors import InvalidConfigError, NotFoundError
 from aivudaos.gateway.deps import (
     get_apt_sources_service,
+    get_aivudaos_service_manager,
     get_auth_service,
     get_config_service,
     get_magnet_service,
@@ -20,6 +21,7 @@ from aivudaos.gateway.deps import (
 from aivudaos.gateway.schemas import (
     AptSourcesRestoreRequest,
     AptSourcesWriteRequest,
+    AppAutostartUpdateRequest,
     ConfigUpdateRequest,
     MagnetUpdateRequest,
     SudoNopasswdUpdateRequest,
@@ -90,6 +92,43 @@ async def restart_avahi(token: str) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to restart avahi-daemon.service: {exc}")
     return {"ok": True}
+
+
+@router.get("/system/aivudaos-service")
+async def get_aivudaos_service_status(token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_aivudaos_service_manager()
+    try:
+        return service.get_status()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/system/aivudaos-service/autostart")
+async def set_aivudaos_service_autostart(
+    payload: AppAutostartUpdateRequest,
+    token: str,
+) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_aivudaos_service_manager()
+    try:
+        return service.set_autostart(payload.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/system/aivudaos-service/{action}")
+async def trigger_aivudaos_service_action(action: str, token: str) -> dict[str, Any]:
+    _require_auth(token)
+    service = get_aivudaos_service_manager()
+    try:
+        return service.schedule_action(action)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/system/apt-sources-list")

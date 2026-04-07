@@ -179,7 +179,7 @@ App 启动时会注入配置路径相关环境变量：
 | `/dashboard/apps/configs` | 统一应用参数配置（所有 app active 版本） |
 | `/dashboard/apps/:appId/config` | 应用参数配置（按版本） |
 | `/dashboard/store` | 在线应用商店（查看与下载/安装） |
-| `/dashboard/settings` | 系统设置（sudo 免密、重登录、APT 源配置） |
+| `/dashboard/settings` | 系统设置（AivudaOS 服务 stop/restart/uninstall/autostart、sudo 免密、重登录、APT 源配置） |
 
 ## API 接口
 
@@ -196,6 +196,9 @@ App 启动时会注入配置路径相关环境变量：
 - `PUT  /aivuda_os/api/config/system/sudo-nopasswd`（更新 sudo 免密状态）
 - `POST /aivuda_os/api/config/system/relogin`（注销并重启 `user@UID.service`，用于用户组变更后重登录）
 - `POST /aivuda_os/api/config/system/avahi/restart`（重启 `avahi-daemon.service`）
+- `GET  /aivuda_os/api/config/system/aivudaos-service`（读取 AivudaOS 自身 systemd user service 状态）
+- `POST /aivuda_os/api/config/system/aivudaos-service/autostart`（启用/禁用 AivudaOS 自身自启动）
+- `POST /aivuda_os/api/config/system/aivudaos-service/{action}`（触发 `stop` / `restart` / `uninstall`，以后端脱离当前进程组的方式后台执行）
 - `GET  /aivuda_os/api/config/system/apt-sources-list`（读取 `/etc/apt/sources.list`）
 - `GET  /aivuda_os/api/config/system/apt-sources-list/backups`（读取 APT 源备份列表）
 - `PUT  /aivuda_os/api/config/system/apt-sources-list`（写入 APT 源，写入前自动创建时间戳备份，并自动执行 `apt update`）

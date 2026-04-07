@@ -47,6 +47,25 @@ export async function triggerRelogin() {
   })
 }
 
+export async function fetchAivudaosServiceStatus() {
+  return request('/api/config/system/aivudaos-service', { auth: true })
+}
+
+export async function setAivudaosServiceAutostart(enabled) {
+  return request('/api/config/system/aivudaos-service/autostart', {
+    method: 'POST',
+    body: { enabled: Boolean(enabled) },
+    auth: true,
+  })
+}
+
+export async function triggerAivudaosServiceAction(action) {
+  return request(`/api/config/system/aivudaos-service/${encodeURIComponent(action)}`, {
+    method: 'POST',
+    auth: true,
+  })
+}
+
 export async function fetchAptSourcesList() {
   return request('/api/config/system/apt-sources-list', { auth: true })
 }

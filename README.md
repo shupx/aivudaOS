@@ -23,7 +23,8 @@ pip install aivudaos-1.0.0.dev2026040501-py3-none-any.whl
 ```bash
 git clone https://gitee.com/buaa_iooda/aivudaOS.git
 cd aivudaOS/
-pip install . # need dated npm and node (>20) installed
+pip install -e . # need dated npm and node (>20) installed
+# pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e .  # use pypi mirror for build
 ```
 
 To upgrade:
@@ -73,6 +74,14 @@ aivudaos get-avahi-hostname --debug
 ```
 
 > Each robot has a randomly generated and unique avahi_hostname on install, which can also be changed in the system setting of the aivudaOS panel.
+
+The `System Settings` page in the web UI can also manage the AivudaOS service itself:
+
+- stop service
+- restart service
+- uninstall service
+- enable/disable autostart
+- passwordless sudo, relogin, and APT sources management
 
 After installation, you can use the unified CLI:
 

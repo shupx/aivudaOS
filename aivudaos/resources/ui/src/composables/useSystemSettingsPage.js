@@ -5,9 +5,12 @@ import { logout } from '../services/core/auth'
 import {
   fetchAptSourcesBackups,
   fetchAptSourcesList,
+  fetchAivudaosServiceStatus,
   fetchOsConfig,
   fetchSudoNopasswdSetting,
   restoreAptSourcesBackup,
+  setAivudaosServiceAutostart,
+  triggerAivudaosServiceAction,
   triggerRelogin,
   updateAptSourcesList,
   updateOsConfig,
@@ -26,6 +29,10 @@ export function useSystemSettingsPage() {
   const successLinks = ref([])
   const username = ref('')
   const enabled = ref(false)
+  const serviceInstalled = ref(false)
+  const serviceRunning = ref(false)
+  const serviceAutostartEnabled = ref(false)
+  const serviceActionPending = ref('')
   const osDraftData = ref({})
   const osOriginalData = ref({})
   const osVersion = ref(0)
@@ -70,9 +77,16 @@ export function useSystemSettingsPage() {
     success.value = ''
     successLinks.value = []
     try {
-      const [data, osData] = await Promise.all([fetchSudoNopasswdSetting(), fetchOsConfig()])
+      const [data, osData, serviceData] = await Promise.all([
+        fetchSudoNopasswdSetting(),
+        fetchOsConfig(),
+        fetchAivudaosServiceStatus(),
+      ])
       username.value = String(data?.username || '')
       enabled.value = Boolean(data?.enabled)
+      serviceInstalled.value = Boolean(serviceData?.installed)
+      serviceRunning.value = Boolean(serviceData?.running)
+      serviceAutostartEnabled.value = Boolean(serviceData?.autostart_enabled)
       osDraftData.value = deepClone(osData?.data || {})
       osOriginalData.value = deepClone(osData?.data || {})
       osVersion.value = Number(osData?.version || 0)
@@ -142,6 +156,73 @@ export function useSystemSettingsPage() {
       error.value = String(err?.message || err || t('systemSettings.reloginFailed'))
     } finally {
       reloginPending.value = false
+    }
+  }
+
+  async function toggleServiceAutostart(nextValue) {
+    if (loading.value || saving.value || serviceActionPending.value) return
+
+    const previousValue = Boolean(serviceAutostartEnabled.value)
+    serviceAutostartEnabled.value = Boolean(nextValue)
+    serviceActionPending.value = 'autostart'
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+
+    try {
+      const resp = await setAivudaosServiceAutostart(nextValue)
+      serviceInstalled.value = Boolean(resp?.installed)
+      serviceRunning.value = Boolean(resp?.running)
+      serviceAutostartEnabled.value = Boolean(resp?.autostart_enabled)
+      success.value = nextValue
+        ? t('systemSettings.serviceAutostartEnabledSuccess')
+        : t('systemSettings.serviceAutostartDisabledSuccess')
+    } catch (err) {
+      serviceAutostartEnabled.value = previousValue
+      error.value = String(err?.message || err || t('systemSettings.serviceAutostartFailed'))
+    } finally {
+      serviceActionPending.value = ''
+    }
+  }
+
+  async function triggerServiceAction(action) {
+    if (loading.value || saving.value || serviceActionPending.value) return
+
+    if (action === 'stop') {
+      const confirmed = window.confirm(t('systemSettings.serviceStopWarning'))
+      if (!confirmed) return
+    }
+    if (action === 'uninstall') {
+      const confirmed = window.confirm(t('systemSettings.serviceUninstallWarning'))
+      if (!confirmed) return
+    }
+
+    serviceActionPending.value = action
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+
+    try {
+      await triggerAivudaosServiceAction(action)
+      if (action === 'stop') {
+        serviceRunning.value = false
+        success.value = t('systemSettings.serviceStopScheduled')
+      } else if (action === 'restart') {
+        success.value = t('systemSettings.serviceRestartScheduled')
+      } else if (action === 'uninstall') {
+        serviceInstalled.value = false
+        serviceRunning.value = false
+        serviceAutostartEnabled.value = false
+        success.value = t('systemSettings.serviceUninstallScheduled')
+      }
+    } catch (err) {
+      error.value = String(err?.message || err || t('systemSettings.serviceActionFailed'))
+    } finally {
+      window.setTimeout(() => {
+        if (serviceActionPending.value === action) {
+          serviceActionPending.value = ''
+        }
+      }, 1500)
     }
   }
 
@@ -389,7 +470,13 @@ export function useSystemSettingsPage() {
     successLinks,
     username,
     enabled,
+    serviceInstalled,
+    serviceRunning,
+    serviceAutostartEnabled,
+    serviceActionPending,
     toggleEnabled,
+    toggleServiceAutostart,
+    triggerServiceAction,
     showPasswordModal,
     closePasswordModal,
     sudoPassword,

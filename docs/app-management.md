@@ -263,6 +263,9 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 | PUT | `/aivuda_os/api/config/system/sudo-nopasswd` | 设置当前系统用户 sudo 免密（需 sudo 密码） |
 | POST | `/aivuda_os/api/config/system/relogin` | 注销当前 token 并后台执行 `sudo systemctl restart user@$(id -u $USER).service` |
 | POST | `/aivuda_os/api/config/system/avahi/restart` | 重启 `avahi-daemon.service` |
+| GET | `/aivuda_os/api/config/system/aivudaos-service` | 查询 AivudaOS 自身 user service 的安装/运行/自启动状态 |
+| POST | `/aivuda_os/api/config/system/aivudaos-service/autostart` | 设置 AivudaOS 自身自启动 `{ "enabled": true }` |
+| POST | `/aivuda_os/api/config/system/aivudaos-service/{action}` | 触发 `stop` / `restart` / `uninstall`，以脱离当前服务生命周期的后台脚本执行 |
 | GET | `/aivuda_os/api/config/system/apt-sources-list` | 读取 `/etc/apt/sources.list` |
 | GET | `/aivuda_os/api/config/system/apt-sources-list/backups` | 获取 APT 源时间戳备份列表 |
 | PUT | `/aivuda_os/api/config/system/apt-sources-list` | 写入 APT 源（写入前自动备份，并执行 `apt update`） |

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from aivudaos.core.aivudaos_service import AivudaosServiceManager
 from aivudaos.core.apps.installer import InstallerService
 from aivudaos.core.apps.magnet import MagnetService
 from aivudaos.core.apps.operations import AppOperationManager
@@ -18,6 +19,11 @@ from aivudaos.core.config.sudo_nopasswd import SudoNopasswdService
 @lru_cache
 def get_avahi_service() -> AvahiService:
     return AvahiService()
+
+
+@lru_cache
+def get_aivudaos_service_manager() -> AivudaosServiceManager:
+    return AivudaosServiceManager()
 
 
 @lru_cache
@@ -79,4 +85,3 @@ def get_relogin_service() -> ReloginService:
 @lru_cache
 def get_apt_sources_service() -> AptSourcesService:
     return AptSourcesService()
-
