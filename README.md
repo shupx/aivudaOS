@@ -9,7 +9,6 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 ```bash
 pip install aivudaos
 # pip install -i https://pypi.tuna.tsinghua.edu.cn/simple aivudaos  # use pypi mirror (may not be the latest)
-# pip index versions aivudaos --pre  # inspect available versions on PyPI
 # pip install aivudaos==1.0.0.dev2026040602  # for a certain version
 ```
 
@@ -24,8 +23,25 @@ pip install aivudaos-1.0.0.dev2026040501-py3-none-any.whl
 ```bash
 git clone https://gitee.com/buaa_iooda/aivudaOS.git
 cd aivudaOS/
-pip install . # need dated npm and node installed
+pip install . # need dated npm and node (>20) installed
 ```
+
+To upgrade:
+
+```bash
+# pip index versions aivudaos --pre  # inspect available versions on PyPI
+pip install aivudaos --upgrade
+```
+
+To uninstall:
+
+```bash
+# stop and remove the systemd service by 'aivudaos uninstall' first:
+aivudaos uninstall
+pip uninstall aivudaos
+```
+
+## Usage
 
 **After install the wheel, you need to install aivudaOS dependencies first:**
 
@@ -35,15 +51,22 @@ aivudaos install
 
 This will install all the dependencies and start aivudaOS and make aivudaOS autostart.
 
+Then get url and open it in your browser:
+
+```bash
+aivudaos web
+```
+
+It will remind you to visit  [http://127.0.0.1:80](http://127.0.0.1:80) on the local browser, or vist  [https://<avahi_hostname>.local:443]() on a remote browser
+
 The following port is used by aivudaOS:
 
 - `127.0.0.1:8000`: internal backend, reverse proxy by caddy;
 - `http://127.0.0.1:80`: expose the service by caddy for http;
-- `https://<avahi_hostname>.local:443 ` expose the service by caddy for https.
+- `https://<avahi_hostname>.local:443 ` expose the service by caddy for https,
 
-## Usage
+where the `<avahi_hostname>` can be read by
 
-Visit  [http://127.0.0.1:80](http://127.0.0.1:80) on the local browser, or vist  [https://<avahi_hostname>.local:443]() on a remote browser, where the `<avahi_hostname>` can be get by
 ```bash
 aivudaos get-avahi-hostname
 aivudaos get-avahi-hostname --debug
@@ -67,15 +90,15 @@ aivudaos download-caddy
 aivudaos uninstall
 ```
 
-`aivudaos web` prints the local and remote UI addresses. If AivudaOS has not been initialized yet, it will remind you to run `aivudaos install` first.
-
 ## Build wheel
 
 Build release artifacts locally:
 
+> Wheel artifacts include only `aivudaos/resources/ui/dist` for the frontend. The source distribution keeps the non-`dist` UI source files for development and rebuilding.
+
 ```bash
 cd aivudaOS/
-cd ui/ && npm install && npm run build && cd ..
+cd aivudaos/resources/ui/ && npm install && npm run build && cd ../../..
 AIVUDAOS_BUILD_SEQ=01 
 python -m build
 # PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple python -m build  # use pypi mirror

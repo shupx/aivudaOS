@@ -6,9 +6,17 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 ## 目录结构
 
-- `core/`: 核心业务逻辑（纯 Python，不依赖 HTTP）
-- `gateway/`: FastAPI 服务层，提供core service的统一的REST 接口，作为后端http server
-- `ui/`: 操作界面（Vue 3 + Vite）
+- `aivudaos/core/`: 核心业务逻辑（纯 Python，不依赖 HTTP）
+- `aivudaos/gateway/`: FastAPI 服务层，提供core service的统一的REST 接口，作为后端http server
+- `aivudaos/resources/ui/`: 操作界面源码（Vue 3 + Vite）
+- `aivudaos/resources/`: 打包后的运行时资源根目录
+- `aivudaos/resources/scripts/`: 开发态/运维态入口脚本
+
+其中常用运行时资源位置：
+
+- `aivudaos/resources/caddy/Caddyfile_template`
+- `aivudaos/resources/shell_helpers/`
+- `aivudaos/resources/ui/dist/`
 
 ## 运行时工作目录（默认）
 
@@ -50,19 +58,19 @@ HOST=$(grep -E '^host-name=' /etc/avahi/avahi-daemon.conf | cut -d= -f2); [ -n "
 
 ### 开发模式（热重载，单命令）
 
-`scripts/run_aivudaos_stack.sh --dev` 会同时启动：
+`aivudaos/resources/scripts/_run_aivudaos_stack.sh --dev` 会同时启动：
 
 - 后端：`python3 -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir aivudaos/gateway --reload-dir aivudaos/core`
-- 前端：`cd ui && npm exec vite build -- --watch`
+- 前端：`cd aivudaos/resources/ui && npm exec vite build -- --watch`
 - 代理：`cd ~ && ./aivudaOS_ws/.tools/caddy/caddy run --config ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`
 
 ```bash
 cd aivudaOS/
 # 先安装python依赖和下载caddy（做一次就行）
 pip install -r requirements.txt
-./scripts/_download_caddy.sh
+aivudaos/resources/scripts/_download_caddy.sh
 # 再启动开发模式脚本
-./scripts/_run_aivudaos_stack.sh --dev
+aivudaos/resources/scripts/_run_aivudaos_stack.sh --dev
 ```
 
 说明：`--dev` 模式下会持续监听后端与前端变更并自动重载；按 `Ctrl+C` 会统一停止后端、前端 watch 和 caddy。
@@ -71,17 +79,22 @@ pip install -r requirements.txt
 
 #### 手动启动：
 
-gateway 启动后自动检测 `ui/dist/`，将前端静态文件与 API 挂载在同一端口。
+gateway 启动后自动检测 `aivudaos/resources/ui/dist/`，将前端静态文件与 API 挂载在同一端口。
+
+打包规则：
+
+- wheel 仅包含 `aivudaos/resources/ui/dist/`
+- sdist 保留 `aivudaos/resources/ui/` 下的非 `dist` 前端源码，便于重新构建
 
 ```bash
 # 构建前端静态文件
-cd ui && npm install && npm run build && cd ..
+cd aivudaos/resources/ui && npm install && npm run build && cd ../../..
 
 # 启动（推荐，后端 gunicorn + caddy）
-./scripts/_run_aivudaos_stack.sh
+aivudaos/resources/scripts/_run_aivudaos_stack.sh
 
 # 或仅启动后端（gunicorn + uvicorn worker）注意：保持 `-w 1`。安装任务状态存于进程内存，多 worker 会导致任务查询 404。
-PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000
+python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000
 ```
 
 #### 开机自启动：
@@ -89,10 +102,10 @@ PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.
 安装开机自启动servcie：
 
 ```bash
-./scripts/install_aivudaos.sh
+aivudaos/resources/scripts/install_aivudaos.sh
 ```
 
-`scripts/install_user_services.sh` 会将解析到的 `avahi_hostname` 同步写入：
+`aivudaos/resources/scripts/install_aivudaos.sh` 会将解析到的 `avahi_hostname` 同步写入：
 
 - `/etc/avahi/avahi-daemon.conf` 的 `[server]` 块 `host-name=<value>`
 - `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点 `https://<value>.local:443`
@@ -102,7 +115,7 @@ PYTHONPATH=. python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.
 卸载自启动：
 
 ```bash
-./scripts/uninstall_aivudaos.sh
+aivudaos/resources/scripts/uninstall_aivudaos.sh
 ```
 
 ## Caddy 配置说明
@@ -139,7 +152,7 @@ App 启动时会注入配置路径相关环境变量：
 
 - `AIVUDA_APP_CONFIG_PATH`：当前 app 当前版本配置文件路径
 - `AIVUDA_APP_ID` / `AIVUDA_APP_VERSION`
-- `AIVUDA_APP_HELPERS_ENTRY_PATH`：统一 helper 入口（`core/shell_helpers/aivuda_app_helpers.sh`）
+- `AIVUDA_APP_HELPERS_ENTRY_PATH`：统一 helper 入口（`aivudaos/resources/shell_helpers/aivuda_app_helpers.sh`）
 
 推荐在 app `start.sh` 先 `source "$AIVUDA_APP_HELPERS_ENTRY_PATH"`，再用 `aivuda_yaml_get` 按 dotted path 读取配置。
 

@@ -90,16 +90,11 @@ COMMANDS: dict[str, CommandSpec] = {
 
 def _resource_root() -> str:
     package_dir = Path(__file__).resolve().parent
-    source_root = package_dir.parent
 
-    # Detect editable/source layout by checking for files that exist only at the
-    # repository root, not the generic site-packages parent directory.
-    if (
-        (source_root / "setup.py").exists()
-        and (source_root / "Caddyfile_template").exists()
-        and (source_root / "scripts" / "install_aivudaos.sh").exists()
-    ):
-        return str(source_root.resolve())
+    from_env = os.environ.get("AIVUDAOS_PACKAGE_ROOT", "").strip()
+    if from_env:
+        return str(Path(from_env).expanduser().resolve())
+
     return str((package_dir / "resources").resolve())
 
 

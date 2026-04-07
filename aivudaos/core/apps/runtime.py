@@ -27,7 +27,10 @@ from aivudaos.core.errors import (
     OperationCanceledError,
 )
 from aivudaos.core.paths import APP_LOG_DIR
-from aivudaos.core.paths import PROJECT_ROOT
+from aivudaos.core.paths import SHELL_HELPERS_DIR
+from aivudaos.core.paths import SYSTEMD_RUNTIME_DIR
+from aivudaos.core.paths import UI_DEFAULT_ICON_PATH
+from aivudaos.core.paths import UI_FALLBACK_ICON_PATH
 
 
 class RuntimeService:
@@ -45,7 +48,7 @@ class RuntimeService:
         self._versioning = versioning
         self._config = config_service
         self._magnet = magnet_service
-        self._systemd = SystemdRuntimeBackend(PROJECT_ROOT)
+        self._systemd = SystemdRuntimeBackend(SHELL_HELPERS_DIR, SYSTEMD_RUNTIME_DIR)
         self._script_hooks = ScriptHookRunner()
         self._caddy = CaddyConfigService(versioning=versioning)
 
@@ -889,9 +892,7 @@ class RuntimeService:
             app_id,
             app_version,
         )
-        helpers_entry_path = (
-            PROJECT_ROOT / "core" / "shell_helpers" / "aivuda_app_helpers.sh"
-        ).resolve()
+        helpers_entry_path = (SHELL_HELPERS_DIR / "aivuda_app_helpers.sh").resolve()
         env: dict[str, str] = {
             "AIVUDA_APP_ID": app_id,
             "AIVUDA_APP_VERSION": app_version,
@@ -973,10 +974,9 @@ class RuntimeService:
                 if icon_path is not None:
                     return icon_path
 
-        default_icon = PROJECT_ROOT / "ui" / "public" / "app-default-icon.png"
-        if default_icon.exists() and default_icon.is_file():
-            return default_icon
-        return PROJECT_ROOT / "ui" / "public" / "vite.svg"
+        if UI_DEFAULT_ICON_PATH.exists() and UI_DEFAULT_ICON_PATH.is_file():
+            return UI_DEFAULT_ICON_PATH
+        return UI_FALLBACK_ICON_PATH
 
     def get_app_ui_entry_path(self, app_id: str) -> Optional[Path]:
         install_path = self._versioning.active_install_path(app_id)

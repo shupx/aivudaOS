@@ -165,7 +165,7 @@ fi
 
 echo "[publish_aivudaos_pypi] Building ui/dist ..."
 (
-  cd ui
+  cd aivudaos/resources/ui
   npm install
   npm run build
 )

@@ -2,7 +2,7 @@
 
 本方案用于 `aivudaOS`：
 
-- Caddy 托管前端静态文件（`ui/dist`）
+- Caddy 托管前端静态文件（`aivudaos/resources/ui/dist`）
 - Caddy 反向代理后端 API（`127.0.0.1:8000`）
 - 对外暴露 HTTP `80` 与 HTTPS `443`
 
@@ -13,7 +13,7 @@
 推荐在仓库根目录执行：
 
 ```bash
-bash scripts/_download_caddy.sh
+bash aivudaos/resources/scripts/_download_caddy.sh
 ```
 
 安装完成后验证：
@@ -28,19 +28,19 @@ cd ~
 在仓库根目录执行：
 
 ```bash
-cd ui
+cd aivudaos/resources/ui
 npm install
 npm run build
 ```
 
-构建产物默认在 `ui/dist`。
+构建产物默认在 `aivudaos/resources/ui/dist`。
 
 ## 3. 启动后端 + Caddy（前台）
 
 在仓库根目录执行：
 
 ```bash
-bash scripts/_run_aivudaos_stack.sh
+bash aivudaos/resources/scripts/_run_aivudaos_stack.sh
 ```
 
 可选：先校验配置再启动。
@@ -59,7 +59,7 @@ bash scripts/_run_aivudaos_stack.sh
 确保已构建前端后，在仓库根目录执行:
 
 ```bash
-bash scripts/install_user_services.sh
+bash aivudaos/resources/scripts/install_aivudaos.sh
 ```
 
 脚本会自动：
@@ -111,6 +111,6 @@ journalctl --user -u aivudaos.service -f
 
 ## 6. 重要注意事项
 
-1. 运行时 Caddy 配置文件是 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`，首次启动会从仓库模板 `aivudaOS/Caddyfile_template` 自动复制。
+1. 运行时 Caddy 配置文件是 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile`，首次启动会从包内模板 `aivudaos/resources/caddy/Caddyfile_template` 自动复制。
 2. 建议后端仅监听 `127.0.0.1:8000`，由 Caddy 统一对外暴露。
 3. 当前 `tls internal` 适合内网/开发环境；公网正式域名可改为 ACME 证书模式。

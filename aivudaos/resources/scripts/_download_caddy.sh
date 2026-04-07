@@ -2,8 +2,6 @@
 set -euo pipefail
 
 RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INSTALL_DIR="${RUNTIME_ROOT}/.tools/caddy"
 FORCE="${FORCE:-0}"
 SOURCE=""
@@ -174,7 +172,9 @@ fi
 CADDY_BIN="${bin_path}"
 if command -v getcap >/dev/null 2>&1; then
   if getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service"; then
-    return
+    echo "Installed Caddy to: ${bin_path}"
+    "${bin_path}" version
+    exit 0
   fi
 fi
 

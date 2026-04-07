@@ -215,7 +215,7 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
      - `AIVUDA_APP_ID` / `AIVUDA_APP_VERSION`：当前 app 标识与版本
      - `AIVUDA_APP_INSTALL_PATH`：当前 app 当前版本安装目录（例如 `${AIVUDAOS_WS_ROOT}/apps/{app_id}/versions/{version}`）
      - `AIVUDA_APP_RUNTIME_DATA_PATH`：当前 app 当前版本 runtime 数据目录（例如 `${AIVUDAOS_WS_ROOT}/data/runtime/{app_id}/{version}`）
-     - `AIVUDA_APP_HELPERS_ENTRY_PATH`：统一 helper 入口（`core/shell_helpers/aivuda_app_helpers.sh`）
+     - `AIVUDA_APP_HELPERS_ENTRY_PATH`：统一 helper 入口（`aivudaos/resources/shell_helpers/aivuda_app_helpers.sh`）
 - app 启动脚本建议先 `source "$AIVUDA_APP_HELPERS_ENTRY_PATH"`
 - 之后可调用 `aivuda_yaml_get <dotted.path> [default]` 与 `aivuda_yaml_has <dotted.path>`
 - **停止**：`os.kill(pid, SIGTERM)`

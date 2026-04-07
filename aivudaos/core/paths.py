@@ -9,28 +9,30 @@ import yaml
 from aivudaos.core.config.avahi import AvahiService
 import aivudaos
 
-def _project_root() -> Path:
-    source_root = Path(__file__).resolve().parents[2]
-    if (source_root / "Caddyfile_template").exists():
-        return source_root
 
+def _source_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _package_resources_root() -> Path:
     from_env = os.environ.get("AIVUDAOS_PACKAGE_ROOT", "").strip()
     if from_env:
         candidate = Path(from_env).expanduser().resolve()
-        if (candidate / "Caddyfile_template").exists():
+        if (candidate / "caddy" / "Caddyfile_template").exists():
             return candidate
 
     packaged_root = (Path(aivudaos.__file__).resolve().parent / "resources").resolve()
-    if (packaged_root / "Caddyfile_template").exists():
-        return packaged_root
-
-    return source_root
+    return packaged_root
 
 
-# PROJECT_ROOT is the repository root in source layout,
-# or the packaged resource root in wheel installation layout.
-PROJECT_ROOT = _project_root()
-CADDYFILE_TEMPLATE_PATH = PROJECT_ROOT / "Caddyfile_template"
+SOURCE_ROOT = _source_root().resolve()
+PACKAGE_RESOURCES_ROOT = _package_resources_root()
+CADDYFILE_TEMPLATE_PATH = PACKAGE_RESOURCES_ROOT / "caddy" / "Caddyfile_template"
+SHELL_HELPERS_DIR = PACKAGE_RESOURCES_ROOT / "shell_helpers"
+SHELL_HELPERS_ENV_DIR = SHELL_HELPERS_DIR / "env"
+UI_DIST_DIR = PACKAGE_RESOURCES_ROOT / "ui" / "dist"
+UI_DEFAULT_ICON_PATH = UI_DIST_DIR / "app-default-icon.png"
+UI_FALLBACK_ICON_PATH = UI_DIST_DIR / "vite.svg"
 
 
 def _runtime_root() -> Path:
@@ -59,6 +61,7 @@ APPS_DIR = RUNTIME_ROOT / "apps"
 # Runtime data
 DATA_DIR = RUNTIME_ROOT / "data"
 APP_RUNTIME_DATA_DIR = DATA_DIR / "runtime"
+SYSTEMD_RUNTIME_DIR = APP_RUNTIME_DATA_DIR / "systemd"
 DB_PATH = DATA_DIR / "aivuda.db"
 # ARTIFACT_CACHE_DIR = DATA_DIR / "artifact-cache"
 UPLOAD_TEMP_DIR = DATA_DIR / "uploads"
@@ -66,9 +69,6 @@ SESSIONS_DIR = DATA_DIR / "sessions"
 LOG_DIR = DATA_DIR / "logs"
 OS_LOG_DIR = LOG_DIR / "os"
 APP_LOG_DIR = LOG_DIR / "apps"
-
-# UI build output
-UI_DIST_DIR = PROJECT_ROOT / "ui" / "dist"
 
 DEFAULT_OS_CONFIG: dict[str, object] = {
     "runtime_process_manager": "auto",
@@ -112,6 +112,7 @@ def ensure_dirs() -> None:
         APPS_DIR,
         DATA_DIR,
         APP_RUNTIME_DATA_DIR,
+        SYSTEMD_RUNTIME_DIR,
         # ARTIFACT_CACHE_DIR, 
         UPLOAD_TEMP_DIR,
         SESSIONS_DIR,

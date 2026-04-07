@@ -38,3 +38,5 @@ npm run dev
 npm run build
 npm run preview
 ```
+
+前端构建产物会输出到当前目录下的 `dist/`，也就是仓库中的 `aivudaos/resources/ui/dist`，供后端/Caddy 和 wheel 打包统一复用。

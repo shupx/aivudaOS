@@ -43,9 +43,9 @@ def read_requirements() -> list[str]:
 
 
 def ensure_ui_dist() -> None:
-    ui_dir = SOURCE_ROOT / "ui"
+    ui_dir = SOURCE_ROOT / "aivudaos" / "resources" / "ui"
     package_json = ui_dir / "package.json"
-    dist_dir = ui_dir / "dist"
+    dist_dir = SOURCE_ROOT / "aivudaos" / "resources" / "ui" / "dist"
 
     if not package_json.exists():
         if dist_dir.exists():
@@ -54,7 +54,7 @@ def ensure_ui_dist() -> None:
 
     npm_cmd = shutil.which("npm")
     if npm_cmd is None:
-        raise RuntimeError("npm is required to build ui/dist before packaging")
+        raise RuntimeError("npm is required to build aivudaos/resources/ui/dist before packaging")
 
     subprocess.run([npm_cmd, "install"], cwd=ui_dir, check=True)
     subprocess.run([npm_cmd, "run", "build"], cwd=ui_dir, check=True)
@@ -67,28 +67,31 @@ class build_py(_build_py):
         self._copy_packaged_resources()
 
     def _copy_packaged_resources(self) -> None:
-        destination_root = Path(self.build_lib) / "aivudaos" / "resources"
-        resource_specs = [
-            ("Caddyfile_template", "Caddyfile_template"),
-            ("README.md", "README.md"),
-            ("requirements.txt", "requirements.txt"),
-            ("scripts", "scripts"),
-            ("ui/dist", "ui/dist"),
-        ]
+        source_path = SOURCE_ROOT / "aivudaos" / "resources"
+        destination_path = Path(self.build_lib) / "aivudaos" / "resources"
+        if not source_path.exists():
+            raise RuntimeError(f"Required packaging resource not found: {source_path}")
+        if destination_path.exists():
+            shutil.rmtree(destination_path)
+        shutil.copytree(
+            source_path,
+            destination_path,
+            ignore=self._ignore_packaged_resources,
+        )
 
-        for source_rel, dest_rel in resource_specs:
-            source_path = SOURCE_ROOT / source_rel
-            destination_path = destination_root / dest_rel
-            if not source_path.exists():
-                raise RuntimeError(f"Required packaging resource not found: {source_path}")
+    @staticmethod
+    def _ignore_packaged_resources(directory: str, entries: list[str]) -> list[str]:
+        current = Path(directory)
+        ignored = {name for name in entries if name in {"node_modules", ".vite", ".vite-temp"}}
 
-            if source_path.is_dir():
-                if destination_path.exists():
-                    shutil.rmtree(destination_path)
-                shutil.copytree(source_path, destination_path)
-            else:
-                destination_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_path, destination_path)
+        if current.name == "ui":
+            ignored.update(
+                name
+                for name in entries
+                if name != "dist"
+            )
+
+        return sorted(ignored)
 
 
 class sdist(_sdist):

@@ -1,8 +1,6 @@
 include README.md
 include requirements.txt
-include Caddyfile_template
-recursive-include scripts *.sh *.py
-recursive-include ui/dist *
-prune ui/node_modules
-prune ui/src
-exclude ui/package-lock.json
+recursive-include aivudaos/resources *
+prune aivudaos/resources/ui/node_modules
+prune aivudaos/resources/ui/.vite
+prune aivudaos/resources/ui/.vite-temp

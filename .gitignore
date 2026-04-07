@@ -13,6 +13,10 @@ __pycache__/
 node_modules/
 dist/
 build/
+aivudaos/resources/ui/dist/
+aivudaos/resources/ui/node_modules/
+aivudaos/resources/ui/.vite/
+aivudaos/resources/ui/.vite-temp/
 
 # SQLite WAL side-files (the .db itself lives under data/ which has its own .gitignore)
 *.db-wal

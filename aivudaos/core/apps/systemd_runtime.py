@@ -29,8 +29,9 @@ class SystemdRuntimeBackend:
         "PY_COLORS": "1",
     }
 
-    def __init__(self, project_root: Path) -> None:
-        self._project_root = project_root
+    def __init__(self, shell_helpers_dir: Path, runtime_dir: Path) -> None:
+        self._shell_helpers_dir = shell_helpers_dir
+        self._runtime_dir = runtime_dir
 
     def is_available(self, scope: str) -> bool:
         if shutil.which("systemctl") is None:
@@ -114,13 +115,7 @@ class SystemdRuntimeBackend:
         return unit_path
 
     def _ensure_common_runtime_env_file(self) -> Path:
-        env_path = (
-            self._project_root
-            / "core"
-            / "shell_helpers"
-            / "env"
-            / "runtime_common.env"
-        )
+        env_path = self._runtime_dir / "runtime_common.env"
         env_path.parent.mkdir(parents=True, exist_ok=True)
         lines = [f"{k}={v}" for k, v in self.COMMON_RUNTIME_ENV.items()]
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -194,5 +189,4 @@ class SystemdRuntimeBackend:
             check=check,
             capture_output=True,
             text=True,
-            cwd=str(self._project_root),
         )

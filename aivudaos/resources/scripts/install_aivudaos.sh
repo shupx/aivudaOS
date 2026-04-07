@@ -6,23 +6,37 @@ set -euo pipefail
 # - Write it into /etc/avahi/avahi-daemon.conf ([server] host-name=...).
 # - Rewrite runtime Caddyfile HTTPS site address to concrete <hostname>.local.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ -n "${AIVUDAOS_PACKAGE_ROOT:-}" ]]; then
+  PACKAGE_ROOT="$(cd "${AIVUDAOS_PACKAGE_ROOT}" && pwd -P)"
+else
+  PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
+fi
+SOURCE_ROOT_CANDIDATE="$(cd "${PACKAGE_ROOT}/../.." && pwd -P)"
+SOURCE_ROOT=""
+if [[ -f "${SOURCE_ROOT_CANDIDATE}/setup.py" ]]; then
+  SOURCE_ROOT="${SOURCE_ROOT_CANDIDATE}"
+fi
 USER_SYSTEMD_DIR="${HOME}/.config/systemd/user"
 RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
 
 STACK_UNIT="${USER_SYSTEMD_DIR}/aivudaos.service"
 CADDY_BIN="${RUNTIME_ROOT}/.tools/caddy/caddy"
-CADDY_TEMPLATE="${REPO_DIR}/Caddyfile_template"
+CADDY_TEMPLATE="${PACKAGE_ROOT}/caddy/Caddyfile_template"
 CADDY_CONFIG="${RUNTIME_ROOT}/config/Caddyfile"
-FRONTEND_DIST="${REPO_DIR}/ui/dist"
-STACK_RUN_SCRIPT="${REPO_DIR}/scripts/_run_aivudaos_stack.sh"
-UPSERT_AVAHI_HELPER="${REPO_DIR}/scripts/helpers/upsert_avahi_hostname_conf.py"
-RENDER_CADDY_HELPER="${REPO_DIR}/scripts/helpers/render_caddy_hostname.py"
-GET_AVAHI_HOSTNAME_HELPER="${REPO_DIR}/scripts/_get_avahi_hostname.sh"
-DOWNLOAD_CADDY_HELPER_URL="${REPO_DIR}/scripts/_download_caddy.sh"
+FRONTEND_DIST="${PACKAGE_ROOT}/ui/dist"
+STACK_RUN_SCRIPT="${SCRIPT_DIR}/_run_aivudaos_stack.sh"
+UPSERT_AVAHI_HELPER="${SCRIPT_DIR}/helpers/upsert_avahi_hostname_conf.py"
+RENDER_CADDY_HELPER="${SCRIPT_DIR}/helpers/render_caddy_hostname.py"
+GET_AVAHI_HOSTNAME_HELPER="${SCRIPT_DIR}/_get_avahi_hostname.sh"
+DOWNLOAD_CADDY_HELPER_URL="${SCRIPT_DIR}/_download_caddy.sh"
 RUNTIME_OS_CONFIG="${RUNTIME_ROOT}/config/os.yaml"
 AVAHI_HOSTNAME=""
+WORKING_DIRECTORY="${RUNTIME_ROOT}"
+
+if [[ -n "${SOURCE_ROOT}" ]]; then
+  WORKING_DIRECTORY="${SOURCE_ROOT}"
+fi
 
 log() {
   echo "[install_user_services] $*"
@@ -140,8 +154,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${REPO_DIR}
+WorkingDirectory=${WORKING_DIRECTORY}
 Environment=AIVUDAOS_WS_ROOT=${RUNTIME_ROOT}
+Environment=AIVUDAOS_PACKAGE_ROOT=${PACKAGE_ROOT}
 ExecStartPre=/usr/bin/test -x ${CADDY_BIN}
 # ExecStartPre=/usr/bin/test -f ${CADDY_CONFIG}
 ExecStartPre=/usr/bin/test -d ${FRONTEND_DIST}

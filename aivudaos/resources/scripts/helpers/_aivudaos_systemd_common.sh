@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
 RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
 USER_SYSTEMD_DIR="${HOME}/.config/systemd/user"
 STACK_SERVICE_NAME="aivudaos.service"
 STACK_UNIT="${USER_SYSTEMD_DIR}/${STACK_SERVICE_NAME}"
-INSTALL_SCRIPT="${REPO_DIR}/scripts/install_aivudaos.sh"
+INSTALL_SCRIPT="${SCRIPTS_DIR}/install_aivudaos.sh"
 RUNTIME_OS_CONFIG="${RUNTIME_ROOT}/config/os.yaml"
 
 log() {
