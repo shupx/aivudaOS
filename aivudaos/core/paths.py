@@ -32,7 +32,7 @@ SHELL_HELPERS_DIR = PACKAGE_RESOURCES_ROOT / "shell_helpers"
 SHELL_HELPERS_ENV_DIR = SHELL_HELPERS_DIR / "env"
 UI_DIST_DIR = PACKAGE_RESOURCES_ROOT / "ui" / "dist"
 UI_DEFAULT_ICON_PATH = UI_DIST_DIR / "app-default-icon.png"
-UI_FALLBACK_ICON_PATH = UI_DIST_DIR / "vite.svg"
+UI_FALLBACK_ICON_PATH = UI_DIST_DIR / "aivuda_icon.png"
 
 
 def _runtime_root() -> Path:
