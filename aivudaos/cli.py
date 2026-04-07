@@ -79,11 +79,21 @@ COMMANDS: dict[str, CommandSpec] = {
         summary="Download or install the Caddy binary into the runtime tools directory.",
         usage="aivudaos download-caddy [--source PATH_OR_URL] [--output PATH]",
     ),
+    "web": CommandSpec(
+        name="web",
+        script_relpath="scripts/_web_hint.sh",
+        summary="Print the local and remote AivudaOS web addresses.",
+        usage="aivudaos web",
+    ),
 }
 
 
 def _resource_root() -> str:
-    return str((Path(__file__).resolve().parent / "resources").resolve())
+    package_dir = Path(__file__).resolve().parent
+    source_root = package_dir.parent
+    if (source_root / "scripts").exists():
+        return str(source_root.resolve())
+    return str((package_dir / "resources").resolve())
 
 
 def _script_path(command: CommandSpec) -> str:

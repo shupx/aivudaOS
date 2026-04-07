@@ -4,10 +4,11 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 
 ## Install 
 
-- Install from PyPI (may not be the newest):
+- Install from PyPI:
 
 ```bash
 pip install aivudaos
+# pip install -i https://pypi.tuna.tsinghua.edu.cn/simple aivudaos  # use pypi mirror (may not be updated)
 # pip install aivudaos==1.0.0.dev2026040602  # for a certain version
 ```
 
@@ -55,6 +56,7 @@ After installation, you can use the unified CLI:
 aivudaos --help
 aivudaos --version
 aivudaos install
+aivudaos web
 aivudaos start
 aivudaos stop
 aivudaos restart
@@ -64,6 +66,8 @@ aivudaos download-caddy
 aivudaos uninstall
 ```
 
+`aivudaos web` prints the local and remote UI addresses. If AivudaOS has not been initialized yet, it will remind you to run `aivudaos install` first.
+
 ## Build wheel
 
 Build release artifacts locally:
@@ -71,7 +75,9 @@ Build release artifacts locally:
 ```bash
 cd aivudaOS/
 cd ui/ && npm install && npm run build && cd ..
-AIVUDAOS_BUILD_SEQ=01 python -m build
+AIVUDAOS_BUILD_SEQ=01 
+python -m build
+# PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple python -m build  # use pypi mirror
 ```
 
 If your environment does not provide `python -m build` isolation support, use:
