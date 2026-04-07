@@ -46,20 +46,32 @@ class SudoNopasswdService:
 
     def _is_passwordless_sudo_enabled(self, username: str) -> bool:
         path = self._sudoers_file_for_user(username)
-        if not path.exists() or not path.is_file():
+        try:
+            if path.exists() and path.is_file():
+                content = path.read_text(encoding='utf-8', errors='ignore')
+            else:
+                return False
+        except PermissionError:
+            content = self._read_sudoers_file_via_nopasswd_sudo(path)
+            if content is None:
+                return False
+        except OSError:
             return False
+        expected = f'{username} ALL=(ALL) NOPASSWD:ALL'
+        return expected in content
+
+    @staticmethod
+    def _read_sudoers_file_via_nopasswd_sudo(path: Path) -> Optional[str]:
         try:
             result = subprocess.run(
-                ['sudo', 'cat', str(path)],
+                ['sudo', '-n', 'cat', str(path)],
                 text=True,
                 capture_output=True,
                 check=True,
             )
-            content = result.stdout
         except (OSError, subprocess.CalledProcessError):
-            return False
-        expected = f'{username} ALL=(ALL) NOPASSWD:ALL'
-        return expected in content
+            return None
+        return result.stdout
 
     def _run_privileged(
         self,
