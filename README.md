@@ -8,7 +8,8 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 
 ```bash
 pip install aivudaos
-# pip install -i https://pypi.tuna.tsinghua.edu.cn/simple aivudaos  # use pypi mirror (may not be updated)
+# pip install -i https://pypi.tuna.tsinghua.edu.cn/simple aivudaos  # use pypi mirror (may not be the latest)
+# pip index versions aivudaos --pre  # inspect available versions on PyPI
 # pip install aivudaos==1.0.0.dev2026040602  # for a certain version
 ```
 
