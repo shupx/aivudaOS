@@ -171,5 +171,24 @@ else
   fi
 fi
 
+CADDY_BIN="${bin_path}"
+if command -v getcap >/dev/null 2>&1; then
+  if getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service"; then
+    return
+  fi
+fi
+
+echo ""
+echo "Caddy needs permission to bind privileged port 80."
+echo "Running: sudo setcap cap_net_bind_service=+ep ${CADDY_BIN}"
+sudo setcap cap_net_bind_service=+ep "${CADDY_BIN}"
+
+if command -v getcap >/dev/null 2>&1; then
+  if ! getcap "${CADDY_BIN}" 2>/dev/null | grep -q "cap_net_bind_service"; then
+    echo "Failed to grant cap_net_bind_service on ${CADDY_BIN}" >&2
+    exit 1
+  fi
+fi
+
 echo "Installed Caddy to: ${bin_path}"
 "${bin_path}" version
