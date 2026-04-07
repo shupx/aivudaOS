@@ -192,6 +192,10 @@ export function useSystemSettingsPage() {
       const confirmed = window.confirm(t('systemSettings.serviceStopWarning'))
       if (!confirmed) return
     }
+    if (action === 'restart') {
+      const confirmed = window.confirm(t('systemSettings.serviceRestartWarning'))
+      if (!confirmed) return
+    }
     if (action === 'uninstall') {
       const confirmed = window.confirm(t('systemSettings.serviceUninstallWarning'))
       if (!confirmed) return

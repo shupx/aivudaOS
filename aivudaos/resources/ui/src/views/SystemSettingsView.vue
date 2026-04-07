@@ -144,8 +144,7 @@ const {
         />
       </div>
 
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.serviceStopLabel') }}</span>
+      <div class="panel-actions wrap">
         <button
           class="btn danger"
           :disabled="loading || saving || !serviceInstalled || !serviceRunning || Boolean(serviceActionPending)"
@@ -153,27 +152,19 @@ const {
         >
           {{ serviceActionPending === 'stop' ? t('common.processing') : t('systemSettings.serviceStopButton') }}
         </button>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.serviceRestartLabel') }}</span>
-        <button
-          class="btn"
-          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
-          @click="triggerServiceAction('restart')"
-        >
-          {{ serviceActionPending === 'restart' ? t('common.processing') : t('systemSettings.serviceRestartButton') }}
-        </button>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.serviceUninstallLabel') }}</span>
         <button
           class="btn danger"
           :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
           @click="triggerServiceAction('uninstall')"
         >
           {{ serviceActionPending === 'uninstall' ? t('common.processing') : t('systemSettings.serviceUninstallButton') }}
+        </button>
+        <button
+          class="btn"
+          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+          @click="triggerServiceAction('restart')"
+        >
+          {{ serviceActionPending === 'restart' ? t('common.processing') : t('systemSettings.serviceRestartButton') }}
         </button>
       </div>
     </article>

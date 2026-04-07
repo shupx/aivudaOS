@@ -92,6 +92,7 @@ export default {
     serviceAutostartDisabledSuccess: 'AivudaOS autostart disabled',
     serviceAutostartFailed: 'Failed to update AivudaOS autostart',
     serviceStopWarning: 'This will stop the AivudaOS service and the web UI will become unavailable. Continue?',
+    serviceRestartWarning: 'This will restart the AivudaOS service. The web UI may disconnect briefly. Continue?',
     serviceUninstallWarning: 'This will uninstall the AivudaOS service. The web UI will become unavailable until you run aivudaos install again. Continue?',
     serviceStopScheduled: 'AivudaOS stop has been scheduled. This page may disconnect shortly.',
     serviceRestartScheduled: 'AivudaOS restart has been scheduled. This page may reconnect shortly.',

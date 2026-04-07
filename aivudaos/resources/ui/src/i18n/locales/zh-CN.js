@@ -92,6 +92,7 @@ export default {
     serviceAutostartDisabledSuccess: '已禁用 AivudaOS 自启动',
     serviceAutostartFailed: '更新 AivudaOS 自启动失败',
     serviceStopWarning: '该操作会停止 AivudaOS 服务，网页界面会暂时不可用。确定继续吗？',
+    serviceRestartWarning: '该操作会重启 AivudaOS 服务，网页界面可能会短暂断开。确定继续吗？',
     serviceUninstallWarning: '该操作会卸载 AivudaOS 服务，网页界面会不可用，直到再次执行 aivudaos install。确定继续吗？',
     serviceStopScheduled: '已提交 AivudaOS 停止操作，页面可能很快断开连接。',
     serviceRestartScheduled: '已提交 AivudaOS 重启操作，页面可能会很快断开并重新恢复。',
