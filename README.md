@@ -63,6 +63,8 @@ Then get url and open it in your browser:
 
 ```bash
 aivudaos web
+# or
+aivudaos status
 ```
 
 It will remind you to visit  [http://127.0.0.1:80](http://127.0.0.1:80) on the local browser, or vist  [https://<avahi_hostname>.local:443]() on a remote browser
@@ -89,6 +91,7 @@ aivudaos --help
 aivudaos --version
 aivudaos install
 aivudaos web
+aivudaos status
 aivudaos start
 aivudaos stop
 aivudaos restart

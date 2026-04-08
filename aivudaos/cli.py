@@ -85,6 +85,12 @@ COMMANDS: Dict[str, CommandSpec] = {
         summary="Print the local and remote AivudaOS web addresses.",
         usage="aivudaos web",
     ),
+    "status": CommandSpec(
+        name="status",
+        script_relpath="scripts/_status_aivudaos_service.sh",
+        summary="Print the web access hints and aivudaos.service status.",
+        usage="aivudaos status",
+    ),
 }
 
 
