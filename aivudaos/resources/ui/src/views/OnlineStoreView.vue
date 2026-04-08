@@ -41,7 +41,16 @@ const {
           @keydown.enter.prevent="saveAddress"
         >
       </div>
-      <p class="muted">{{ t('store.addressConnectionHint') }}</p>
+      <p class="muted">
+        {{ t('store.addressConnectionHint') }}
+        <a
+          href="https://pypi.org/project/aivudaappstore/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          https://pypi.org/project/aivudaappstore/
+        </a>
+      </p>
       <p v-if="addressError" class="error-text">{{ addressError }}</p>
       <p v-if="showAddressManualCheckHint" class="muted">
         {{ t('store.addressManualCheckHint') }}
