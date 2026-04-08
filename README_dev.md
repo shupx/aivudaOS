@@ -2,8 +2,6 @@
 
 aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 aivudaAppStore 安装和运行应用。
 
-一个部署在云服务器上的示例：http://39.102.60.150:80
-
 ## 目录结构
 
 - `aivudaos/core/`: 核心业务逻辑（纯 Python，不依赖 HTTP）
