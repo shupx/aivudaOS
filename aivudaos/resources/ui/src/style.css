@@ -653,6 +653,15 @@ input {
   font-size: 13px;
 }
 
+.config-table-resizable {
+  table-layout: fixed;
+  min-width: 100%;
+}
+
+.resizable-table-wrap {
+  position: relative;
+}
+
 .config-table th,
 .config-table td {
   border: 1px solid #e2e8f0;
@@ -666,6 +675,34 @@ input {
   color: #334155;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.table-col-resize-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  margin-left: -4px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 3;
+}
+
+.table-col-resize-line::after {
+  content: '';
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  left: 3px;
+  opacity: 0;
+  width: 2px;
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.table-col-resize-line:hover::after {
+  opacity: 1;
 }
 
 .config-table.compact th,
@@ -684,11 +721,127 @@ input {
   min-width: 220px;
 }
 
+.btn-array-editor {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 38px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-group-row td {
+  background: #f8fafc;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.config-tree-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+}
+
+.tree-toggle-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 4px;
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.tree-toggle-btn:hover {
+  border-color: #94a3b8;
+}
+
+.config-group-label,
+.config-leaf-label {
+  font-weight: 400;
+  color: #0f172a;
+}
+
+.config-array-editor {
+  min-height: 320px;
+  resize: vertical;
+}
+
+.config-array-editor-modal {
+  width: min(132ch, 96vw);
+  min-width: 720px;
+  min-height: 280px;
+}
+
+.config-array-editor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.config-array-editor-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.config-array-editor-index {
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.config-array-editor-item {
+  min-height: 42px;
+  height: 42px;
+  resize: vertical;
+  overflow-y: hidden;
+}
+
+.config-array-editor-add,
+.config-array-editor-remove {
+  min-width: 38px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+}
+
+.config-array-editor-remove {
+  align-self: center;
+}
+
+.config-array-editor-item::placeholder {
+  color: #94a3b8;
+}
+
 .config-app-title-row td {
   font-weight: 600;
   border-top-width: 2px;
   border-top-color: #64748b;
-  background: #f8fafc;
+  background: #e2e8f0;
+}
+
+.config-app-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .apps-grid {

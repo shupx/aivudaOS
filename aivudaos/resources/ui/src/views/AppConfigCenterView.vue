@@ -1,10 +1,48 @@
 <script setup>
+import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 
 const { t } = useI18n()
+const systemColumnWidths = ref([260, 320, 110, 180, 120, 260, 100])
+let stopSystemColumnResize = null
+
+function getSystemResizeHandleLeft(index) {
+  return systemColumnWidths.value
+    .slice(0, index + 1)
+    .reduce((sum, width) => sum + Number(width || 0), 0)
+}
+
+function startSystemColumnResize(index, event) {
+  event.preventDefault()
+  const startX = event.clientX
+  const startWidth = Number(systemColumnWidths.value[index] || 0)
+
+  const onPointerMove = (moveEvent) => {
+    const nextWidth = Math.max(80, startWidth + moveEvent.clientX - startX)
+    systemColumnWidths.value = systemColumnWidths.value.map((width, currentIndex) => (
+      currentIndex === index ? nextWidth : width
+    ))
+  }
+
+  const onPointerUp = () => {
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
+    stopSystemColumnResize = null
+  }
+
+  stopSystemColumnResize = onPointerUp
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+}
+
+onBeforeUnmount(() => {
+  if (stopSystemColumnResize) {
+    stopSystemColumnResize()
+  }
+})
 
 const {
   loading,
@@ -12,7 +50,7 @@ const {
   success,
   appOptions,
   selectedAppId,
-  rows,
+  appTreeRows,
   systemRows,
   magnets,
   magnetConflicts,
@@ -23,11 +61,31 @@ const {
   getCellValue,
   getCellError,
   displayValue,
+  getArrayPreviewText,
   getDefaultText,
   getRangeText,
   getDescriptionText,
   getNeedRestartText,
   getRowThemeClass,
+  isArrayEditableRow,
+  isArrayEditableMagnet,
+  openArrayEditorForRow,
+  openArrayEditorForMagnet,
+  arrayEditorVisible,
+  arrayEditorTitle,
+  arrayEditorItems,
+  arrayEditorPlaceholder,
+  closeArrayEditor,
+  saveArrayEditor,
+  addArrayEditorRow,
+  removeArrayEditorRow,
+  updateArrayEditorRow,
+  isGroupCollapsed,
+  toggleGroupCollapsed,
+  isAppCollapsed,
+  toggleAppCollapsed,
+  areAllGroupsCollapsed,
+  toggleAllGroupsCollapsed,
   getSystemEnumValues,
   getSystemInputType,
   getSystemValuePlaceholder,
@@ -95,6 +153,9 @@ const {
         :get-magnet-row-id="getMagnetRowId"
         :get-magnet-value="getMagnetValue"
         :get-magnet-display-value="getMagnetDisplayValue"
+        :get-array-preview-text="getArrayPreviewText"
+        :is-array-editable-magnet="isArrayEditableMagnet"
+        :open-array-editor-for-magnet="openArrayEditorForMagnet"
         :on-magnet-boolean-change="onMagnetBooleanChange"
         :on-magnet-text-change="onMagnetTextChange"
         :save-magnet-changes="saveMagnetChanges"
@@ -112,8 +173,11 @@ const {
       </div>
 
       <div v-if="!systemRows.length" class="empty-box">{{ t('appConfigCenter.systemEmpty') }}</div>
-      <div v-else class="table-wrap">
-        <table class="config-table compact">
+      <div v-else class="table-wrap resizable-table-wrap">
+        <table class="config-table compact config-table-resizable">
+          <colgroup>
+            <col v-for="(width, index) in systemColumnWidths" :key="`sys-col-${index}`" :style="{ width: `${width}px` }">
+          </colgroup>
           <thead>
             <tr>
               <th>{{ t('appConfigCenter.colPath') }}</th>
@@ -129,7 +193,7 @@ const {
             <tr v-for="row in systemRows" :key="`sys:${row.path}`">
               <td class="mono-cell">{{ row.path }}</td>
               <td>
-                <div class="config-edit-cell">
+                <div class="config-edit-cell" :title="row.readonly ? t('appConfigCenter.readonlyInMagnetZone') : ''">
                   <label v-if="row.type === 'boolean'" class="check-item">
                     <input
                       :checked="Boolean(getCellValue(row))"
@@ -150,6 +214,14 @@ const {
                       {{ valueToInlineText(item) }}
                     </option>
                   </select>
+                  <button
+                    v-else-if="isArrayEditableRow(row)"
+                    class="btn btn-array-editor"
+                    :disabled="row.readonly"
+                    @click="openArrayEditorForRow(row)"
+                  >
+                    {{ getArrayPreviewText(getCellValue(row)) }}
+                  </button>
                   <input
                     v-else
                     class="input"
@@ -161,7 +233,6 @@ const {
                   >
 
                   <template v-if="row.readonly">
-                    <p class="muted">{{ t('appConfigCenter.readonlyInMagnetZone') }}</p>
                     <button class="link-btn" @click="jumpToMagnetByPath(row.path)">
                       {{ t('appConfigCenter.jumpToMagnet') }}
                     </button>
@@ -181,6 +252,13 @@ const {
             </tr>
           </tbody>
         </table>
+        <span
+          v-for="(width, index) in systemColumnWidths.slice(0, -1)"
+          :key="`sys-col-handle-${index}`"
+          class="table-col-resize-line"
+          :style="{ left: `${getSystemResizeHandleLeft(index)}px` }"
+          @pointerdown="startSystemColumnResize(index, $event)"
+        ></span>
       </div>
     </article>
 
@@ -312,21 +390,71 @@ const {
       :app-options="appOptions"
       :selected-app-id="selectedAppId"
       :set-selected-app-id="setSelectedAppId"
-      :rows="rows"
+      :tree-rows="appTreeRows"
       :get-cell-value="getCellValue"
       :get-cell-error="getCellError"
       :display-value="displayValue"
+      :get-array-preview-text="getArrayPreviewText"
       :get-default-text="getDefaultText"
       :get-range-text="getRangeText"
       :get-description-text="getDescriptionText"
       :get-need-restart-text="getNeedRestartText"
       :get-row-theme-class="getRowThemeClass"
+      :is-array-editable-row="isArrayEditableRow"
+      :open-array-editor-for-row="openArrayEditorForRow"
+      :is-group-collapsed="isGroupCollapsed"
+      :toggle-group-collapsed="toggleGroupCollapsed"
+      :is-app-collapsed="isAppCollapsed"
+      :toggle-app-collapsed="toggleAppCollapsed"
+      :are-all-groups-collapsed="areAllGroupsCollapsed"
+      :toggle-all-groups-collapsed="toggleAllGroupsCollapsed"
       :on-boolean-change="onBooleanChange"
       :on-enum-change="onEnumChange"
       :on-text-change="onTextChange"
       :jump-to-magnet-by-path="jumpToMagnetByPath"
       :value-to-inline-text="valueToInlineText"
     />
+
+    <div v-if="arrayEditorVisible" class="modal-overlay">
+      <section class="modal-card modal-wide modal-resizable config-array-editor-modal">
+        <header class="modal-header">
+          <h3>{{ arrayEditorTitle }}</h3>
+        </header>
+
+        <div class="field">
+          <div class="config-array-editor-list">
+            <div v-for="(item, index) in arrayEditorItems" :key="item.id" class="config-array-editor-row">
+              <div class="config-array-editor-index">{{ index + 1 }}</div>
+              <textarea
+                class="text-area config-array-editor-item"
+                :placeholder="arrayEditorPlaceholder"
+                :value="item.text"
+                @input="updateArrayEditorRow(item.id, $event?.target?.value || ''); $event.target.style.height = 'auto'; $event.target.style.height = `${$event.target.scrollHeight}px`"
+                @focus="$event.target.style.height = 'auto'; $event.target.style.height = `${$event.target.scrollHeight}px`"
+              ></textarea>
+              <button
+                class="btn config-array-editor-remove"
+                :disabled="arrayEditorItems.length <= 1"
+                @click="removeArrayEditorRow(item.id)"
+                :title="t('appConfigCenter.arrayEditorRemoveRow')"
+              >
+                -
+              </button>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button class="btn config-array-editor-add" :title="t('appConfigCenter.arrayEditorAddRow')" @click="addArrayEditorRow">
+              +
+            </button>
+          </div>
+        </div>
+
+        <div class="panel-actions wrap">
+          <button class="btn primary" @click="saveArrayEditor">{{ t('appConfigCenter.arrayEditorSave') }}</button>
+          <button class="btn" @click="closeArrayEditor">{{ t('appConfigCenter.arrayEditorExit') }}</button>
+        </div>
+      </section>
+    </div>
 
     <div v-if="needRestartToastVisible" class="side-toast side-toast-info">
       {{ needRestartToastMessage }}

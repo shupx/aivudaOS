@@ -36,6 +36,14 @@ export function useAppConfigCenterPage() {
   const sysReadonlyPaths = ref([])
   const needRestartToastVisible = ref(false)
   const needRestartToastMessage = ref('')
+  const arrayEditorVisible = ref(false)
+  const arrayEditorTitle = ref('')
+  const arrayEditorItems = ref([])
+  const arrayEditorPlaceholder = ref('')
+  const arrayEditorItemType = ref('string')
+  const arrayEditorContext = ref(null)
+  const collapsedGroups = ref({})
+  const touchedGroups = ref({})
   let needRestartToastTimer = null
   const showSystemAddModal = ref(false)
   const newSystemPath = ref('')
@@ -122,6 +130,12 @@ export function useAppConfigCenterPage() {
     }
 
     return result
+  })
+
+  const appTreeRows = computed(() => {
+    const tree = buildAppParamTree(rows.value)
+    ensureGroupCollapsedState(tree)
+    return flattenTreeForDisplay(tree, collapsedGroups.value)
   })
 
   const hasChanges = computed(() => collectChanges().length > 0)
@@ -271,6 +285,126 @@ export function useAppConfigCenterPage() {
     return valueToInlineText(getCellValue(row))
   }
 
+  function getArrayPreviewText(value) {
+    if (!Array.isArray(value) || !value.length) {
+      return t('appConfigCenter.arrayPreviewEmpty')
+    }
+    const previewItems = value
+      .slice(0, 3)
+      .map((item) => compactArrayPreviewItem(item))
+      .filter((item) => item.trim() !== '')
+
+    if (!previewItems.length) {
+      return t('appConfigCenter.arrayPreviewEmpty')
+    }
+
+    let preview = previewItems.join(', ')
+    if (value.length > 3) {
+      preview += ', ...'
+    }
+    if (preview.length > 180) {
+      preview = `${preview.slice(0, 177)}...`
+    }
+    return preview
+  }
+
+  function isArrayEditableRow(row) {
+    return row?.type === 'array'
+  }
+
+  function isArrayEditableMagnet(group) {
+    return String(group?.value_type || '') === 'array'
+  }
+
+  function openArrayEditorForRow(row) {
+    if (!row || row.readonly || !isArrayEditableRow(row)) return
+    arrayEditorContext.value = {
+      kind: 'row',
+      row,
+    }
+    arrayEditorTitle.value = t('appConfigCenter.arrayEditorTitle', {
+      path: row.path || '-',
+    })
+    const prepared = prepareArrayEditor(Array.isArray(getCellValue(row)) ? getCellValue(row) : [], row?.schemaObj?.items)
+    arrayEditorItemType.value = prepared.itemType
+    arrayEditorPlaceholder.value = prepared.placeholder
+    arrayEditorItems.value = prepared.items
+    arrayEditorVisible.value = true
+  }
+
+  function openArrayEditorForMagnet(group) {
+    if (!group || !isArrayEditableMagnet(group)) return
+    arrayEditorContext.value = {
+      kind: 'magnet',
+      group,
+    }
+    arrayEditorTitle.value = t('appConfigCenter.arrayEditorTitle', {
+      path: group.path || '-',
+    })
+    const prepared = prepareArrayEditor(Array.isArray(getMagnetValue(group)) ? getMagnetValue(group) : [], null)
+    arrayEditorItemType.value = prepared.itemType
+    arrayEditorPlaceholder.value = prepared.placeholder
+    arrayEditorItems.value = prepared.items
+    arrayEditorVisible.value = true
+  }
+
+  function closeArrayEditor() {
+    arrayEditorVisible.value = false
+    arrayEditorTitle.value = ''
+    arrayEditorItems.value = []
+    arrayEditorPlaceholder.value = ''
+    arrayEditorItemType.value = 'string'
+    arrayEditorContext.value = null
+  }
+
+  async function saveArrayEditor() {
+    const context = arrayEditorContext.value
+    if (!context) {
+      closeArrayEditor()
+      return
+    }
+
+    let nextValue
+    try {
+      nextValue = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
+    } catch (err) {
+      error.value = String(err?.message || err || t('appConfigCenter.invalidValue'))
+      return
+    }
+    if (context.kind === 'row') {
+      const saved = await applyValue(context.row, nextValue)
+      if (saved) {
+        closeArrayEditor()
+      }
+      return
+    }
+
+    if (context.kind === 'magnet') {
+      setMagnetValue(context.group, nextValue)
+      const saved = await saveMagnetChanges(context.group)
+      if (saved) {
+        closeArrayEditor()
+      }
+    }
+  }
+
+  function addArrayEditorRow() {
+    arrayEditorItems.value = [...arrayEditorItems.value, createArrayEditorRow()]
+  }
+
+  function removeArrayEditorRow(id) {
+    const next = arrayEditorItems.value.filter((item) => item.id !== id)
+    arrayEditorItems.value = next.length ? next : [createArrayEditorRow()]
+  }
+
+  function updateArrayEditorRow(id, text) {
+    arrayEditorItems.value = arrayEditorItems.value.map((item) => (
+      item.id === id
+        ? { ...item, text }
+        : item
+    ))
+  }
+
   async function onBooleanChange(row, checked) {
     await applyValue(row, Boolean(checked))
   }
@@ -307,7 +441,7 @@ export function useAppConfigCenterPage() {
   async function applyValue(row, nextValue) {
     if (row.readonly) {
       error.value = t('appConfigCenter.readonlyInMagnetZone')
-      return
+      return false
     }
 
     if (row?.scope === 'sys') {
@@ -330,13 +464,14 @@ export function useAppConfigCenterPage() {
         const resp = await updateSysConfig(deepClone(nextData), Number(sysVersion.value || 0))
         sysVersion.value = Number(resp?.version || sysVersion.value || 0)
         sysOriginalData.value = deepClone(nextData)
-        await refreshMagnetsAfterSysChange()
+        await loadAllConfigs()
         success.value = t('appConfigCenter.autoSyncSuccess')
       } catch (err) {
         sysDraftData.value = beforeData
         error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+        return false
       }
-      return
+      return true
     }
 
     const beforeAppData = deepClone(draftByApp.value[row.appId] || {})
@@ -371,7 +506,7 @@ export function useAppConfigCenterPage() {
         ...originalByApp.value,
         [row.appId]: deepClone(appData),
       }
-      await refreshAfterAppChange()
+      await loadAllConfigs()
       success.value = t('appConfigCenter.autoSyncSuccess')
       if (row.needRestart === true) {
         showNeedRestartToast(row)
@@ -382,7 +517,9 @@ export function useAppConfigCenterPage() {
         [row.appId]: beforeAppData,
       }
       error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      return false
     }
+    return true
   }
 
   function openSaveConfirm() {
@@ -512,7 +649,7 @@ export function useAppConfigCenterPage() {
 
   async function saveMagnetChanges(group) {
     const groupId = String(group?.group_id || '')
-    if (!groupId) return
+    if (!groupId) return false
     magnetSaving.value = true
     error.value = ''
     success.value = ''
@@ -527,6 +664,7 @@ export function useAppConfigCenterPage() {
         ...magnetOriginalById.value,
         [groupId]: deepClone(magnetDraftById.value[groupId]),
       }
+      await loadAllConfigs()
       success.value = t('appConfigCenter.autoSyncSuccess')
     } catch (err) {
       magnetDraftById.value = {
@@ -534,9 +672,11 @@ export function useAppConfigCenterPage() {
         [groupId]: deepClone(magnetOriginalById.value[groupId]),
       }
       error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
+      return false
     } finally {
       magnetSaving.value = false
     }
+    return true
   }
 
   function collectChanges() {
@@ -610,6 +750,119 @@ export function useAppConfigCenterPage() {
 
   function toggleMagnetCollapsed() {
     magnetCollapsed.value = !magnetCollapsed.value
+  }
+
+  function isGroupCollapsed(groupId) {
+    return collapsedGroups.value[groupId] !== false
+  }
+
+  function toggleGroupCollapsed(groupId) {
+    const key = String(groupId || '')
+    if (!key) return
+    collapsedGroups.value = {
+      ...collapsedGroups.value,
+      [key]: !isGroupCollapsed(key),
+    }
+    touchedGroups.value = {
+      ...touchedGroups.value,
+      [key]: true,
+    }
+  }
+
+  function getCurrentGroupIdsByApp(appId) {
+    return getAllGroupIdsByApp(appId)
+  }
+
+  function isAppCollapsed(appId) {
+    const ids = getCurrentGroupIdsByApp(appId)
+    if (!ids.length) return false
+    return ids.every((id) => isGroupCollapsed(id))
+  }
+
+  function setGroupsCollapsedState(groupIds, collapsed) {
+    if (!groupIds.length) return
+    const nextCollapsed = { ...collapsedGroups.value }
+    const nextTouched = { ...touchedGroups.value }
+    for (const id of groupIds) {
+      nextCollapsed[id] = collapsed
+      nextTouched[id] = true
+    }
+    collapsedGroups.value = nextCollapsed
+    touchedGroups.value = nextTouched
+  }
+
+  function toggleAppCollapsed(appId) {
+    const groupIds = getCurrentGroupIdsByApp(String(appId || ''))
+    if (!groupIds.length) return
+    setGroupsCollapsedState(groupIds, !isAppCollapsed(appId))
+  }
+
+  function collapseAllGroups() {
+    const groupIds = getAllGroupIds()
+    setGroupsCollapsedState(groupIds, true)
+  }
+
+  function expandAllGroups() {
+    const groupIds = getAllGroupIds()
+    setGroupsCollapsedState(groupIds, false)
+  }
+
+  function areAllGroupsCollapsed() {
+    const groupIds = getAllGroupIds()
+    if (!groupIds.length) return false
+    return groupIds.every((id) => isGroupCollapsed(id))
+  }
+
+  function toggleAllGroupsCollapsed() {
+    if (areAllGroupsCollapsed()) {
+      expandAllGroups()
+      return
+    }
+    collapseAllGroups()
+  }
+
+  function getAllGroupIds() {
+    const appGroups = buildAppParamTree(rows.value)
+    return appGroups.flatMap((appGroup) => collectGroupNodes(appGroup.nodes).map((node) => node.id))
+  }
+
+  function getAllGroupIdsByApp(appId) {
+    const targetAppId = String(appId || '')
+    if (!targetAppId) return []
+    const appGroups = buildAppParamTree(rows.value)
+    const appGroup = appGroups.find((item) => item.appId === targetAppId)
+    if (!appGroup) return []
+    return collectGroupNodes(appGroup.nodes).map((node) => node.id)
+  }
+
+  function ensureGroupCollapsedState(appGroups) {
+    const next = { ...collapsedGroups.value }
+    const nextTouched = { ...touchedGroups.value }
+    const defaultCollapsed = shouldDefaultCollapseGroups(selectedAppId.value, appGroups)
+    let changed = false
+
+    for (const appGroup of appGroups) {
+      for (const node of collectGroupNodes(appGroup.nodes)) {
+        if (!Object.prototype.hasOwnProperty.call(next, node.id)) {
+          next[node.id] = defaultCollapsed
+          nextTouched[node.id] = false
+          changed = true
+          continue
+        }
+        if (nextTouched[node.id] === true) {
+          continue
+        }
+        if (next[node.id] !== defaultCollapsed) {
+          next[node.id] = defaultCollapsed
+          changed = true
+        }
+      }
+    }
+
+    if (changed) {
+      collapsedGroups.value = next
+      touchedGroups.value = nextTouched
+    }
   }
 
   function openMagnetPanel() {
@@ -718,7 +971,7 @@ export function useAppConfigCenterPage() {
       .then(async (resp) => {
         sysVersion.value = Number(resp?.version || sysVersion.value || 0)
         sysOriginalData.value = deepClone(next)
-        await refreshMagnetsAfterSysChange()
+        await loadAllConfigs()
         success.value = t('appConfigCenter.autoSyncSuccess')
       })
       .catch((err) => {
@@ -746,7 +999,7 @@ export function useAppConfigCenterPage() {
       .then(async (resp) => {
         sysVersion.value = Number(resp?.version || sysVersion.value || 0)
         sysOriginalData.value = deepClone(next)
-        await refreshMagnetsAfterSysChange()
+        await loadAllConfigs()
         success.value = t('appConfigCenter.autoSyncSuccess')
       })
       .catch((err) => {
@@ -807,7 +1060,7 @@ export function useAppConfigCenterPage() {
       .then(async (resp) => {
         sysVersion.value = Number(resp?.version || sysVersion.value || 0)
         sysOriginalData.value = deepClone(next)
-        await refreshMagnetsAfterSysChange()
+        await loadAllConfigs()
         success.value = t('appConfigCenter.autoSyncSuccess')
       })
       .catch((err) => {
@@ -881,6 +1134,7 @@ export function useAppConfigCenterPage() {
     selectedAppId,
     setSelectedAppId,
     rows,
+    appTreeRows,
     systemRows,
     magnets,
     magnetConflicts,
@@ -895,11 +1149,33 @@ export function useAppConfigCenterPage() {
     getCellValue,
     getCellError,
     displayValue,
+    getArrayPreviewText,
     getDefaultText,
     getRangeText,
     getDescriptionText,
     getNeedRestartText,
     getRowThemeClass,
+    isArrayEditableRow,
+    isArrayEditableMagnet,
+    openArrayEditorForRow,
+    openArrayEditorForMagnet,
+    arrayEditorVisible,
+    arrayEditorTitle,
+    arrayEditorItems,
+    arrayEditorPlaceholder,
+    closeArrayEditor,
+    saveArrayEditor,
+    addArrayEditorRow,
+    removeArrayEditorRow,
+    updateArrayEditorRow,
+    isGroupCollapsed,
+    toggleGroupCollapsed,
+    isAppCollapsed,
+    toggleAppCollapsed,
+    collapseAllGroups,
+    expandAllGroups,
+    areAllGroupsCollapsed,
+    toggleAllGroupsCollapsed,
     getSystemEnumValues,
     getSystemInputType,
     getSystemValuePlaceholder,
@@ -940,6 +1216,243 @@ export function useAppConfigCenterPage() {
   }
 }
 
+function createArrayEditorRow(text = '') {
+  return {
+    id: `array-item-${Math.random().toString(36).slice(2, 10)}`,
+    text,
+  }
+}
+
+function prepareArrayEditor(values, itemSchema) {
+  const itemType = getArrayItemType(values, itemSchema)
+  return {
+    itemType,
+    placeholder: buildArrayItemPlaceholder(itemType, itemSchema),
+    items: values.length
+      ? values.map((item) => createArrayEditorRow(formatArrayItemForEditor(item)))
+      : [createArrayEditorRow()],
+  }
+}
+
+function parseArrayEditorItems(items, itemType) {
+  const values = []
+  for (const item of items) {
+    const text = String(item?.text || '').trim()
+    if (!text) continue
+    if (itemType === 'object' || itemType === 'array') {
+      values.push(parseValueByType(text, itemType))
+      continue
+    }
+    if (itemType === 'integer' || itemType === 'number' || itemType === 'boolean' || itemType === 'null') {
+      values.push(parseValueByType(text, itemType))
+      continue
+    }
+    values.push(text)
+  }
+  return values
+}
+
+function getArrayItemType(values, itemSchema) {
+  const schemaType = normalizeType(itemSchema?.type)
+  if (schemaType) return schemaType
+  const sample = Array.isArray(values) ? values.find((item) => item !== null && item !== undefined) : undefined
+  if (sample !== undefined) return inferValueType(sample)
+  return 'string'
+}
+
+function buildArrayItemPlaceholder(itemType, itemSchema) {
+  if (itemType === 'object') {
+    const example = buildObjectExample(itemSchema)
+    return example ? JSON.stringify(example) : '{"key":"value"}'
+  }
+  if (itemType === 'array') {
+    return '[\"item1\", \"item2\"]'
+  }
+  if (itemType === 'integer') return '1'
+  if (itemType === 'number') return '3.14'
+  if (itemType === 'boolean') return 'true'
+  if (itemType === 'null') return 'null'
+  return ''
+}
+
+function buildObjectExample(schema) {
+  const properties = isRecord(schema?.properties) ? schema.properties : null
+  if (!properties) return null
+  const result = {}
+  for (const [key, value] of Object.entries(properties)) {
+    const type = normalizeType(value?.type)
+    if (type === 'string') {
+      result[key] = key === 'topic_name' ? '/topic/name' : (key === 'prefix' ? 'uav${sys/role/id}' : `example_${key}`)
+      continue
+    }
+    if (type === 'integer') {
+      result[key] = 1
+      continue
+    }
+    if (type === 'number') {
+      result[key] = 1.0
+      continue
+    }
+    if (type === 'boolean') {
+      result[key] = true
+      continue
+    }
+    result[key] = null
+  }
+  return result
+}
+
+function formatArrayItemForEditor(value) {
+  if (isRecord(value) || Array.isArray(value)) {
+    return JSON.stringify(value)
+  }
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+function compactArrayPreviewItem(value) {
+  if (isRecord(value) || Array.isArray(value)) {
+    const json = JSON.stringify(value)
+    return typeof json === 'string' ? json : ''
+  }
+  if (value === null || value === undefined) {
+    return ''
+  }
+  return String(value)
+}
+
+function groupIdForPath(appId, fullPath) {
+  return `${String(appId || '')}::${String(fullPath || '')}`
+}
+
+function buildAppParamTree(rows) {
+  const groupsByApp = new Map()
+
+  for (const row of rows) {
+    const appId = String(row?.appId || '')
+    if (!appId) continue
+    if (!groupsByApp.has(appId)) {
+      groupsByApp.set(appId, {
+        appId,
+        appName: row.appName,
+        appVersion: row.appVersion,
+        groups: new Map(),
+        roots: [],
+      })
+    }
+
+    const appEntry = groupsByApp.get(appId)
+    const parts = String(row.path || '').split('.').filter(Boolean)
+    let parentPath = ''
+    let siblings = appEntry.roots
+
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index]
+      const fullPath = parentPath ? `${parentPath}.${part}` : part
+      const isLeaf = index === parts.length - 1
+
+      if (isLeaf) {
+        siblings.push({
+          id: `${groupIdForPath(appId, fullPath)}::leaf`,
+          appId,
+          label: part,
+          fullPath,
+          depth: index,
+          type: 'leaf',
+          children: [],
+          row,
+        })
+        break
+      }
+
+      let group = appEntry.groups.get(fullPath)
+      if (!group) {
+        group = {
+          id: groupIdForPath(appId, fullPath),
+          appId,
+          label: part,
+          fullPath,
+          depth: index,
+          type: 'group',
+          children: [],
+          row: null,
+        }
+        appEntry.groups.set(fullPath, group)
+        siblings.push(group)
+      }
+
+      siblings = group.children
+      parentPath = fullPath
+    }
+  }
+
+  return Array.from(groupsByApp.values()).map((entry) => ({
+    appId: entry.appId,
+    appName: entry.appName,
+    appVersion: entry.appVersion,
+    nodes: sortTreeNodes(entry.roots),
+  }))
+}
+
+function sortTreeNodes(nodes) {
+  return [...nodes]
+    .sort((left, right) => {
+      if (left.type !== right.type) {
+        return left.type === 'group' ? -1 : 1
+      }
+      return String(left.label || '').localeCompare(String(right.label || ''))
+    })
+    .map((node) => {
+      if (node.type !== 'group') return node
+      return {
+        ...node,
+        children: sortTreeNodes(node.children || []),
+      }
+    })
+}
+
+function flattenTreeForDisplay(appGroups, collapsedMap) {
+  const output = []
+
+  for (const appGroup of appGroups) {
+    output.push({
+      type: 'app-title',
+      id: `app-title:${appGroup.appId}`,
+      appId: appGroup.appId,
+      appName: appGroup.appName,
+      appVersion: appGroup.appVersion,
+    })
+    appendTreeNodes(output, appGroup.nodes, collapsedMap)
+  }
+
+  return output
+}
+
+function appendTreeNodes(output, nodes, collapsedMap) {
+  for (const node of nodes) {
+    output.push(node)
+    if (node.type !== 'group') continue
+    const collapsed = collapsedMap[node.id] !== false
+    if (!collapsed) {
+      appendTreeNodes(output, node.children || [], collapsedMap)
+    }
+  }
+}
+
+function shouldDefaultCollapseGroups(selectedAppId, appGroups) {
+  if (selectedAppId) return false
+  return appGroups.length > 1
+}
+
+function collectGroupNodes(nodes, output = []) {
+  for (const node of nodes) {
+    if (node.type !== 'group') continue
+    output.push(node)
+    collectGroupNodes(node.children || [], output)
+  }
+  return output
+}
+
 function flattenSchema(schema, data, appInfo, readonlyPaths, defaultData, parentPath = '') {
   if (!schema || typeof schema !== 'object') {
     return []
@@ -973,6 +1486,7 @@ function flattenSchema(schema, data, appInfo, readonlyPaths, defaultData, parent
     appVersion: appInfo.appVersion,
     path: parentPath,
     type,
+    schemaObj: deepClone(schema),
     enumValues,
     rangeText,
     description: typeof schema.description === 'string' ? schema.description : '',

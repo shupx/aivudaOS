@@ -1,7 +1,46 @@
 <script setup>
+import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+
+const columnWidths = ref([260, 320, 120, 320])
+let stopColumnResize = null
+
+function getResizeHandleLeft(index) {
+  return columnWidths.value
+    .slice(0, index + 1)
+    .reduce((sum, width) => sum + Number(width || 0), 0)
+}
+
+function startColumnResize(index, event) {
+  event.preventDefault()
+  const startX = event.clientX
+  const startWidth = Number(columnWidths.value[index] || 0)
+
+  const onPointerMove = (moveEvent) => {
+    const nextWidth = Math.max(80, startWidth + moveEvent.clientX - startX)
+    columnWidths.value = columnWidths.value.map((width, currentIndex) => (
+      currentIndex === index ? nextWidth : width
+    ))
+  }
+
+  const onPointerUp = () => {
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
+    stopColumnResize = null
+  }
+
+  stopColumnResize = onPointerUp
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+}
+
+onBeforeUnmount(() => {
+  if (stopColumnResize) {
+    stopColumnResize()
+  }
+})
 
 defineProps({
   magnets: { type: Array, default: () => [] },
@@ -11,6 +50,9 @@ defineProps({
   getMagnetRowId: { type: Function, required: true },
   getMagnetValue: { type: Function, required: true },
   getMagnetDisplayValue: { type: Function, required: true },
+  getArrayPreviewText: { type: Function, required: true },
+  isArrayEditableMagnet: { type: Function, required: true },
+  openArrayEditorForMagnet: { type: Function, required: true },
   onMagnetBooleanChange: { type: Function, required: true },
   onMagnetTextChange: { type: Function, required: true },
   saveMagnetChanges: { type: Function, required: true },
@@ -33,8 +75,11 @@ defineProps({
 
     <div v-if="collapsed" class="muted"></div>
     <div v-else-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
-    <div v-else class="table-wrap">
-      <table class="config-table compact">
+    <div v-else class="table-wrap resizable-table-wrap">
+      <table class="config-table compact config-table-resizable">
+        <colgroup>
+          <col v-for="(width, index) in columnWidths" :key="`magnet-col-${index}`" :style="{ width: `${width}px` }">
+        </colgroup>
         <thead>
           <tr>
             <th>{{ t('appConfigCenter.colPath') }}</th>
@@ -55,6 +100,13 @@ defineProps({
                 >
                 {{ Boolean(getMagnetValue(group)) ? 'true' : 'false' }}
               </label>
+              <button
+                v-else-if="isArrayEditableMagnet(group)"
+                class="btn btn-array-editor"
+                @click="openArrayEditorForMagnet(group)"
+              >
+                {{ getArrayPreviewText(getMagnetValue(group)) }}
+              </button>
               <input
                 v-else
                 class="input"
@@ -67,6 +119,13 @@ defineProps({
           </tr>
         </tbody>
       </table>
+      <span
+        v-for="(width, index) in columnWidths.slice(0, -1)"
+        :key="`magnet-col-handle-${index}`"
+        class="table-col-resize-line"
+        :style="{ left: `${getResizeHandleLeft(index)}px` }"
+        @pointerdown="startColumnResize(index, $event)"
+      ></span>
     </div>
 
     <p v-if="!collapsed && magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
