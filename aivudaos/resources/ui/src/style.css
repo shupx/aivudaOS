@@ -302,11 +302,7 @@ input {
 }
 
 .app-config-center-magnet-sticky {
-  position: sticky;
-  top: calc(var(--config-center-sticky-top) + var(--config-center-header-height));
-  z-index: 15;
-  background: #ffffff;
-  border-radius: 12px;
+  position: static;
 }
 
 .panel-header {
