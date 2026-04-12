@@ -9,6 +9,7 @@ const {
   error,
   addressError,
   storeAddress,
+  searchText,
   normalizedStoreAddress,
   showAddressManualCheckHint,
   displayItems,
@@ -62,6 +63,19 @@ const {
           {{ normalizedStoreAddress }}
         </a>
       </p>
+    </article>
+
+    <article class="store-setting-panel">
+      <div class="panel-actions wrap store-inline-form-row">
+        <label class="muted" for="store-search-input">{{ t('store.searchLabel') }}</label>
+        <input
+          id="store-search-input"
+          v-model="searchText"
+          class="select-input store-address-input"
+          type="text"
+          :placeholder="t('store.searchPlaceholder')"
+        >
+      </div>
     </article>
 
     <p v-if="error" class="error-text">{{ error }}</p>

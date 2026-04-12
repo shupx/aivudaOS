@@ -16,6 +16,7 @@ export function useOnlineStorePage() {
   const error = ref('')
   const addressError = ref('')
   const storeAddress = ref('')
+  const searchText = ref('')
   const items = ref([])
 
   const hasItems = computed(() => items.value.length > 0)
@@ -25,10 +26,12 @@ export function useOnlineStorePage() {
     Boolean(addressError.value || error.value) && canOpenStoreAddress.value
   ))
   const displayItems = computed(() => (
-    items.value.map((item) => ({
-      ...item,
-      updated_at_display: formatStoreUpdatedAt(item?.updated_at),
-    }))
+    items.value
+      .map((item) => ({
+        ...item,
+        updated_at_display: formatStoreUpdatedAt(item?.updated_at),
+      }))
+      .filter((item) => matchesSearch(item, searchText.value))
   ))
 
   async function load() {
@@ -77,6 +80,7 @@ export function useOnlineStorePage() {
     error,
     addressError,
     storeAddress,
+    searchText,
     normalizedStoreAddress,
     canOpenStoreAddress,
     showAddressManualCheckHint,
@@ -86,4 +90,11 @@ export function useOnlineStorePage() {
     load,
     saveAddress,
   }
+}
+
+function matchesSearch(item, rawSearchText) {
+  const keyword = String(rawSearchText || '').trim().toLowerCase()
+  if (!keyword) return true
+  const appName = String(item?.manifest?.name || item?.app_id || '').toLowerCase()
+  return appName.includes(keyword)
 }

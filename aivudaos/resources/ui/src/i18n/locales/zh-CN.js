@@ -162,6 +162,8 @@ export default {
     loadFailed: '加载商店失败',
     addressLabel: '商店后端地址',
     addressPlaceholder: '例如：https://127.0.0.1:8580',
+    searchLabel: '搜索应用名',
+    searchPlaceholder: '按 app name 搜索',
     addressConnectionHint: '该地址是由浏览器所在主机直接连接。你需要先在这个地址部署商店后端，详情参考',
     addressManualCheckHint: '如果该地址无法 fetch，请点击在浏览器中打开，检查是否可连通或是否需要手动信任/安装证书：',
     saveAddress: '保存地址',

@@ -854,6 +854,10 @@ input {
   gap: 8px;
 }
 
+.store-inline-form-row {
+  align-items: center;
+}
+
 .store-address-input {
   min-width: min(560px, 100%);
 }

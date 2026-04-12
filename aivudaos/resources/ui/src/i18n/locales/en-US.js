@@ -162,6 +162,8 @@ export default {
     loadFailed: 'Failed to load store',
     addressLabel: 'App Store backend address',
     addressPlaceholder: 'Example: https://127.0.0.1:8580',
+    searchLabel: 'Search App Name',
+    searchPlaceholder: 'Search by app name',
     addressConnectionHint: 'This address is connected directly by the browser host. You should deploy the store backend first on this address. Refer to ',
     addressManualCheckHint: 'If this address cannot be fetched, click to open it in your browser to check connectivity or manually trust/install its certificate:',
     saveAddress: 'Save Address',
