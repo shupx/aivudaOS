@@ -9,6 +9,8 @@ const props = defineProps({
   app: { type: Object, required: true },
   busy: { type: Boolean, default: false },
   clickable: { type: Boolean, default: true },
+  cardId: { type: String, default: '' },
+  highlighted: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['toggle-running', 'toggle-autostart'])
@@ -57,8 +59,9 @@ function onIconError() {
 
 <template>
   <article
+    :id="cardId || undefined"
     class="app-card"
-    :class="{ 'card-clickable': clickable }"
+    :class="{ 'card-clickable': clickable, 'app-card-highlighted': highlighted }"
     :tabindex="clickable ? 0 : -1"
     @click="goDetail"
     @keydown.enter.prevent="goDetail"

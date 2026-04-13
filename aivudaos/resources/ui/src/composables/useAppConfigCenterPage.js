@@ -623,6 +623,24 @@ export function useAppConfigCenterPage() {
     return valueToInlineText(getMagnetValue(group))
   }
 
+  function getMagnetBindingsText(bindings) {
+    const items = Array.isArray(bindings) ? bindings : []
+    if (!items.length) return '-'
+
+    return items
+      .map((binding) => {
+        if (String(binding?.kind || '') === 'sys') {
+          return 'sys'
+        }
+        const appId = String(binding?.app_id || '')
+        if (!appId) return '-'
+        const app = appItems.value.find((item) => String(item?.app_id || '') === appId)
+        return String(app?.name || appId)
+      })
+      .filter(Boolean)
+      .join(', ')
+  }
+
   function onMagnetBooleanChange(group, checked) {
     setMagnetValue(group, Boolean(checked))
   }
@@ -1197,6 +1215,7 @@ export function useAppConfigCenterPage() {
     newSystemSchemaDescription,
     getMagnetValue,
     getMagnetDisplayValue,
+    getMagnetBindingsText,
     onBooleanChange,
     onEnumChange,
     onSystemEnumChange,

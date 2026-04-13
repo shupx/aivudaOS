@@ -126,6 +126,28 @@ export function useAppsPanel() {
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
+  const searchText = ref('')
+  const highlightedAppId = ref('')
+  const searchDropdownVisible = ref(false)
+  const activeSearchIndex = ref(-1)
+  let highlightTimer = null
+
+  const handlePointerDown = (event) => {
+    const target = event?.target
+    if (target instanceof Element && target.closest('.apps-search-box')) {
+      return
+    }
+    searchDropdownVisible.value = false
+    activeSearchIndex.value = -1
+  }
+
+  const searchResults = computed(() => {
+    const keyword = String(searchText.value || '').trim().toLowerCase()
+    if (!keyword) return []
+    return apps.value
+      .filter((app) => String(app?.name || app?.app_id || '').toLowerCase().includes(keyword))
+      .slice(0, 20)
+  })
 
   const uploadModal = useAppUploadInstallModal({
     async onInstalled() {
@@ -154,17 +176,113 @@ export function useAppsPanel() {
       delete nextQuery.openUpload
       router.replace({ path: route.path, query: nextQuery })
     }
+
+    document.addEventListener('pointerdown', handlePointerDown)
   })
 
   onUnmounted(() => {
     stopPolling()
+    document.removeEventListener('pointerdown', handlePointerDown)
+    if (highlightTimer) {
+      clearTimeout(highlightTimer)
+      highlightTimer = null
+    }
   })
+
+  watch(
+    () => searchText.value,
+    (next) => {
+      const hasKeyword = Boolean(String(next || '').trim())
+      searchDropdownVisible.value = hasKeyword
+      activeSearchIndex.value = hasKeyword && searchResults.value.length ? 0 : -1
+    },
+  )
+
+  function jumpToAppCard(app) {
+    const appId = String(app?.app_id || '')
+    if (!appId) return
+    const element = document.getElementById(`app-card-${appId}`)
+    if (!element) return
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightedAppId.value = appId
+    searchDropdownVisible.value = false
+    activeSearchIndex.value = -1
+    if (highlightTimer) {
+      clearTimeout(highlightTimer)
+    }
+    highlightTimer = window.setTimeout(() => {
+      highlightedAppId.value = ''
+      highlightTimer = null
+    }, 2200)
+  }
+
+  function openSearchDropdown() {
+    if (!String(searchText.value || '').trim()) return
+    searchDropdownVisible.value = true
+    activeSearchIndex.value = searchResults.value.length ? 0 : -1
+  }
+
+  function closeSearchDropdown() {
+    searchDropdownVisible.value = false
+    activeSearchIndex.value = -1
+  }
+
+  function handleSearchKeydown(event) {
+    if (!String(searchText.value || '').trim()) return
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (!searchDropdownVisible.value) {
+        openSearchDropdown()
+        return
+      }
+      if (!searchResults.value.length) return
+      activeSearchIndex.value = (activeSearchIndex.value + 1 + searchResults.value.length) % searchResults.value.length
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!searchDropdownVisible.value) {
+        openSearchDropdown()
+        return
+      }
+      if (!searchResults.value.length) return
+      activeSearchIndex.value = (activeSearchIndex.value - 1 + searchResults.value.length) % searchResults.value.length
+      return
+    }
+
+    if (event.key === 'Enter') {
+      if (!searchDropdownVisible.value || !searchResults.value.length) return
+      event.preventDefault()
+      const target = searchResults.value[Math.max(0, activeSearchIndex.value)]
+      if (target) {
+        jumpToAppCard(target)
+      }
+      return
+    }
+
+    if (event.key === 'Escape') {
+      if (!searchDropdownVisible.value) return
+      event.preventDefault()
+      closeSearchDropdown()
+    }
+  }
 
   return {
     apps,
     loading,
     error,
     busyById,
+    searchText,
+    searchResults,
+    searchDropdownVisible,
+    activeSearchIndex,
+    highlightedAppId,
+    jumpToAppCard,
+    openSearchDropdown,
+    closeSearchDropdown,
+    handleSearchKeydown,
     refresh,
     toggleRunning,
     toggleAutostart,

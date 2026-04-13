@@ -67,14 +67,16 @@ const {
 
     <article class="store-setting-panel">
       <div class="panel-actions wrap store-inline-form-row">
-        <label class="muted" for="store-search-input">{{ t('store.searchLabel') }}</label>
-        <input
-          id="store-search-input"
-          v-model="searchText"
-          class="select-input store-address-input"
-          type="text"
-          :placeholder="t('store.searchPlaceholder')"
-        >
+        <div class="search-input-shell store-search-input-shell">
+          <input
+            id="store-search-input"
+            v-model="searchText"
+            class="select-input search-input-with-clear"
+            type="text"
+            :placeholder="t('store.searchPlaceholder')"
+          >
+          <button v-if="String(searchText || '')" type="button" class="search-clear-btn" @click="searchText = ''">x</button>
+        </div>
       </div>
     </article>
 

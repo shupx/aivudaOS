@@ -107,6 +107,7 @@ const {
   newSystemSchemaDescription,
   getMagnetValue,
   getMagnetDisplayValue,
+  getMagnetBindingsText,
   onBooleanChange,
   onEnumChange,
   onSystemEnumChange,
@@ -153,6 +154,7 @@ const {
         :get-magnet-row-id="getMagnetRowId"
         :get-magnet-value="getMagnetValue"
         :get-magnet-display-value="getMagnetDisplayValue"
+        :get-magnet-bindings-text="getMagnetBindingsText"
         :get-array-preview-text="getArrayPreviewText"
         :is-array-editable-magnet="isArrayEditableMagnet"
         :open-array-editor-for-magnet="openArrayEditorForMagnet"

@@ -50,6 +50,7 @@ defineProps({
   getMagnetRowId: { type: Function, required: true },
   getMagnetValue: { type: Function, required: true },
   getMagnetDisplayValue: { type: Function, required: true },
+  getMagnetBindingsText: { type: Function, required: true },
   getArrayPreviewText: { type: Function, required: true },
   isArrayEditableMagnet: { type: Function, required: true },
   openArrayEditorForMagnet: { type: Function, required: true },
@@ -115,7 +116,7 @@ defineProps({
               >
             </td>
             <td>{{ group.value_type || '-' }}</td>
-            <td class="mono-cell">{{ valueToInlineText(group.bindings || []) }}</td>
+            <td>{{ getMagnetBindingsText(group.bindings || []) }}</td>
           </tr>
         </tbody>
       </table>

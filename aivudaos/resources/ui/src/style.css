@@ -862,6 +862,41 @@ input {
   min-width: min(560px, 100%);
 }
 
+.store-search-input-shell {
+  width: min(560px, 100%);
+}
+
+.search-input-shell {
+  position: relative;
+}
+
+.search-input-with-clear,
+.apps-search-input {
+  padding-right: 30px;
+  width: 100%;
+}
+
+.search-clear-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #64748b;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+}
+
+.search-clear-btn:hover {
+  color: #334155;
+}
+
 .store-version-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -908,10 +943,69 @@ input {
   outline: none;
 }
 
+.app-card-highlighted {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.22);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
 .app-card-header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+}
+
+.apps-search-box {
+  position: relative;
+  width: min(420px, 100%);
+  margin-top: 8px;
+}
+
+.apps-search-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.apps-search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.apps-search-result-item {
+  border: none;
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apps-search-result-item:hover,
+.apps-search-result-item:focus-visible,
+.apps-search-result-item-active {
+  background: #f1f5f9;
+  outline: none;
+}
+
+.apps-search-result-empty {
+  color: #64748b;
+  padding: 8px 10px;
 }
 
 .app-header-actions {
