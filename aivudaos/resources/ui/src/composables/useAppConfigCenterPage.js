@@ -1346,6 +1346,7 @@ function groupIdForPath(appId, fullPath) {
 
 function buildAppParamTree(rows) {
   const groupsByApp = new Map()
+  const changedPrefixesByApp = new Map()
 
   for (const row of rows) {
     const appId = String(row?.appId || '')
@@ -1358,6 +1359,15 @@ function buildAppParamTree(rows) {
         groups: new Map(),
         roots: [],
       })
+    }
+
+    if (row.hasDefault && !isValueEqual(row.currentValue, row.defaultValue)) {
+      const prefixes = changedPrefixesByApp.get(appId) || new Set()
+      const parts = String(row.path || '').split('.').filter(Boolean)
+      for (let index = 0; index < parts.length; index += 1) {
+        prefixes.add(parts.slice(0, index + 1).join('.'))
+      }
+      changedPrefixesByApp.set(appId, prefixes)
     }
 
     const appEntry = groupsByApp.get(appId)
@@ -1380,6 +1390,7 @@ function buildAppParamTree(rows) {
           type: 'leaf',
           children: [],
           row,
+          defaultChanged: Boolean(changedPrefixesByApp.get(appId)?.has(fullPath)),
         })
         break
       }
@@ -1395,9 +1406,14 @@ function buildAppParamTree(rows) {
           type: 'group',
           children: [],
           row: null,
+          defaultChanged: false,
         }
         appEntry.groups.set(fullPath, group)
         siblings.push(group)
+      }
+
+      if (changedPrefixesByApp.get(appId)?.has(fullPath)) {
+        group.defaultChanged = true
       }
 
       siblings = group.children

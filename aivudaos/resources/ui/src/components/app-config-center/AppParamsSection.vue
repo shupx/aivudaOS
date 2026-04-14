@@ -141,7 +141,7 @@ defineProps({
                   <button class="tree-toggle-btn" :title="isGroupCollapsed(item.id) ? t('appConfigCenter.expand') : t('appConfigCenter.collapse')" @click="toggleGroupCollapsed(item.id)">
                     {{ isGroupCollapsed(item.id) ? '+' : '-' }}
                   </button>
-                  <span class="config-group-label">{{ item.label }}</span>
+                  <span class="config-group-label" :class="{ 'config-default-changed-label': item.defaultChanged }">{{ item.label }}</span>
                 </div>
               </td>
               <td colspan="6"></td>
@@ -150,12 +150,16 @@ defineProps({
             <tr v-else :class="getRowThemeClass(item.row.appId)">
               <td class="mono-cell">
                 <div class="config-tree-path" :style="{ paddingLeft: `${item.depth * 20}px` }">
-                  <span class="config-leaf-label">{{ item.label }}</span>
+                  <span class="config-leaf-label" :class="{ 'config-default-changed-label': item.defaultChanged }">{{ item.label }}</span>
                 </div>
               </td>
               <td>
-                <div class="config-edit-cell" :title="item.row.readonly ? t('appConfigCenter.readonlyInMagnetZone') : ''">
-                  <label v-if="item.row.type === 'boolean'" class="check-item">
+                <div
+                  class="config-edit-cell"
+                  :class="{ 'config-default-changed-value': item.defaultChanged }"
+                  :title="item.row.readonly ? t('appConfigCenter.readonlyInMagnetZone') : ''"
+                >
+                  <label v-if="item.row.type === 'boolean'" class="check-item" :class="{ 'config-default-changed-value': item.defaultChanged }">
                     <input
                       :checked="Boolean(getCellValue(item.row))"
                       :disabled="item.row.readonly"
@@ -168,6 +172,7 @@ defineProps({
                   <select
                     v-else-if="Array.isArray(item.row.enumValues) && item.row.enumValues.length"
                     class="select-input"
+                    :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
                     :value="item.row.enumValues.findIndex((enumItem) => JSON.stringify(enumItem) === JSON.stringify(getCellValue(item.row)))"
                     @change="onEnumChange(item.row, $event?.target?.value)"
@@ -180,6 +185,7 @@ defineProps({
                   <button
                     v-else-if="isArrayEditableRow(item.row)"
                     class="btn btn-array-editor"
+                    :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
                     @click="openArrayEditorForRow(item.row)"
                   >
@@ -189,6 +195,7 @@ defineProps({
                   <input
                     v-else
                     class="input"
+                    :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
                     :value="displayValue(item.row)"
                     @change="onTextChange(item.row, $event?.target?.value || '')"

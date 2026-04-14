@@ -769,6 +769,21 @@ input {
   color: #0f172a;
 }
 
+.config-default-changed-label {
+  color: #a16207;
+}
+
+.config-default-changed-value {
+  color: #a16207;
+}
+
+input.config-default-changed-value,
+select.config-default-changed-value,
+button.config-default-changed-value,
+label.config-default-changed-value {
+  color: #a16207;
+}
+
 .config-array-editor {
   min-height: 320px;
   resize: vertical;
