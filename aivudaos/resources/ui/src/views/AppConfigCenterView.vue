@@ -6,7 +6,7 @@ import MagnetConfigSection from '../components/app-config-center/MagnetConfigSec
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 
 const { t } = useI18n()
-const systemColumnWidths = ref([260, 320, 110, 180, 120, 260, 100])
+const systemColumnWidths = ref([260, 320, 110, 180, 260, 120, 100])
 const systemTableWidth = computed(() => systemColumnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
 const systemTableWrapRef = ref(null)
 const systemHeaderRefs = ref([])
@@ -239,8 +239,8 @@ const {
             <th :ref="setSystemHeaderRef(1)">{{ t('appConfigCenter.colCurrent') }}</th>
             <th :ref="setSystemHeaderRef(2)">{{ t('appConfigCenter.colType') }}</th>
             <th :ref="setSystemHeaderRef(3)">{{ t('appConfigCenter.colRange') }}</th>
-            <th :ref="setSystemHeaderRef(4)">{{ t('appConfigCenter.colNeedRestart') }}</th>
-            <th :ref="setSystemHeaderRef(5)">{{ t('appConfigCenter.colDesc') }}</th>
+            <th :ref="setSystemHeaderRef(4)">{{ t('appConfigCenter.colDesc') }}</th>
+            <th :ref="setSystemHeaderRef(5)">{{ t('appConfigCenter.colNeedRestart') }}</th>
             <th :ref="setSystemHeaderRef(6)">{{ t('appConfigCenter.colAction') }}</th>
           </tr>
         </thead>
@@ -297,8 +297,8 @@ const {
               </td>
               <td>{{ row.type || '-' }}</td>
               <td>{{ row.rangeText || '-' }}</td>
-              <td>{{ getNeedRestartText(row) }}</td>
               <td>{{ row.description || '-' }}</td>
+              <td>{{ getNeedRestartText(row) }}</td>
               <td>
                 <button class="btn" :disabled="row.readonly" @click="confirmRemoveSystemParam(row)">
                   {{ t('appConfigCenter.systemDelete') }}

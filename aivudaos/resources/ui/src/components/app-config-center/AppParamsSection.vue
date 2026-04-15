@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
-const columnWidths = ref([260, 320, 180, 110, 180, 120, 260])
+const columnWidths = ref([260, 320, 180, 110, 180, 260, 120])
 const totalTableWidth = computed(() => columnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
 const tableWrapRef = ref(null)
 const tableRef = ref(null)
@@ -164,8 +164,8 @@ defineProps({
             <th :ref="setHeaderRef(2)">{{ t('appConfigCenter.colDefault') }}</th>
             <th :ref="setHeaderRef(3)">{{ t('appConfigCenter.colType') }}</th>
             <th :ref="setHeaderRef(4)">{{ t('appConfigCenter.colRange') }}</th>
-            <th :ref="setHeaderRef(5)">{{ t('appConfigCenter.colNeedRestart') }}</th>
-            <th :ref="setHeaderRef(6)">{{ t('appConfigCenter.colDesc') }}</th>
+            <th :ref="setHeaderRef(5)">{{ t('appConfigCenter.colDesc') }}</th>
+            <th :ref="setHeaderRef(6)">{{ t('appConfigCenter.colNeedRestart') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -266,8 +266,8 @@ defineProps({
               <td class="mono-cell">{{ getDefaultText(item.row) }}</td>
               <td>{{ item.row.type || '-' }}</td>
               <td>{{ getRangeText(item.row) }}</td>
-              <td>{{ getNeedRestartText(item.row) }}</td>
               <td>{{ getDescriptionText(item.row) }}</td>
+              <td>{{ getNeedRestartText(item.row) }}</td>
             </tr>
           </template>
         </tbody>
