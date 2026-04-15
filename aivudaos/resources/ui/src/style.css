@@ -673,23 +673,19 @@ input {
   white-space: nowrap;
 }
 
-.config-table-resizable th {
-  position: relative;
-}
-
-.table-col-resize-handle {
+.table-col-resize-line {
   position: absolute;
   top: 0;
-  right: -4px;
   bottom: 0;
   width: 8px;
+  margin-left: -4px;
   cursor: col-resize;
   user-select: none;
   touch-action: none;
   z-index: 3;
 }
 
-.table-col-resize-handle::after {
+.table-col-resize-line::after {
   content: '';
   position: absolute;
   top: 15%;
@@ -701,7 +697,7 @@ input {
   border-radius: 999px;
 }
 
-.table-col-resize-handle:hover::after {
+.table-col-resize-line:hover::after {
   opacity: 1;
 }
 

@@ -1,12 +1,16 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
 const columnWidths = ref([260, 320, 120, 320])
 const totalTableWidth = computed(() => columnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
+const tableWrapRef = ref(null)
+const headerRefs = ref([])
+const resizeLineLefts = ref([])
 let stopColumnResize = null
+let resizeFrame = 0
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -31,11 +35,65 @@ function startColumnResize(index, event) {
   window.addEventListener('pointerup', onPointerUp)
 }
 
+function setHeaderRef(index) {
+  return (element) => {
+    headerRefs.value[index] = element || null
+    queueResizeLineUpdate()
+  }
+}
+
+function updateResizeLines() {
+  resizeFrame = 0
+  const wrap = tableWrapRef.value
+  if (!wrap) return
+
+  resizeLineLefts.value = headerRefs.value
+    .slice(0, -1)
+    .map((header) => {
+      if (!header) return 0
+      return header.offsetLeft + header.offsetWidth - wrap.scrollLeft
+    })
+}
+
+function queueResizeLineUpdate() {
+  if (resizeFrame) return
+  resizeFrame = window.requestAnimationFrame(() => {
+    updateResizeLines()
+  })
+}
+
 onBeforeUnmount(() => {
   if (stopColumnResize) {
     stopColumnResize()
   }
+  if (resizeFrame) {
+    window.cancelAnimationFrame(resizeFrame)
+    resizeFrame = 0
+  }
+  const wrap = tableWrapRef.value
+  if (wrap) {
+    wrap.removeEventListener('scroll', queueResizeLineUpdate)
+  }
+  window.removeEventListener('resize', queueResizeLineUpdate)
 })
+
+onMounted(() => {
+  const wrap = tableWrapRef.value
+  if (wrap) {
+    wrap.addEventListener('scroll', queueResizeLineUpdate, { passive: true })
+  }
+  window.addEventListener('resize', queueResizeLineUpdate)
+  queueResizeLineUpdate()
+})
+
+onUpdated(() => {
+  queueResizeLineUpdate()
+})
+
+watch(columnWidths, async () => {
+  await nextTick()
+  queueResizeLineUpdate()
+}, { deep: true })
 
 defineProps({
   magnets: { type: Array, default: () => [] },
@@ -71,17 +129,17 @@ defineProps({
 
     <div v-if="collapsed" class="muted"></div>
     <div v-else-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
-    <div v-else class="table-wrap resizable-table-wrap">
+    <div ref="tableWrapRef" v-else class="table-wrap resizable-table-wrap">
       <table class="config-table compact config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
         <colgroup>
           <col v-for="(width, index) in columnWidths" :key="`magnet-col-${index}`" :style="{ width: `${width}px` }">
         </colgroup>
         <thead>
           <tr>
-            <th>{{ t('appConfigCenter.colPath') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(0, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colCurrent') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(1, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colType') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(2, $event)"></span></th>
-            <th>{{ t('appConfigCenter.magnetBindings') }}</th>
+            <th :ref="setHeaderRef(0)">{{ t('appConfigCenter.colPath') }}</th>
+            <th :ref="setHeaderRef(1)">{{ t('appConfigCenter.colCurrent') }}</th>
+            <th :ref="setHeaderRef(2)">{{ t('appConfigCenter.colType') }}</th>
+            <th :ref="setHeaderRef(3)">{{ t('appConfigCenter.magnetBindings') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -115,6 +173,13 @@ defineProps({
           </tr>
         </tbody>
       </table>
+      <span
+        v-for="(left, index) in resizeLineLefts"
+        :key="`magnet-col-line-${index}`"
+        class="table-col-resize-line"
+        :style="{ left: `${left}px` }"
+        @pointerdown="startColumnResize(index, $event)"
+      ></span>
     </div>
 
     <p v-if="!collapsed && magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>

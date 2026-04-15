@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
@@ -8,7 +8,11 @@ import AppParamsSection from '../components/app-config-center/AppParamsSection.v
 const { t } = useI18n()
 const systemColumnWidths = ref([260, 320, 110, 180, 120, 260, 100])
 const systemTableWidth = computed(() => systemColumnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
+const systemTableWrapRef = ref(null)
+const systemHeaderRefs = ref([])
+const systemResizeLineLefts = ref([])
 let stopSystemColumnResize = null
+let systemResizeFrame = 0
 
 function startSystemColumnResize(index, event) {
   event.preventDefault()
@@ -33,11 +37,65 @@ function startSystemColumnResize(index, event) {
   window.addEventListener('pointerup', onPointerUp)
 }
 
+function setSystemHeaderRef(index) {
+  return (element) => {
+    systemHeaderRefs.value[index] = element || null
+    queueSystemResizeLineUpdate()
+  }
+}
+
+function updateSystemResizeLines() {
+  systemResizeFrame = 0
+  const wrap = systemTableWrapRef.value
+  if (!wrap) return
+
+  systemResizeLineLefts.value = systemHeaderRefs.value
+    .slice(0, -1)
+    .map((header) => {
+      if (!header) return 0
+      return header.offsetLeft + header.offsetWidth - wrap.scrollLeft
+    })
+}
+
+function queueSystemResizeLineUpdate() {
+  if (systemResizeFrame) return
+  systemResizeFrame = window.requestAnimationFrame(() => {
+    updateSystemResizeLines()
+  })
+}
+
 onBeforeUnmount(() => {
   if (stopSystemColumnResize) {
     stopSystemColumnResize()
   }
+  if (systemResizeFrame) {
+    window.cancelAnimationFrame(systemResizeFrame)
+    systemResizeFrame = 0
+  }
+  const wrap = systemTableWrapRef.value
+  if (wrap) {
+    wrap.removeEventListener('scroll', queueSystemResizeLineUpdate)
+  }
+  window.removeEventListener('resize', queueSystemResizeLineUpdate)
 })
+
+onMounted(() => {
+  const wrap = systemTableWrapRef.value
+  if (wrap) {
+    wrap.addEventListener('scroll', queueSystemResizeLineUpdate, { passive: true })
+  }
+  window.addEventListener('resize', queueSystemResizeLineUpdate)
+  queueSystemResizeLineUpdate()
+})
+
+onUpdated(() => {
+  queueSystemResizeLineUpdate()
+})
+
+watch(systemColumnWidths, async () => {
+  await nextTick()
+  queueSystemResizeLineUpdate()
+}, { deep: true })
 
 const {
   loading,
@@ -170,20 +228,20 @@ const {
       </div>
 
       <div v-if="!systemRows.length" class="empty-box">{{ t('appConfigCenter.systemEmpty') }}</div>
-      <div v-else class="table-wrap resizable-table-wrap">
+      <div ref="systemTableWrapRef" v-else class="table-wrap resizable-table-wrap">
         <table class="config-table compact config-table-resizable" :style="{ width: `${systemTableWidth}px` }">
           <colgroup>
             <col v-for="(width, index) in systemColumnWidths" :key="`sys-col-${index}`" :style="{ width: `${width}px` }">
           </colgroup>
         <thead>
           <tr>
-            <th>{{ t('appConfigCenter.colPath') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(0, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colCurrent') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(1, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colType') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(2, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colRange') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(3, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colNeedRestart') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(4, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colDesc') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(5, $event)"></span></th>
-            <th>{{ t('appConfigCenter.colAction') }}</th>
+            <th :ref="setSystemHeaderRef(0)">{{ t('appConfigCenter.colPath') }}</th>
+            <th :ref="setSystemHeaderRef(1)">{{ t('appConfigCenter.colCurrent') }}</th>
+            <th :ref="setSystemHeaderRef(2)">{{ t('appConfigCenter.colType') }}</th>
+            <th :ref="setSystemHeaderRef(3)">{{ t('appConfigCenter.colRange') }}</th>
+            <th :ref="setSystemHeaderRef(4)">{{ t('appConfigCenter.colNeedRestart') }}</th>
+            <th :ref="setSystemHeaderRef(5)">{{ t('appConfigCenter.colDesc') }}</th>
+            <th :ref="setSystemHeaderRef(6)">{{ t('appConfigCenter.colAction') }}</th>
           </tr>
         </thead>
           <tbody>
@@ -247,8 +305,15 @@ const {
                 </button>
               </td>
             </tr>
-          </tbody>
-        </table>
+        </tbody>
+      </table>
+      <span
+        v-for="(left, index) in systemResizeLineLefts"
+        :key="`sys-col-line-${index}`"
+        class="table-col-resize-line"
+        :style="{ left: `${left}px` }"
+        @pointerdown="startSystemColumnResize(index, $event)"
+      ></span>
       </div>
     </article>
 
