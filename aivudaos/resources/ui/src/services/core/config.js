@@ -1,4 +1,4 @@
-import { request } from './api'
+import { buildAuthUrl, request } from './api'
 
 export const DEFAULT_APPSTORE_BASE_URL = 'https://127.0.0.1:8580'
 // export const DEFAULT_APPSTORE_BASE_URL = 'https://39.102.60.150:8580'
@@ -72,6 +72,10 @@ export async function fetchAptSourcesList() {
 
 export async function fetchAptSourcesBackups() {
   return request('/api/config/system/apt-sources-list/backups', { auth: true })
+}
+
+export function buildCaddyLocalCaDownloadUrl() {
+  return buildAuthUrl('/api/config/system/caddy-local-ca/root.crt')
 }
 
 export async function updateAptSourcesList(content, sudoPassword = '') {

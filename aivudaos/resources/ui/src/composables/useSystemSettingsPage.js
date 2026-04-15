@@ -3,6 +3,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { logout } from '../services/core/auth'
 import {
+  buildCaddyLocalCaDownloadUrl,
   fetchAptSourcesBackups,
   fetchAptSourcesList,
   fetchAivudaosServiceStatus,
@@ -33,6 +34,8 @@ export function useSystemSettingsPage() {
   const serviceRunning = ref(false)
   const serviceAutostartEnabled = ref(false)
   const serviceActionPending = ref('')
+  const caddyLocalCaDownloadUrl = computed(() => buildCaddyLocalCaDownloadUrl())
+  const caddyLocalCaHintVisible = ref(false)
   const osDraftData = ref({})
   const osOriginalData = ref({})
   const osVersion = ref(0)
@@ -182,6 +185,34 @@ export function useSystemSettingsPage() {
       error.value = String(err?.message || err || t('systemSettings.serviceAutostartFailed'))
     } finally {
       serviceActionPending.value = ''
+    }
+  }
+
+  async function downloadCaddyLocalCa() {
+    if (loading.value || saving.value) return
+
+    caddyLocalCaHintVisible.value = true
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+
+    try {
+      const resp = await fetch(caddyLocalCaDownloadUrl.value, {
+        method: 'HEAD',
+      })
+
+      if (!resp.ok) {
+        throw new Error(await resolveCaddyLocalCaDownloadError(caddyLocalCaDownloadUrl.value, t))
+      }
+
+      const link = document.createElement('a')
+      link.href = caddyLocalCaDownloadUrl.value
+      link.rel = 'noopener'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      error.value = String(err?.message || err || t('systemSettings.caddyLocalCaDownloadFailed'))
     }
   }
 
@@ -478,6 +509,9 @@ export function useSystemSettingsPage() {
     serviceRunning,
     serviceAutostartEnabled,
     serviceActionPending,
+    caddyLocalCaDownloadUrl,
+    caddyLocalCaHintVisible,
+    downloadCaddyLocalCa,
     toggleEnabled,
     toggleServiceAutostart,
     triggerServiceAction,
@@ -538,6 +572,26 @@ function getOsEnumOptions(row) {
     ]
   }
   return []
+}
+
+async function resolveCaddyLocalCaDownloadError(url, t) {
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+    })
+    const text = await resp.text()
+    let payload = text
+
+    try {
+      payload = text ? JSON.parse(text) : null
+    } catch {
+      payload = text
+    }
+
+    return String(payload?.detail || payload || t('systemSettings.caddyLocalCaDownloadFailed'))
+  } catch {
+    return t('systemSettings.caddyLocalCaDownloadFailed')
+  }
 }
 
 function isOsValueSelectionBlocked(row, value) {

@@ -17,6 +17,9 @@ const {
   serviceRunning,
   serviceAutostartEnabled,
   serviceActionPending,
+  caddyLocalCaDownloadUrl,
+  caddyLocalCaHintVisible,
+  downloadCaddyLocalCa,
   toggleEnabled,
   toggleServiceAutostart,
   triggerServiceAction,
@@ -114,6 +117,29 @@ const {
           {{ t('systemSettings.aptSourcesButton') }}
         </button>
       </div>
+
+      <div class="setting-row">
+        <span class="setting-row-label">{{ t('systemSettings.caddyLocalCaLabel') }}</span>
+        <a
+          :href="caddyLocalCaDownloadUrl"
+          :aria-disabled="loading || saving"
+          @click.prevent="downloadCaddyLocalCa"
+        >
+          {{ t('systemSettings.caddyLocalCaDownloadLink') }}
+        </a>
+      </div>
+
+      <p v-if="caddyLocalCaHintVisible" class="muted">
+        {{ t('systemSettings.caddyLocalCaHintPrefix') }}
+        <a :href="t('systemSettings.caddyLocalCaChromeUrl')">
+          {{ t('systemSettings.caddyLocalCaChromeUrl') }}
+        </a>
+        {{ t('systemSettings.caddyLocalCaHintMiddle') }}
+        <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
+        {{ t('systemSettings.caddyLocalCaHintImport') }}
+        <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
+        {{ t('systemSettings.caddyLocalCaHintSuffix') }}
+      </p>
     </article>
 
     <article class="actions-panel">

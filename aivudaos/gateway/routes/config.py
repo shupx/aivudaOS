@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from aivudaos.core.auth.models import SessionInfo
 from aivudaos.core.auth.service import AuthService
@@ -28,6 +30,7 @@ from aivudaos.gateway.schemas import (
 )
 
 router = APIRouter(prefix="/api/config", tags=["config"])
+_CADDY_LOCAL_CA_ROOT_PATH = Path.home() / ".local/share/caddy/pki/authorities/local/root.crt"
 
 
 def _require_auth(token: str) -> SessionInfo:
@@ -36,6 +39,15 @@ def _require_auth(token: str) -> SessionInfo:
         return auth.validate_token(token)
     except AuthenticationError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def _build_caddy_local_ca_filename() -> str:
+    config = get_config_service()
+    hostname = str(config.get_os_setting("avahi_hostname", "") or "").strip().lower()
+    safe_hostname = "".join(ch for ch in hostname if ch.isalnum() or ch == "-").strip("-")
+    if not safe_hostname:
+        safe_hostname = "local"
+    return f"aivudaos-{safe_hostname}-caddy-local-root.crt"
 
 
 @router.get("/system/sudo-nopasswd")
@@ -92,6 +104,24 @@ async def restart_avahi(token: str) -> Dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to restart avahi-daemon.service: {exc}")
     return {"ok": True}
+
+
+@router.api_route("/system/caddy-local-ca/root.crt", methods=["GET", "HEAD"])
+async def download_caddy_local_ca_root(token: str) -> FileResponse:
+    _require_auth(token)
+
+    cert_path = _CADDY_LOCAL_CA_ROOT_PATH
+    if not cert_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Caddy local CA root certificate not found or not accessible: ~/.local/share/caddy/pki/authorities/local/root.crt",
+        )
+
+    return FileResponse(
+        str(cert_path),
+        media_type="application/x-x509-ca-cert",
+        filename=_build_caddy_local_ca_filename(),
+    )
 
 
 @router.get("/system/aivudaos-service")
