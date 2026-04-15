@@ -114,12 +114,12 @@ function onIconError() {
 
       <div class="switch-row">
         <div class="switch-item" @click.stop>
-          <span>{{ t('appCard.start') }}</span>
+          <span v-if="!compact">{{ t('appCard.start') }}</span>
           <SwitchToggle :model-value="Boolean(app.running)" :disabled="busy" @update:model-value="onRunningChange" />
         </div>
 
         <div class="switch-item switch-item-autostart" @click.stop>
-          <span>{{ t('appCard.autostart') }}</span>
+          <span v-if="!compact">{{ t('appCard.autostart') }}</span>
           <SwitchToggle :model-value="Boolean(app.autostart)" :disabled="busy" @update:model-value="onAutostartChange" />
         </div>
       </div>
