@@ -1,17 +1,12 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
 const columnWidths = ref([260, 320, 120, 320])
+const totalTableWidth = computed(() => columnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
 let stopColumnResize = null
-
-function getResizeHandleLeft(index) {
-  return columnWidths.value
-    .slice(0, index + 1)
-    .reduce((sum, width) => sum + Number(width || 0), 0)
-}
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -77,15 +72,15 @@ defineProps({
     <div v-if="collapsed" class="muted"></div>
     <div v-else-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
     <div v-else class="table-wrap resizable-table-wrap">
-      <table class="config-table compact config-table-resizable">
+      <table class="config-table compact config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
         <colgroup>
           <col v-for="(width, index) in columnWidths" :key="`magnet-col-${index}`" :style="{ width: `${width}px` }">
         </colgroup>
         <thead>
           <tr>
-            <th>{{ t('appConfigCenter.colPath') }}</th>
-            <th>{{ t('appConfigCenter.colCurrent') }}</th>
-            <th>{{ t('appConfigCenter.colType') }}</th>
+            <th>{{ t('appConfigCenter.colPath') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(0, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colCurrent') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(1, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colType') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(2, $event)"></span></th>
             <th>{{ t('appConfigCenter.magnetBindings') }}</th>
           </tr>
         </thead>
@@ -120,13 +115,6 @@ defineProps({
           </tr>
         </tbody>
       </table>
-      <span
-        v-for="(width, index) in columnWidths.slice(0, -1)"
-        :key="`magnet-col-handle-${index}`"
-        class="table-col-resize-line"
-        :style="{ left: `${getResizeHandleLeft(index)}px` }"
-        @pointerdown="startColumnResize(index, $event)"
-      ></span>
     </div>
 
     <p v-if="!collapsed && magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>

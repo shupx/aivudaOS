@@ -1,17 +1,12 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
 const columnWidths = ref([260, 320, 180, 110, 180, 120, 260])
+const totalTableWidth = computed(() => columnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
 let stopColumnResize = null
-
-function getResizeHandleLeft(index) {
-  return columnWidths.value
-    .slice(0, index + 1)
-    .reduce((sum, width) => sum + Number(width || 0), 0)
-}
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -99,18 +94,18 @@ defineProps({
     <div v-if="!treeRows.length" class="empty-box">{{ t('appConfigCenter.empty') }}</div>
 
     <div v-else class="table-wrap resizable-table-wrap">
-      <table class="config-table config-table-resizable">
+      <table class="config-table config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
         <colgroup>
           <col v-for="(width, index) in columnWidths" :key="`app-col-${index}`" :style="{ width: `${width}px` }">
         </colgroup>
         <thead>
           <tr>
-            <th>{{ t('appConfigCenter.colPath') }}</th>
-            <th>{{ t('appConfigCenter.colCurrent') }}</th>
-            <th>{{ t('appConfigCenter.colDefault') }}</th>
-            <th>{{ t('appConfigCenter.colType') }}</th>
-            <th>{{ t('appConfigCenter.colRange') }}</th>
-            <th>{{ t('appConfigCenter.colNeedRestart') }}</th>
+            <th>{{ t('appConfigCenter.colPath') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(0, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colCurrent') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(1, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colDefault') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(2, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colType') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(3, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colRange') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(4, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colNeedRestart') }}<span class="table-col-resize-handle" @pointerdown="startColumnResize(5, $event)"></span></th>
             <th>{{ t('appConfigCenter.colDesc') }}</th>
           </tr>
         </thead>
@@ -218,13 +213,6 @@ defineProps({
           </template>
         </tbody>
       </table>
-      <span
-        v-for="(width, index) in columnWidths.slice(0, -1)"
-        :key="`app-col-handle-${index}`"
-        class="table-col-resize-line"
-        :style="{ left: `${getResizeHandleLeft(index)}px` }"
-        @pointerdown="startColumnResize(index, $event)"
-      ></span>
     </div>
   </article>
 </template>

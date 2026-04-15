@@ -12,6 +12,7 @@ import {
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 
 let pollTimer = null
+const APPS_COMPACT_MODE_STORAGE_KEY = 'aivuda_ui_apps_compact_mode'
 
 function mergeAppsWithDetail(items) {
   return items.map((item) => {
@@ -127,6 +128,7 @@ export function useAppsPanel() {
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
   const searchText = ref('')
+  const compactMode = ref(localStorage.getItem(APPS_COMPACT_MODE_STORAGE_KEY) === '1')
   const highlightedAppId = ref('')
   const searchDropdownVisible = ref(false)
   const activeSearchIndex = ref(-1)
@@ -195,6 +197,13 @@ export function useAppsPanel() {
       const hasKeyword = Boolean(String(next || '').trim())
       searchDropdownVisible.value = hasKeyword
       activeSearchIndex.value = hasKeyword && searchResults.value.length ? 0 : -1
+    },
+  )
+
+  watch(
+    () => compactMode.value,
+    (next) => {
+      localStorage.setItem(APPS_COMPACT_MODE_STORAGE_KEY, next ? '1' : '0')
     },
   )
 
@@ -269,12 +278,17 @@ export function useAppsPanel() {
     }
   }
 
+  function toggleCompactMode() {
+    compactMode.value = !compactMode.value
+  }
+
   return {
     apps,
     loading,
     error,
     busyById,
     searchText,
+    compactMode,
     searchResults,
     searchDropdownVisible,
     activeSearchIndex,
@@ -284,6 +298,7 @@ export function useAppsPanel() {
     closeSearchDropdown,
     handleSearchKeydown,
     refresh,
+    toggleCompactMode,
     toggleRunning,
     toggleAutostart,
     ...uploadModal,

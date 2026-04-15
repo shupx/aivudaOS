@@ -11,6 +11,7 @@ const props = defineProps({
   clickable: { type: Boolean, default: true },
   cardId: { type: String, default: '' },
   highlighted: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['toggle-running', 'toggle-autostart'])
@@ -20,6 +21,7 @@ const { t } = useI18n()
 
 const description = computed(() => props.app.description || t('appCard.noDescription'))
 const hasBuiltInUi = computed(() => Boolean(props.app.has_builtin_ui))
+const builtInUiHref = computed(() => `/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
@@ -49,7 +51,17 @@ function goDetail() {
 
 function goBuiltInUi() {
   if (!hasBuiltInUi.value) return
-  router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
+  router.push(builtInUiHref.value)
+}
+
+function onBuiltInUiClick(event) {
+  if (!hasBuiltInUi.value) return
+  if (event.defaultPrevented) return
+  if (event.button !== 0) return
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
+  event.preventDefault()
+  goBuiltInUi()
 }
 
 function onIconError() {
@@ -61,7 +73,7 @@ function onIconError() {
   <article
     :id="cardId || undefined"
     class="app-card"
-    :class="{ 'card-clickable': clickable, 'app-card-highlighted': highlighted }"
+    :class="{ 'card-clickable': clickable, 'app-card-highlighted': highlighted, 'app-card-compact': compact }"
     :tabindex="clickable ? 0 : -1"
     @click="goDetail"
     @keydown.enter.prevent="goDetail"
@@ -82,23 +94,23 @@ function onIconError() {
       </div>
     </header>
 
-    <div class="app-meta">
+    <div v-if="!compact" class="app-meta">
       <p><strong>{{ t('appCard.appId') }}:</strong> {{ app.app_id }}</p>
       <p><strong>{{ t('appCard.description') }}:</strong> {{ description }}</p>
       <p><strong>{{ t('appCard.status') }}:</strong> {{ app.running ? t('appCard.running') : t('appCard.stopped') }}</p>
     </div>
 
     <div class="app-card-footer">
-      <button
+      <a
         v-if="hasBuiltInUi"
         class="app-ui-text-btn"
-        type="button"
+        :href="builtInUiHref"
         :title="t('appCard.openBuiltInUi')"
         :aria-label="t('appCard.openBuiltInUi')"
-        @click.stop="goBuiltInUi"
+        @click.stop="onBuiltInUiClick"
       >
         {{ t('appCard.openBuiltInUi') }}
-      </button>
+      </a>
 
       <div class="switch-row">
         <div class="switch-item" @click.stop>

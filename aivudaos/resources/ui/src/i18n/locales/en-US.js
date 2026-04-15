@@ -43,6 +43,7 @@ export default {
     title: 'Apps',
     uploadLink: 'Upload a new app package manually',
     noInstalledApps: 'No installed apps yet',
+    compactToggleTooltip: 'Toggle compact view',
     uploadModalTitle: 'Upload app package',
     packageFile: 'Package file (.tar.gz / .zip)',
     noFileSelected: 'No file selected',

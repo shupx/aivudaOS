@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
@@ -7,13 +7,8 @@ import AppParamsSection from '../components/app-config-center/AppParamsSection.v
 
 const { t } = useI18n()
 const systemColumnWidths = ref([260, 320, 110, 180, 120, 260, 100])
+const systemTableWidth = computed(() => systemColumnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
 let stopSystemColumnResize = null
-
-function getSystemResizeHandleLeft(index) {
-  return systemColumnWidths.value
-    .slice(0, index + 1)
-    .reduce((sum, width) => sum + Number(width || 0), 0)
-}
 
 function startSystemColumnResize(index, event) {
   event.preventDefault()
@@ -176,21 +171,21 @@ const {
 
       <div v-if="!systemRows.length" class="empty-box">{{ t('appConfigCenter.systemEmpty') }}</div>
       <div v-else class="table-wrap resizable-table-wrap">
-        <table class="config-table compact config-table-resizable">
+        <table class="config-table compact config-table-resizable" :style="{ width: `${systemTableWidth}px` }">
           <colgroup>
             <col v-for="(width, index) in systemColumnWidths" :key="`sys-col-${index}`" :style="{ width: `${width}px` }">
           </colgroup>
-          <thead>
-            <tr>
-              <th>{{ t('appConfigCenter.colPath') }}</th>
-              <th>{{ t('appConfigCenter.colCurrent') }}</th>
-              <th>{{ t('appConfigCenter.colType') }}</th>
-              <th>{{ t('appConfigCenter.colRange') }}</th>
-              <th>{{ t('appConfigCenter.colNeedRestart') }}</th>
-              <th>{{ t('appConfigCenter.colDesc') }}</th>
-              <th>{{ t('appConfigCenter.colAction') }}</th>
-            </tr>
-          </thead>
+        <thead>
+          <tr>
+            <th>{{ t('appConfigCenter.colPath') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(0, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colCurrent') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(1, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colType') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(2, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colRange') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(3, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colNeedRestart') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(4, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colDesc') }}<span class="table-col-resize-handle" @pointerdown="startSystemColumnResize(5, $event)"></span></th>
+            <th>{{ t('appConfigCenter.colAction') }}</th>
+          </tr>
+        </thead>
           <tbody>
             <tr v-for="row in systemRows" :key="`sys:${row.path}`">
               <td class="mono-cell">{{ row.path }}</td>
@@ -254,13 +249,6 @@ const {
             </tr>
           </tbody>
         </table>
-        <span
-          v-for="(width, index) in systemColumnWidths.slice(0, -1)"
-          :key="`sys-col-handle-${index}`"
-          class="table-col-resize-line"
-          :style="{ left: `${getSystemResizeHandleLeft(index)}px` }"
-          @pointerdown="startSystemColumnResize(index, $event)"
-        ></span>
       </div>
     </article>
 

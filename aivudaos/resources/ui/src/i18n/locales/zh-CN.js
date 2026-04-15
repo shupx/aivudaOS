@@ -43,6 +43,7 @@ export default {
     title: '应用菜单',
     uploadLink: '手动上传新应用安装包',
     noInstalledApps: '当前没有已安装应用',
+    compactToggleTooltip: '缩略切换',
     uploadModalTitle: '上传新应用安装包',
     packageFile: '安装包文件（.tar.gz / .zip）',
     noFileSelected: '未选择文件',

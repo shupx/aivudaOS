@@ -11,6 +11,7 @@ const {
   loading,
   error,
   searchText,
+  compactMode,
   searchResults,
   searchDropdownVisible,
   activeSearchIndex,
@@ -19,6 +20,7 @@ const {
   openSearchDropdown,
   handleSearchKeydown,
   refresh,
+  toggleCompactMode,
   busyById,
   toggleRunning,
   toggleAutostart,
@@ -60,33 +62,50 @@ const {
       </div>
     </header>
 
-    <div class="apps-search-box">
-      <div class="search-input-shell">
-        <input
-          id="apps-search-input"
-          v-model="searchText"
-          class="select-input apps-search-input"
-          type="text"
-          :placeholder="t('apps.searchPlaceholder')"
-          @focus="openSearchDropdown"
-          @keydown="handleSearchKeydown"
-        >
-        <button v-if="searchText" class="search-clear-btn" @click="searchText = ''">x</button>
-      </div>
-      <div v-if="searchDropdownVisible" class="apps-search-results-dropdown">
-        <button
-          v-for="(app, index) in searchResults"
-          :key="`search-${app.app_id}`"
-          class="apps-search-result-item"
-          :class="{ 'apps-search-result-item-active': index === activeSearchIndex }"
-          @click="jumpToAppCard(app)"
-        >
-          {{ app.name || app.app_id }}
-        </button>
-        <div v-if="!searchResults.length" class="apps-search-result-empty">
-          {{ t('apps.searchEmpty') }}
+    <div class="apps-search-row">
+      <div class="apps-search-box">
+        <div class="search-input-shell">
+          <input
+            id="apps-search-input"
+            v-model="searchText"
+            class="select-input apps-search-input"
+            type="text"
+            :placeholder="t('apps.searchPlaceholder')"
+            @focus="openSearchDropdown"
+            @keydown="handleSearchKeydown"
+          >
+          <button v-if="searchText" class="search-clear-btn" @click="searchText = ''">x</button>
+        </div>
+        <div v-if="searchDropdownVisible" class="apps-search-results-dropdown">
+          <button
+            v-for="(app, index) in searchResults"
+            :key="`search-${app.app_id}`"
+            class="apps-search-result-item"
+            :class="{ 'apps-search-result-item-active': index === activeSearchIndex }"
+            @click="jumpToAppCard(app)"
+          >
+            {{ app.name || app.app_id }}
+          </button>
+          <div v-if="!searchResults.length" class="apps-search-result-empty">
+            {{ t('apps.searchEmpty') }}
+          </div>
         </div>
       </div>
+      <button
+        class="apps-view-toggle-btn"
+        type="button"
+        :title="t('apps.compactToggleTooltip')"
+        :aria-label="t('apps.compactToggleTooltip')"
+        :aria-pressed="compactMode"
+        @click="toggleCompactMode"
+      >
+        <span class="apps-view-toggle-icon" aria-hidden="true">
+          <span class="apps-view-toggle-square"></span>
+          <span class="apps-view-toggle-square"></span>
+          <span class="apps-view-toggle-square"></span>
+          <span class="apps-view-toggle-square"></span>
+        </span>
+      </button>
     </div>
 
     <p v-if="error" class="error-text">{{ error }}</p>
@@ -95,7 +114,7 @@ const {
       {{ t('apps.noInstalledApps') }}
     </div>
 
-    <div class="apps-grid">
+    <div class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
       <AppCard
         v-for="app in apps"
         :key="app.app_id"
@@ -103,6 +122,7 @@ const {
         :busy="Boolean(busyById[app.app_id])"
         :card-id="`app-card-${app.app_id}`"
         :highlighted="highlightedAppId === app.app_id"
+        :compact="compactMode"
         @toggle-running="toggleRunning"
         @toggle-autostart="toggleAutostart"
       />
