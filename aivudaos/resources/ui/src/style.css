@@ -1128,6 +1128,8 @@ label.config-default-changed-value {
   white-space: normal;
   line-height: 1.25;
   max-height: 2.5em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .app-card-compact .app-header-actions {
