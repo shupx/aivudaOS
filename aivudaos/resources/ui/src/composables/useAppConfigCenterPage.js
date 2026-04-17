@@ -429,12 +429,13 @@ export function useAppConfigCenterPage() {
   async function onTextChange(row, rawText) {
     try {
       const next = parseValueByType(rawText, row.type)
-      await applyValue(row, next)
+      return await applyValue(row, next)
     } catch (err) {
       cellErrors.value = {
         ...cellErrors.value,
         [cellErrorKey(row)]: String(err?.message || err || t('appConfigCenter.invalidValue')),
       }
+      return false
     }
   }
 
@@ -649,8 +650,10 @@ export function useAppConfigCenterPage() {
     try {
       const nextValue = parseValueByType(rawText, String(group?.value_type || ''))
       setMagnetValue(group, nextValue)
+      return true
     } catch (err) {
       error.value = String(err?.message || err || t('appConfigCenter.invalidValue'))
+      return false
     }
   }
 

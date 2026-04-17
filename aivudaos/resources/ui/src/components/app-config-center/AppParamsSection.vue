@@ -12,6 +12,7 @@ const headerRefs = ref([])
 const resizeLineLefts = ref([])
 let stopColumnResize = null
 let resizeFrame = 0
+const textDrafts = ref({})
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -63,6 +64,37 @@ function queueResizeLineUpdate() {
   })
 }
 
+function textDraftKey(row) {
+  return `${row?.scope || 'app'}:${row?.appId || ''}:${row?.path || ''}`
+}
+
+function getTextInputValue(row) {
+  const key = textDraftKey(row)
+  if (Object.prototype.hasOwnProperty.call(textDrafts.value, key)) {
+    return textDrafts.value[key]
+  }
+  return props.displayValue(row)
+}
+
+function onTextInput(row, value) {
+  textDrafts.value = {
+    ...textDrafts.value,
+    [textDraftKey(row)]: String(value ?? ''),
+  }
+}
+
+async function commitTextInput(row) {
+  const key = textDraftKey(row)
+  const rawValue = Object.prototype.hasOwnProperty.call(textDrafts.value, key)
+    ? textDrafts.value[key]
+    : props.displayValue(row)
+  const saved = await props.onTextChange(row, rawValue)
+  if (!saved) return
+  const nextDrafts = { ...textDrafts.value }
+  delete nextDrafts[key]
+  textDrafts.value = nextDrafts
+}
+
 onBeforeUnmount(() => {
   if (stopColumnResize) {
     stopColumnResize()
@@ -96,7 +128,7 @@ watch(columnWidths, async () => {
   queueResizeLineUpdate()
 }, { deep: true })
 
-defineProps({
+const props = defineProps({
   appOptions: { type: Array, default: () => [] },
   selectedAppId: { type: String, default: '' },
   setSelectedAppId: { type: Function, required: true },
@@ -251,8 +283,10 @@ defineProps({
                     class="input"
                     :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
-                    :value="displayValue(item.row)"
-                    @change="onTextChange(item.row, $event?.target?.value || '')"
+                    :value="getTextInputValue(item.row)"
+                    @input="onTextInput(item.row, $event?.target?.value || '')"
+                    @blur="commitTextInput(item.row)"
+                    @keyup.enter="commitTextInput(item.row)"
                   >
 
                   <template v-if="item.row.readonly">

@@ -11,6 +11,7 @@ const headerRefs = ref([])
 const resizeLineLefts = ref([])
 let stopColumnResize = null
 let resizeFrame = 0
+const textDrafts = ref({})
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -62,6 +63,39 @@ function queueResizeLineUpdate() {
   })
 }
 
+function textDraftKey(group) {
+  return String(group?.group_id || '')
+}
+
+function getTextInputValue(group) {
+  const key = textDraftKey(group)
+  if (Object.prototype.hasOwnProperty.call(textDrafts.value, key)) {
+    return textDrafts.value[key]
+  }
+  return props.getMagnetDisplayValue(group)
+}
+
+function onTextInput(group, value) {
+  textDrafts.value = {
+    ...textDrafts.value,
+    [textDraftKey(group)]: String(value ?? ''),
+  }
+}
+
+async function commitTextInput(group) {
+  const key = textDraftKey(group)
+  const rawValue = Object.prototype.hasOwnProperty.call(textDrafts.value, key)
+    ? textDrafts.value[key]
+    : props.getMagnetDisplayValue(group)
+  const parsed = props.onMagnetTextChange(group, rawValue)
+  if (!parsed) return
+  const saved = await props.saveMagnetChanges(group)
+  if (!saved) return
+  const nextDrafts = { ...textDrafts.value }
+  delete nextDrafts[key]
+  textDrafts.value = nextDrafts
+}
+
 onBeforeUnmount(() => {
   if (stopColumnResize) {
     stopColumnResize()
@@ -95,7 +129,7 @@ watch(columnWidths, async () => {
   queueResizeLineUpdate()
 }, { deep: true })
 
-defineProps({
+const props = defineProps({
   magnets: { type: Array, default: () => [] },
   magnetConflicts: { type: Array, default: () => [] },
   collapsed: { type: Boolean, default: true },
@@ -164,8 +198,10 @@ defineProps({
               <input
                 v-else
                 class="input"
-                :value="getMagnetDisplayValue(group)"
-                @change="onMagnetTextChange(group, $event?.target?.value || ''); saveMagnetChanges(group)"
+                :value="getTextInputValue(group)"
+                @input="onTextInput(group, $event?.target?.value || '')"
+                @blur="commitTextInput(group)"
+                @keyup.enter="commitTextInput(group)"
               >
             </td>
             <td>{{ group.value_type || '-' }}</td>

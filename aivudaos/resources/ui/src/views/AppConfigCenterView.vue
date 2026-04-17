@@ -13,6 +13,7 @@ const systemHeaderRefs = ref([])
 const systemResizeLineLefts = ref([])
 let stopSystemColumnResize = null
 let systemResizeFrame = 0
+const systemTextDrafts = ref({})
 
 function startSystemColumnResize(index, event) {
   event.preventDefault()
@@ -62,6 +63,37 @@ function queueSystemResizeLineUpdate() {
   systemResizeFrame = window.requestAnimationFrame(() => {
     updateSystemResizeLines()
   })
+}
+
+function systemTextDraftKey(row) {
+  return `${row?.scope || 'sys'}:${row?.appId || '__system__'}:${row?.path || ''}`
+}
+
+function getSystemTextInputValue(row) {
+  const key = systemTextDraftKey(row)
+  if (Object.prototype.hasOwnProperty.call(systemTextDrafts.value, key)) {
+    return systemTextDrafts.value[key]
+  }
+  return displayValue(row)
+}
+
+function onSystemTextInput(row, value) {
+  systemTextDrafts.value = {
+    ...systemTextDrafts.value,
+    [systemTextDraftKey(row)]: String(value ?? ''),
+  }
+}
+
+async function commitSystemTextInput(row) {
+  const key = systemTextDraftKey(row)
+  const rawValue = Object.prototype.hasOwnProperty.call(systemTextDrafts.value, key)
+    ? systemTextDrafts.value[key]
+    : displayValue(row)
+  const saved = await onTextChange(row, rawValue)
+  if (!saved) return
+  const nextDrafts = { ...systemTextDrafts.value }
+  delete nextDrafts[key]
+  systemTextDrafts.value = nextDrafts
 }
 
 onBeforeUnmount(() => {
@@ -283,8 +315,10 @@ const {
                     :type="getSystemInputType(row)"
                     :disabled="row.readonly"
                     :placeholder="getSystemValuePlaceholder(row)"
-                    :value="displayValue(row)"
-                    @change="onTextChange(row, $event?.target?.value || '')"
+                    :value="getSystemTextInputValue(row)"
+                    @input="onSystemTextInput(row, $event?.target?.value || '')"
+                    @blur="commitSystemTextInput(row)"
+                    @keyup.enter="commitSystemTextInput(row)"
                   >
 
                   <template v-if="row.readonly">
