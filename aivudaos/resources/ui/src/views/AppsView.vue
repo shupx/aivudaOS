@@ -62,36 +62,6 @@ const {
         </button>
       </div>
       <div class="panel-actions wrap">
-        <button
-          class="btn"
-          type="button"
-          :title="t('apps.restartAutostartTooltip')"
-          :aria-label="t('apps.restartAutostartTooltip')"
-          :disabled="loading || Boolean(bulkActionPending)"
-          @click="restartEnabledApps"
-        >
-          {{ bulkActionPending === 'restartAutostart' ? t('common.processing') : t('apps.restartAutostart') }}
-        </button>
-        <button
-          class="btn"
-          type="button"
-          :title="t('apps.startAutostartTooltip')"
-          :aria-label="t('apps.startAutostartTooltip')"
-          :disabled="loading || Boolean(bulkActionPending)"
-          @click="startEnabledApps"
-        >
-          {{ bulkActionPending === 'startAutostart' ? t('common.processing') : t('apps.startAutostart') }}
-        </button>
-        <button
-          class="btn danger"
-          type="button"
-          :title="t('apps.stopAllTooltip')"
-          :aria-label="t('apps.stopAllTooltip')"
-          :disabled="loading || Boolean(bulkActionPending)"
-          @click="stopEveryApp"
-        >
-          {{ bulkActionPending === 'stopAll' ? t('common.processing') : t('apps.stopAll') }}
-        </button>
         <button class="link-btn" @click="openUploadModal">{{ t('apps.uploadLink') }}</button>
       </div>
     </header>
@@ -126,20 +96,53 @@ const {
         </div>
       </div>
       <button
-        class="apps-view-toggle-btn"
+        class="apps-bulk-icon-btn"
         type="button"
         :title="t('apps.compactToggleTooltip')"
         :aria-label="t('apps.compactToggleTooltip')"
         :aria-pressed="compactMode"
         @click="toggleCompactMode"
       >
-        <span class="apps-view-toggle-icon" aria-hidden="true">
-          <span class="apps-view-toggle-square"></span>
-          <span class="apps-view-toggle-square"></span>
-          <span class="apps-view-toggle-square"></span>
-          <span class="apps-view-toggle-square"></span>
-        </span>
+        <!-- When in compact mode, show a list icon/larger grid to toggle back. When in normal mode, show a tighter grid icon -->
+        <svg v-if="compactMode" class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+        <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
       </button>
+
+      <div class="apps-bulk-actions-row">
+        <button
+          class="apps-bulk-icon-btn"
+          type="button"
+          :title="t('apps.restartAutostartTooltip')"
+          :aria-label="t('apps.restartAutostartTooltip')"
+          :disabled="Boolean(bulkActionPending)"
+          @click="restartEnabledApps"
+        >
+          <svg v-if="bulkActionPending === 'restartAutostart'" class="apps-bulk-icon-symbol animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        </button>
+        <button
+          class="apps-bulk-icon-btn"
+          type="button"
+          :title="t('apps.startAutostartTooltip')"
+          :aria-label="t('apps.startAutostartTooltip')"
+          :disabled="Boolean(bulkActionPending)"
+          @click="startEnabledApps"
+        >
+          <svg v-if="bulkActionPending === 'startAutostart'" class="apps-bulk-icon-symbol animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        </button>
+        <button
+          class="apps-bulk-icon-btn apps-bulk-icon-btn-danger"
+          type="button"
+          :title="t('apps.stopAllTooltip')"
+          :aria-label="t('apps.stopAllTooltip')"
+          :disabled="Boolean(bulkActionPending)"
+          @click="stopEveryApp"
+        >
+          <svg v-if="bulkActionPending === 'stopAll'" class="apps-bulk-icon-symbol animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+        </button>
+      </div>
     </div>
 
     <p v-if="error" class="error-text">{{ error }}</p>

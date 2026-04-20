@@ -326,6 +326,71 @@ input {
   align-items: center;
 }
 
+.apps-bulk-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.apps-bulk-icon-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.apps-bulk-icon-btn:hover,
+.apps-bulk-icon-btn:focus-visible {
+  background: #e2e8f0;
+  color: #0f172a;
+  outline: none;
+}
+
+.apps-bulk-icon-btn:active {
+  transform: translateY(1px);
+}
+
+.apps-bulk-icon-btn-danger {
+  color: #dc2626;
+}
+
+.apps-bulk-icon-btn-danger:hover,
+.apps-bulk-icon-btn-danger:focus-visible {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.apps-bulk-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.apps-bulk-icon-symbol {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .link-btn {
   border: none;
   background: transparent;
@@ -1000,13 +1065,13 @@ label.config-default-changed-value {
 .apps-search-box {
   position: relative;
   width: min(420px, 100%);
-  margin-top: 8px;
 }
 
 .apps-search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .apps-search-row .apps-search-box {
@@ -1014,45 +1079,8 @@ label.config-default-changed-value {
   min-width: 0;
 }
 
-.apps-view-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  margin-top: 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #f8fafc;
-  color: #334155;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-
-.apps-view-toggle-btn:hover,
-.apps-view-toggle-btn:focus-visible,
-.apps-view-toggle-btn[aria-pressed='true'] {
-  border-color: #60a5fa;
-  background: #eff6ff;
-  color: #1d4ed8;
-  outline: none;
-}
-
-.apps-view-toggle-icon {
-  display: grid;
-  grid-template-columns: repeat(2, 8px);
-  gap: 3px;
-  line-height: 1;
-}
-
-.apps-view-toggle-square {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  border: 1.5px solid currentColor;
-  background: transparent;
-  box-sizing: border-box;
+.apps-search-row .apps-bulk-icon-btn {
+  /* removed margin-top: 8px; */
 }
 
 .apps-search-input {
