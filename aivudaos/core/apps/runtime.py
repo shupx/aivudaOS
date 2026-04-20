@@ -768,6 +768,93 @@ class RuntimeService:
             "mode": "popen",
         }
 
+    def restart_autostart_apps(self) -> Dict[str, Any]:
+        app_ids = self._list_autostart_app_ids()
+        restarted: List[str] = []
+        failed: List[Dict[str, str]] = []
+
+        for app_id in app_ids:
+            try:
+                self.restart(app_id)
+                restarted.append(app_id)
+            except Exception as exc:
+                failed.append({"app_id": app_id, "error": str(exc)})
+
+        return {
+            "ok": len(failed) == 0,
+            "message": "Autostart apps restart completed.",
+            "requested_count": len(app_ids),
+            "restarted": restarted,
+            "skipped": [],
+            "failed": failed,
+        }
+
+    def start_autostart_apps_if_needed(self) -> Dict[str, Any]:
+        app_ids = self._list_autostart_app_ids()
+        started: List[str] = []
+        skipped: List[str] = []
+        failed: List[Dict[str, str]] = []
+
+        for app_id in app_ids:
+            try:
+                state = self.get_runtime_state(app_id)
+                if state.running:
+                    skipped.append(app_id)
+                    continue
+                self.start(app_id)
+                started.append(app_id)
+            except Exception as exc:
+                failed.append({"app_id": app_id, "error": str(exc)})
+
+        return {
+            "ok": len(failed) == 0,
+            "message": "Autostart apps start completed.",
+            "requested_count": len(app_ids),
+            "started": started,
+            "skipped": skipped,
+            "failed": failed,
+        }
+
+    def stop_all_apps(self) -> Dict[str, Any]:
+        app_ids = self._list_installed_app_ids()
+        stopped: List[str] = []
+        skipped: List[str] = []
+        failed: List[Dict[str, str]] = []
+
+        for app_id in app_ids:
+            try:
+                state = self.get_runtime_state(app_id)
+                if not state.running:
+                    skipped.append(app_id)
+                    continue
+                self.stop(app_id)
+                stopped.append(app_id)
+            except Exception as exc:
+                failed.append({"app_id": app_id, "error": str(exc)})
+
+        return {
+            "ok": len(failed) == 0,
+            "message": "All apps stop completed.",
+            "requested_count": len(app_ids),
+            "stopped": stopped,
+            "skipped": skipped,
+            "failed": failed,
+        }
+
+    def _list_autostart_app_ids(self) -> List[str]:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT app_id FROM app_runtime WHERE autostart = 1 ORDER BY app_id"
+            ).fetchall()
+        return [str(row["app_id"]) for row in rows]
+
+    def _list_installed_app_ids(self) -> List[str]:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT app_id FROM app_installation ORDER BY app_id"
+            ).fetchall()
+        return [str(row["app_id"]) for row in rows]
+
     def _reconcile_systemd_units(self, scope: str) -> None:
         """Refresh systemd unit files for installed apps to keep runtime wrappers/env in sync."""
         with db_conn() as conn:

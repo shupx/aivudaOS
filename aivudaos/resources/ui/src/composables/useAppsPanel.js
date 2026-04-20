@@ -5,8 +5,11 @@ import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy }
 import {
   fetchAppStatus,
   fetchInstalledApps,
+  restartAutostartApps,
   setAutostart,
+  startAutostartApps,
   startApp,
+  stopAllApps,
   stopApp,
 } from '../services/core/apps'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
@@ -127,6 +130,7 @@ export function useAppsPanel() {
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
+  const bulkActionPending = ref('')
   const searchText = ref('')
   const compactMode = ref(localStorage.getItem(APPS_COMPACT_MODE_STORAGE_KEY) === '1')
   const highlightedAppId = ref('')
@@ -282,11 +286,43 @@ export function useAppsPanel() {
     compactMode.value = !compactMode.value
   }
 
+  async function runBulkAction(actionName, task) {
+    appState.appsError = ''
+    bulkActionPending.value = actionName
+    try {
+      await task()
+      await refresh()
+    } catch (err) {
+      appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
+    } finally {
+      bulkActionPending.value = ''
+    }
+  }
+
+  async function restartEnabledApps() {
+    await runBulkAction('restartAutostart', async () => {
+      await restartAutostartApps()
+    })
+  }
+
+  async function startEnabledApps() {
+    await runBulkAction('startAutostart', async () => {
+      await startAutostartApps()
+    })
+  }
+
+  async function stopEveryApp() {
+    await runBulkAction('stopAll', async () => {
+      await stopAllApps()
+    })
+  }
+
   return {
     apps,
     loading,
     error,
     busyById,
+    bulkActionPending,
     searchText,
     compactMode,
     searchResults,
@@ -301,6 +337,9 @@ export function useAppsPanel() {
     toggleCompactMode,
     toggleRunning,
     toggleAutostart,
+    restartEnabledApps,
+    startEnabledApps,
+    stopEveryApp,
     ...uploadModal,
   }
 }

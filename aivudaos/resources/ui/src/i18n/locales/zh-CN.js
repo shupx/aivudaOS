@@ -41,6 +41,12 @@ export default {
   },
   apps: {
     title: '应用菜单',
+    restartAutostart: '重启自启动应用',
+    startAutostart: '启动所有自启动应用',
+    stopAll: '停止所有应用',
+    restartAutostartTooltip: '重启所有已启用自启动的应用',
+    startAutostartTooltip: '启动所有已启用自启动且当前未运行的应用',
+    stopAllTooltip: '停止当前所有应用',
     uploadLink: '手动上传新应用安装包',
     noInstalledApps: '当前没有已安装应用',
     compactToggleTooltip: '缩略切换',

@@ -245,6 +245,36 @@ async def get_logs(
 # ================================================================== #
 
 
+@router.post("/bulk/restart-autostart")
+async def restart_autostart_apps(token: str) -> Dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    try:
+        return runtime.restart_autostart_apps()
+    except AppRuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bulk/start-autostart")
+async def start_autostart_apps(token: str) -> Dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    try:
+        return runtime.start_autostart_apps_if_needed()
+    except AppRuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bulk/stop-all")
+async def stop_all_apps(token: str) -> Dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    try:
+        return runtime.stop_all_apps()
+    except AppRuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{app_id}/start")
 async def start_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)

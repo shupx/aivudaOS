@@ -54,6 +54,27 @@ export async function startApp(appId) {
   })
 }
 
+export async function restartAutostartApps() {
+  return request('/api/apps/bulk/restart-autostart', {
+    method: 'POST',
+    auth: true,
+  })
+}
+
+export async function startAutostartApps() {
+  return request('/api/apps/bulk/start-autostart', {
+    method: 'POST',
+    auth: true,
+  })
+}
+
+export async function stopAllApps() {
+  return request('/api/apps/bulk/stop-all', {
+    method: 'POST',
+    auth: true,
+  })
+}
+
 export async function stopApp(appId) {
   return request(`/api/apps/${encodeURIComponent(appId)}/stop`, {
     method: 'POST',

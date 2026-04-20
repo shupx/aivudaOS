@@ -41,6 +41,12 @@ export default {
   },
   apps: {
     title: 'Apps',
+    restartAutostart: 'Restart Autostart Apps',
+    startAutostart: 'Start All Autostart Apps',
+    stopAll: 'Stop All Apps',
+    restartAutostartTooltip: 'Restart all apps with autostart enabled',
+    startAutostartTooltip: 'Start all autostart-enabled apps that are not already running',
+    stopAllTooltip: 'Stop all currently installed apps',
     uploadLink: 'Upload a new app package manually',
     noInstalledApps: 'No installed apps yet',
     compactToggleTooltip: 'Toggle compact view',

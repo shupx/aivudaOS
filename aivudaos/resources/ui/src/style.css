@@ -317,6 +317,11 @@ input {
   gap: 8px;
 }
 
+.panel-actions.wrap {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .panel-title-actions {
   align-items: center;
 }

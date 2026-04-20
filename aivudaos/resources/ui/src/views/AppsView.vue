@@ -10,6 +10,7 @@ const {
   apps,
   loading,
   error,
+  bulkActionPending,
   searchText,
   compactMode,
   searchResults,
@@ -24,6 +25,9 @@ const {
   busyById,
   toggleRunning,
   toggleAutostart,
+  restartEnabledApps,
+  startEnabledApps,
+  stopEveryApp,
   showUploadModal,
   uploadBusy,
   uploadError,
@@ -58,6 +62,36 @@ const {
         </button>
       </div>
       <div class="panel-actions wrap">
+        <button
+          class="btn"
+          type="button"
+          :title="t('apps.restartAutostartTooltip')"
+          :aria-label="t('apps.restartAutostartTooltip')"
+          :disabled="loading || Boolean(bulkActionPending)"
+          @click="restartEnabledApps"
+        >
+          {{ bulkActionPending === 'restartAutostart' ? t('common.processing') : t('apps.restartAutostart') }}
+        </button>
+        <button
+          class="btn"
+          type="button"
+          :title="t('apps.startAutostartTooltip')"
+          :aria-label="t('apps.startAutostartTooltip')"
+          :disabled="loading || Boolean(bulkActionPending)"
+          @click="startEnabledApps"
+        >
+          {{ bulkActionPending === 'startAutostart' ? t('common.processing') : t('apps.startAutostart') }}
+        </button>
+        <button
+          class="btn danger"
+          type="button"
+          :title="t('apps.stopAllTooltip')"
+          :aria-label="t('apps.stopAllTooltip')"
+          :disabled="loading || Boolean(bulkActionPending)"
+          @click="stopEveryApp"
+        >
+          {{ bulkActionPending === 'stopAll' ? t('common.processing') : t('apps.stopAll') }}
+        </button>
         <button class="link-btn" @click="openUploadModal">{{ t('apps.uploadLink') }}</button>
       </div>
     </header>
