@@ -893,6 +893,7 @@ class RuntimeService:
             app_version,
         )
         helpers_entry_path = (SHELL_HELPERS_DIR / "aivuda_app_helpers.sh").resolve()
+        avahi_hostname = str(self._config.get_os_setting("avahi_hostname", "") or "").strip().lower()
         env: Dict[str, str] = {
             "AIVUDA_APP_ID": app_id,
             "AIVUDA_APP_VERSION": app_version,
@@ -900,6 +901,7 @@ class RuntimeService:
             "AIVUDA_APP_RUNTIME_DATA_PATH": str(runtime_data_path.resolve()),
             "AIVUDA_APP_CONFIG_PATH": str(config_path.resolve()),
             "AIVUDA_APP_HELPERS_ENTRY_PATH": str(helpers_entry_path),
+            "AIVUDA_OS_AVAHI_HOSTNAME": avahi_hostname,
         }
         return env
 
