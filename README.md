@@ -110,7 +110,7 @@ Build release artifacts locally:
 ```bash
 cd aivudaOS/
 cd aivudaos/resources/ui/ && npm install && npm run build && cd ../../..
-AIVUDAOS_BUILD_SEQ=01 
+export AIVUDAOS_BUILD_SEQ=01 
 python -m build
 # PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple python -m build  # use pypi mirror
 ```
