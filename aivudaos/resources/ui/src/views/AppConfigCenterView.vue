@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
+import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 
@@ -13,7 +14,6 @@ const systemHeaderRefs = ref([])
 const systemResizeLineLefts = ref([])
 let stopSystemColumnResize = null
 let systemResizeFrame = 0
-const systemTextDrafts = ref({})
 
 function startSystemColumnResize(index, event) {
   event.preventDefault()
@@ -65,35 +65,12 @@ function queueSystemResizeLineUpdate() {
   })
 }
 
-function systemTextDraftKey(row) {
+function systemRowDraftKey(row) {
   return `${row?.scope || 'sys'}:${row?.appId || '__system__'}:${row?.path || ''}`
 }
 
-function getSystemTextInputValue(row) {
-  const key = systemTextDraftKey(row)
-  if (Object.prototype.hasOwnProperty.call(systemTextDrafts.value, key)) {
-    return systemTextDrafts.value[key]
-  }
-  return displayValue(row)
-}
-
-function onSystemTextInput(row, value) {
-  systemTextDrafts.value = {
-    ...systemTextDrafts.value,
-    [systemTextDraftKey(row)]: String(value ?? ''),
-  }
-}
-
-async function commitSystemTextInput(row) {
-  const key = systemTextDraftKey(row)
-  const rawValue = Object.prototype.hasOwnProperty.call(systemTextDrafts.value, key)
-    ? systemTextDrafts.value[key]
-    : displayValue(row)
-  const saved = await onTextChange(row, rawValue)
-  if (!saved) return
-  const nextDrafts = { ...systemTextDrafts.value }
-  delete nextDrafts[key]
-  systemTextDrafts.value = nextDrafts
+function getSystemEnumIndexValue(row) {
+  return String(getSystemEnumValues(row).findIndex((item) => JSON.stringify(item) === JSON.stringify(getCellValue(row))))
 }
 
 onBeforeUnmount(() => {
@@ -211,6 +188,27 @@ const {
   needRestartToastVisible,
   needRestartToastMessage,
 } = useAppConfigCenterPage()
+
+const systemTextDrafts = useDeferredFieldDrafts({
+  buildKey: systemRowDraftKey,
+  getCommittedValue: (row) => displayValue(row),
+  commitDraftValue: (row, value) => onTextChange(row, value),
+  isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
+})
+
+const systemBooleanDrafts = useDeferredFieldDrafts({
+  buildKey: systemRowDraftKey,
+  getCommittedValue: (row) => Boolean(getCellValue(row)),
+  commitDraftValue: (row, value) => onBooleanChange(row, value),
+  isEqual: (left, right) => Boolean(left) === Boolean(right),
+})
+
+const systemEnumDrafts = useDeferredFieldDrafts({
+  buildKey: systemRowDraftKey,
+  getCommittedValue: (row) => getSystemEnumIndexValue(row),
+  commitDraftValue: (row, value) => onSystemEnumChange(row, value),
+  isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
+})
 </script>
 
 <template>
@@ -283,19 +281,21 @@ const {
                 <div class="config-edit-cell" :title="row.readonly ? t('appConfigCenter.readonlyInMagnetZone') : ''">
                   <label v-if="row.type === 'boolean'" class="check-item">
                     <input
-                      :checked="Boolean(getCellValue(row))"
+                      :checked="systemBooleanDrafts.getDraftValue(row)"
                       :disabled="row.readonly"
                       type="checkbox"
-                      @change="onBooleanChange(row, $event?.target?.checked)"
+                      @change="systemBooleanDrafts.setDraftValue(row, $event?.target?.checked)"
+                      @blur="systemBooleanDrafts.commitDraft(row)"
                     >
-                    {{ Boolean(getCellValue(row)) ? 'true' : 'false' }}
+                    {{ systemBooleanDrafts.getDraftValue(row) ? 'true' : 'false' }}
                   </label>
                   <select
                     v-else-if="getSystemEnumValues(row).length"
                     class="select-input"
                     :disabled="row.readonly"
-                    :value="getSystemEnumValues(row).findIndex((item) => JSON.stringify(item) === JSON.stringify(getCellValue(row)))"
-                    @change="onSystemEnumChange(row, $event?.target?.value)"
+                    :value="systemEnumDrafts.getDraftValue(row)"
+                    @change="systemEnumDrafts.setDraftValue(row, $event?.target?.value)"
+                    @blur="systemEnumDrafts.commitDraft(row)"
                   >
                     <option v-for="(item, idx) in getSystemEnumValues(row)" :key="`sys-enum-${row.path}-${idx}`" :value="idx">
                       {{ valueToInlineText(item) }}
@@ -315,10 +315,10 @@ const {
                     :type="getSystemInputType(row)"
                     :disabled="row.readonly"
                     :placeholder="getSystemValuePlaceholder(row)"
-                    :value="getSystemTextInputValue(row)"
-                    @input="onSystemTextInput(row, $event?.target?.value || '')"
-                    @blur="commitSystemTextInput(row)"
-                    @keyup.enter="commitSystemTextInput(row)"
+                    :value="systemTextDrafts.getDraftValue(row)"
+                    @input="systemTextDrafts.setDraftValue(row, $event?.target?.value || '')"
+                    @blur="systemTextDrafts.commitDraft(row)"
+                    @keyup.enter="systemTextDrafts.commitDraft(row)"
                   >
 
                   <template v-if="row.readonly">

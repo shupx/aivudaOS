@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
 
 const { t } = useI18n()
 
@@ -12,7 +13,6 @@ const headerRefs = ref([])
 const resizeLineLefts = ref([])
 let stopColumnResize = null
 let resizeFrame = 0
-const textDrafts = ref({})
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -64,36 +64,34 @@ function queueResizeLineUpdate() {
   })
 }
 
-function textDraftKey(row) {
+function rowDraftKey(row) {
   return `${row?.scope || 'app'}:${row?.appId || ''}:${row?.path || ''}`
 }
 
-function getTextInputValue(row) {
-  const key = textDraftKey(row)
-  if (Object.prototype.hasOwnProperty.call(textDrafts.value, key)) {
-    return textDrafts.value[key]
-  }
-  return props.displayValue(row)
+function getEnumIndexValue(row) {
+  return String(row.enumValues.findIndex((item) => JSON.stringify(item) === JSON.stringify(props.getCellValue(row))))
 }
 
-function onTextInput(row, value) {
-  textDrafts.value = {
-    ...textDrafts.value,
-    [textDraftKey(row)]: String(value ?? ''),
-  }
-}
+const textDrafts = useDeferredFieldDrafts({
+  buildKey: rowDraftKey,
+  getCommittedValue: (row) => props.displayValue(row),
+  commitDraftValue: (row, value) => props.onTextChange(row, value),
+  isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
+})
 
-async function commitTextInput(row) {
-  const key = textDraftKey(row)
-  const rawValue = Object.prototype.hasOwnProperty.call(textDrafts.value, key)
-    ? textDrafts.value[key]
-    : props.displayValue(row)
-  const saved = await props.onTextChange(row, rawValue)
-  if (!saved) return
-  const nextDrafts = { ...textDrafts.value }
-  delete nextDrafts[key]
-  textDrafts.value = nextDrafts
-}
+const booleanDrafts = useDeferredFieldDrafts({
+  buildKey: rowDraftKey,
+  getCommittedValue: (row) => Boolean(props.getCellValue(row)),
+  commitDraftValue: (row, value) => props.onBooleanChange(row, value),
+  isEqual: (left, right) => Boolean(left) === Boolean(right),
+})
+
+const enumDrafts = useDeferredFieldDrafts({
+  buildKey: rowDraftKey,
+  getCommittedValue: (row) => getEnumIndexValue(row),
+  commitDraftValue: (row, value) => props.onEnumChange(row, value),
+  isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
+})
 
 onBeforeUnmount(() => {
   if (stopColumnResize) {
@@ -247,12 +245,13 @@ const props = defineProps({
                 >
                   <label v-if="item.row.type === 'boolean'" class="check-item" :class="{ 'config-default-changed-value': item.defaultChanged }">
                     <input
-                      :checked="Boolean(getCellValue(item.row))"
+                      :checked="booleanDrafts.getDraftValue(item.row)"
                       :disabled="item.row.readonly"
                       type="checkbox"
-                      @change="onBooleanChange(item.row, $event?.target?.checked)"
+                      @change="booleanDrafts.setDraftValue(item.row, $event?.target?.checked)"
+                      @blur="booleanDrafts.commitDraft(item.row)"
                     >
-                    {{ Boolean(getCellValue(item.row)) ? 'true' : 'false' }}
+                    {{ booleanDrafts.getDraftValue(item.row) ? 'true' : 'false' }}
                   </label>
 
                   <select
@@ -260,8 +259,9 @@ const props = defineProps({
                     class="select-input"
                     :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
-                    :value="item.row.enumValues.findIndex((enumItem) => JSON.stringify(enumItem) === JSON.stringify(getCellValue(item.row)))"
-                    @change="onEnumChange(item.row, $event?.target?.value)"
+                    :value="enumDrafts.getDraftValue(item.row)"
+                    @change="enumDrafts.setDraftValue(item.row, $event?.target?.value)"
+                    @blur="enumDrafts.commitDraft(item.row)"
                   >
                     <option v-for="(enumItem, idx) in item.row.enumValues" :key="idx" :value="idx">
                       {{ valueToInlineText(enumItem) }}
@@ -283,10 +283,10 @@ const props = defineProps({
                     class="input"
                     :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
-                    :value="getTextInputValue(item.row)"
-                    @input="onTextInput(item.row, $event?.target?.value || '')"
-                    @blur="commitTextInput(item.row)"
-                    @keyup.enter="commitTextInput(item.row)"
+                    :value="textDrafts.getDraftValue(item.row)"
+                    @input="textDrafts.setDraftValue(item.row, $event?.target?.value || '')"
+                    @blur="textDrafts.commitDraft(item.row)"
+                    @keyup.enter="textDrafts.commitDraft(item.row)"
                   >
 
                   <template v-if="item.row.readonly">

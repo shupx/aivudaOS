@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
 
 const { t } = useI18n()
 
@@ -11,7 +12,6 @@ const headerRefs = ref([])
 const resizeLineLefts = ref([])
 let stopColumnResize = null
 let resizeFrame = 0
-const textDrafts = ref({})
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -63,37 +63,8 @@ function queueResizeLineUpdate() {
   })
 }
 
-function textDraftKey(group) {
+function groupDraftKey(group) {
   return String(group?.group_id || '')
-}
-
-function getTextInputValue(group) {
-  const key = textDraftKey(group)
-  if (Object.prototype.hasOwnProperty.call(textDrafts.value, key)) {
-    return textDrafts.value[key]
-  }
-  return props.getMagnetDisplayValue(group)
-}
-
-function onTextInput(group, value) {
-  textDrafts.value = {
-    ...textDrafts.value,
-    [textDraftKey(group)]: String(value ?? ''),
-  }
-}
-
-async function commitTextInput(group) {
-  const key = textDraftKey(group)
-  const rawValue = Object.prototype.hasOwnProperty.call(textDrafts.value, key)
-    ? textDrafts.value[key]
-    : props.getMagnetDisplayValue(group)
-  const parsed = props.onMagnetTextChange(group, rawValue)
-  if (!parsed) return
-  const saved = await props.saveMagnetChanges(group)
-  if (!saved) return
-  const nextDrafts = { ...textDrafts.value }
-  delete nextDrafts[key]
-  textDrafts.value = nextDrafts
 }
 
 onBeforeUnmount(() => {
@@ -146,6 +117,27 @@ const props = defineProps({
   saveMagnetChanges: { type: Function, required: true },
   valueToInlineText: { type: Function, required: true },
 })
+
+const magnetTextDrafts = useDeferredFieldDrafts({
+  buildKey: groupDraftKey,
+  getCommittedValue: (group) => props.getMagnetDisplayValue(group),
+  commitDraftValue: async (group, value) => {
+    const parsed = props.onMagnetTextChange(group, value)
+    if (!parsed) return false
+    return props.saveMagnetChanges(group)
+  },
+  isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
+})
+
+const magnetBooleanDrafts = useDeferredFieldDrafts({
+  buildKey: groupDraftKey,
+  getCommittedValue: (group) => Boolean(props.getMagnetValue(group)),
+  commitDraftValue: async (group, value) => {
+    props.onMagnetBooleanChange(group, value)
+    return props.saveMagnetChanges(group)
+  },
+  isEqual: (left, right) => Boolean(left) === Boolean(right),
+})
 </script>
 
 <template>
@@ -182,11 +174,12 @@ const props = defineProps({
             <td>
               <label v-if="group.value_type === 'boolean'" class="check-item">
                 <input
-                  :checked="Boolean(getMagnetValue(group))"
+                  :checked="magnetBooleanDrafts.getDraftValue(group)"
                   type="checkbox"
-                  @change="onMagnetBooleanChange(group, $event?.target?.checked); saveMagnetChanges(group)"
+                  @change="magnetBooleanDrafts.setDraftValue(group, $event?.target?.checked)"
+                  @blur="magnetBooleanDrafts.commitDraft(group)"
                 >
-                {{ Boolean(getMagnetValue(group)) ? 'true' : 'false' }}
+                {{ magnetBooleanDrafts.getDraftValue(group) ? 'true' : 'false' }}
               </label>
               <button
                 v-else-if="isArrayEditableMagnet(group)"
@@ -198,10 +191,10 @@ const props = defineProps({
               <input
                 v-else
                 class="input"
-                :value="getTextInputValue(group)"
-                @input="onTextInput(group, $event?.target?.value || '')"
-                @blur="commitTextInput(group)"
-                @keyup.enter="commitTextInput(group)"
+                :value="magnetTextDrafts.getDraftValue(group)"
+                @input="magnetTextDrafts.setDraftValue(group, $event?.target?.value || '')"
+                @blur="magnetTextDrafts.commitDraft(group)"
+                @keyup.enter="magnetTextDrafts.commitDraft(group)"
               >
             </td>
             <td>{{ group.value_type || '-' }}</td>

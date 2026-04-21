@@ -445,6 +445,18 @@ export function useAppConfigCenterPage() {
       return false
     }
 
+    const currentValue = getCellValue(row)
+    if (isValueEqual(currentValue, nextValue)) {
+      const key = cellErrorKey(row)
+      if (cellErrors.value[key]) {
+        const nextErrors = { ...cellErrors.value }
+        delete nextErrors[key]
+        cellErrors.value = nextErrors
+      }
+      error.value = ''
+      return true
+    }
+
     if (row?.scope === 'sys') {
       const beforeData = deepClone(sysDraftData.value || {})
       const nextData = deepClone(sysDraftData.value || {})
@@ -671,6 +683,10 @@ export function useAppConfigCenterPage() {
   async function saveMagnetChanges(group) {
     const groupId = String(group?.group_id || '')
     if (!groupId) return false
+    if (isValueEqual(magnetOriginalById.value[groupId], magnetDraftById.value[groupId])) {
+      error.value = ''
+      return true
+    }
     magnetSaving.value = true
     error.value = ''
     success.value = ''
