@@ -42,6 +42,9 @@ export function useAppConfigCenterPage() {
   const arrayEditorPlaceholder = ref('')
   const arrayEditorItemType = ref('string')
   const arrayEditorContext = ref(null)
+  const arrayEditorMode = ref('rows') // 'rows' | 'json'
+  const arrayEditorJsonText = ref('')
+  const arrayEditorCopySuccess = ref(false)
   const collapsedGroups = ref({})
   const touchedGroups = ref({})
   let needRestartToastTimer = null
@@ -96,7 +99,7 @@ export function useAppConfigCenterPage() {
       appId: item.app_id,
       name: item.name || item.app_id,
       version: item.app_version || '-',
-    }))
+    })).sort((a, b) => a.name.localeCompare(b.name))
   })
 
   const appThemeById = computed(() => {
@@ -329,6 +332,10 @@ export function useAppConfigCenterPage() {
     arrayEditorItemType.value = prepared.itemType
     arrayEditorPlaceholder.value = prepared.placeholder
     arrayEditorItems.value = prepared.items
+    arrayEditorMode.value = 'rows'
+    arrayEditorJsonText.value = JSON.stringify(prepared.items.map(i => {
+      try { return JSON.parse(i.text) } catch { return i.text }
+    }), null, 2)
     arrayEditorVisible.value = true
   }
 
@@ -345,7 +352,55 @@ export function useAppConfigCenterPage() {
     arrayEditorItemType.value = prepared.itemType
     arrayEditorPlaceholder.value = prepared.placeholder
     arrayEditorItems.value = prepared.items
+    arrayEditorMode.value = 'rows'
+    arrayEditorJsonText.value = JSON.stringify(prepared.items.map(i => {
+      try { return JSON.parse(i.text) } catch { return i.text }
+    }), null, 2)
     arrayEditorVisible.value = true
+  }
+
+  function toggleArrayEditorMode() {
+    if (arrayEditorMode.value === 'rows') {
+      try {
+        const values = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
+        arrayEditorJsonText.value = JSON.stringify(values, null, 2)
+        arrayEditorMode.value = 'json'
+      } catch (err) {
+        error.value = 'Failed to convert to JSON'
+      }
+    } else {
+      try {
+        const values = JSON.parse(arrayEditorJsonText.value)
+        if (!Array.isArray(values)) throw new Error('Must be an array')
+        const prepared = prepareArrayEditor(values, null)
+        arrayEditorItems.value = prepared.items
+        arrayEditorMode.value = 'rows'
+      } catch (err) {
+        error.value = 'Invalid JSON'
+      }
+    }
+  }
+
+  function copyArrayEditorJson() {
+    let textToCopy = ''
+    try {
+      if (arrayEditorMode.value === 'json') {
+        textToCopy = arrayEditorJsonText.value
+      } else {
+        const values = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
+        textToCopy = JSON.stringify(values, null, 2)
+      }
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        arrayEditorCopySuccess.value = true
+        setTimeout(() => {
+          arrayEditorCopySuccess.value = false
+        }, 2000)
+      }).catch(() => {
+         error.value = 'Failed to copy'
+      })
+    } catch(err) {
+      error.value = 'Invalid value to copy'
+    }
   }
 
   function closeArrayEditor() {
@@ -355,6 +410,8 @@ export function useAppConfigCenterPage() {
     arrayEditorPlaceholder.value = ''
     arrayEditorItemType.value = 'string'
     arrayEditorContext.value = null
+    arrayEditorMode.value = 'rows'
+    arrayEditorJsonText.value = ''
   }
 
   async function saveArrayEditor() {
@@ -366,7 +423,13 @@ export function useAppConfigCenterPage() {
 
     let nextValue
     try {
-      nextValue = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
+      if (arrayEditorMode.value === 'json') {
+        const parsed = JSON.parse(arrayEditorJsonText.value)
+        if (!Array.isArray(parsed)) throw new Error('Must be an array')
+        nextValue = parsed
+      } else {
+        nextValue = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
+      }
     } catch (err) {
       error.value = String(err?.message || err || t('appConfigCenter.invalidValue'))
       return
@@ -1200,6 +1263,11 @@ export function useAppConfigCenterPage() {
     arrayEditorTitle,
     arrayEditorItems,
     arrayEditorPlaceholder,
+    arrayEditorMode,
+    arrayEditorJsonText,
+    arrayEditorCopySuccess,
+    toggleArrayEditorMode,
+    copyArrayEditorJson,
     closeArrayEditor,
     saveArrayEditor,
     addArrayEditorRow,

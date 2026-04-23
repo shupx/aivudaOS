@@ -137,6 +137,11 @@ const {
   arrayEditorTitle,
   arrayEditorItems,
   arrayEditorPlaceholder,
+  arrayEditorMode,
+  arrayEditorJsonText,
+  arrayEditorCopySuccess,
+  toggleArrayEditorMode,
+  copyArrayEditorJson,
   closeArrayEditor,
   saveArrayEditor,
   addArrayEditorRow,
@@ -508,34 +513,67 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       <section class="modal-card modal-wide modal-resizable config-array-editor-modal">
         <header class="modal-header">
           <h3>{{ arrayEditorTitle }}</h3>
-        </header>
-
-        <div class="field">
-          <div class="config-array-editor-list">
-            <div v-for="(item, index) in arrayEditorItems" :key="item.id" class="config-array-editor-row">
-              <div class="config-array-editor-index">{{ index + 1 }}</div>
-              <textarea
-                class="text-area config-array-editor-item"
-                :placeholder="arrayEditorPlaceholder"
-                :value="item.text"
-                @input="updateArrayEditorRow(item.id, $event?.target?.value || ''); $event.target.style.height = 'auto'; $event.target.style.height = `${$event.target.scrollHeight}px`"
-                @focus="$event.target.style.height = 'auto'; $event.target.style.height = `${$event.target.scrollHeight}px`"
-              ></textarea>
-              <button
-                class="btn config-array-editor-remove"
-                :disabled="arrayEditorItems.length <= 1"
-                @click="removeArrayEditorRow(item.id)"
-                :title="t('appConfigCenter.arrayEditorRemoveRow')"
+            <div class="modal-header-actions" style="display: flex; gap: 4px;">
+              <button 
+                class="link-btn" 
+                style="padding: 4px; display: inline-flex; align-items: center; color: var(--text-color-muted, #888); border: none; background: transparent; outline: none; border-radius: 4px; transition: color 0.2s; cursor: pointer;"
+                  @mouseover="$event.currentTarget.style.color='var(--text-color, #333)'" 
+                  @mouseout="$event.currentTarget.style.color='var(--text-color-muted, #888)'"
+                @click="toggleArrayEditorMode" 
+                title="Toggle JSON Mode"
               >
-                -
+                <svg v-if="arrayEditorMode === 'rows'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              </button>
+              <button 
+                class="link-btn" 
+                style="padding: 4px; display: inline-flex; align-items: center; color: var(--text-color-muted, #888); border: none; background: transparent; outline: none; border-radius: 4px; transition: color 0.2s; cursor: pointer;"
+                  @mouseenter="!arrayEditorCopySuccess ? $event.currentTarget.style.color='var(--text-color, #333)' : null"
+                  @mouseleave="!arrayEditorCopySuccess ? $event.currentTarget.style.color='var(--text-color-muted, #888)' : null"
+                :style="arrayEditorCopySuccess ? 'color: var(--success-color, #10b981) !important;' : ''"
+                @click="copyArrayEditorJson" 
+                title="Copy contents"
+              >
+                <svg v-if="!arrayEditorCopySuccess" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
             </div>
-          </div>
-          <div class="panel-actions">
-            <button class="btn config-array-editor-add" :title="t('appConfigCenter.arrayEditorAddRow')" @click="addArrayEditorRow">
-              +
-            </button>
-          </div>
+          </header>
+        <div class="field">
+          <template v-if="arrayEditorMode === 'rows'">
+            <div class="config-array-editor-list">
+              <div v-for="(item, index) in arrayEditorItems" :key="item.id" class="config-array-editor-row">
+                <div class="config-array-editor-index">{{ index + 1 }}</div>
+                <textarea
+                  class="text-area config-array-editor-item"
+                  :placeholder="arrayEditorPlaceholder"
+                  :value="item.text"
+                  @input="updateArrayEditorRow(item.id, $event?.target?.value || ''); $event.target.style.height = 'auto'; $event.target.style.height = `${$event.target.scrollHeight}px`"
+                  @focus="$event.target.style.height = 'auto'; $event.target.style.height = `${$event.target.scrollHeight}px`"
+                ></textarea>
+                <button
+                  class="btn config-array-editor-remove"
+                  :disabled="arrayEditorItems.length <= 1"
+                  @click="removeArrayEditorRow(item.id)"
+                  :title="t('appConfigCenter.arrayEditorRemoveRow')"
+                >
+                  -
+                </button>
+              </div>
+            </div>
+            <div class="panel-actions">
+              <button class="btn config-array-editor-add" :title="t('appConfigCenter.arrayEditorAddRow')" @click="addArrayEditorRow">
+                +
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <textarea
+              class="text-area config-array-editor-json"
+              v-model="arrayEditorJsonText"
+              style="width: 100%; min-height: 300px; font-family: monospace;"
+            ></textarea>
+          </template>
         </div>
 
         <div class="panel-actions wrap">

@@ -126,7 +126,29 @@ export function useAppsPanel() {
   const route = useRoute()
   const router = useRouter()
 
-  const apps = computed(() => appState.apps)
+  const sortOption = ref(localStorage.getItem('APPS_SORT_OPTION') || 'name') // name | autostart | installed_at
+  const sortDesc = ref(localStorage.getItem('APPS_SORT_DESC') === '1')
+  const appsSortDropdownVisible = ref(false)
+
+  const apps = computed(() => {
+    const list = [...appState.apps]
+    const desc = sortDesc.value ? -1 : 1
+    return list.sort((a, b) => {
+      if (sortOption.value === 'autostart') {
+        const aVal = a.autostart ? 1 : 0
+        const bVal = b.autostart ? 1 : 0
+        if (aVal !== bVal) return (bVal - aVal) * desc
+      } else if (sortOption.value === 'installed_at') {
+        const aVal = a.installed_at || 0
+        const bVal = b.installed_at || 0
+        if (aVal !== bVal) return (aVal - bVal) * desc
+      }
+      // fallback to name sort
+      const aName = a.name || a.app_id || ''
+      const bName = b.name || b.app_id || ''
+      return aName.localeCompare(bName) * desc
+    })
+  })
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
@@ -140,20 +162,41 @@ export function useAppsPanel() {
 
   const handlePointerDown = (event) => {
     const target = event?.target
-    if (target instanceof Element && target.closest('.apps-search-box')) {
-      return
+      if (target instanceof Element) {
+        if (!target.closest('.apps-search-box')) {
+          searchDropdownVisible.value = false
+          activeSearchIndex.value = -1
+        }
+        if (!target.closest('.apps-sort-box')) {
+          appsSortDropdownVisible.value = false
+        }
+      }
     }
-    searchDropdownVisible.value = false
-    activeSearchIndex.value = -1
-  }
 
-  const searchResults = computed(() => {
-    const keyword = String(searchText.value || '').trim().toLowerCase()
-    if (!keyword) return []
-    return apps.value
-      .filter((app) => String(app?.name || app?.app_id || '').toLowerCase().includes(keyword))
-      .slice(0, 20)
-  })
+    const toggleSortDesc = () => {
+      sortDesc.value = !sortDesc.value
+      localStorage.setItem('APPS_SORT_DESC', sortDesc.value ? '1' : '0')
+    }
+
+    const setSortOption = (opt) => {
+      if (sortOption.value === opt) {
+        toggleSortDesc()
+      } else {
+        sortOption.value = opt
+        sortDesc.value = false
+        localStorage.setItem('APPS_SORT_OPTION', opt)
+        localStorage.setItem('APPS_SORT_DESC', '0')
+      }
+      appsSortDropdownVisible.value = false
+    }
+
+    const searchResults = computed(() => {
+      const keyword = String(searchText.value || '').trim().toLowerCase()
+      if (!keyword) return []
+      return apps.value
+        .filter((app) => String(app?.name || app?.app_id || '').toLowerCase().includes(keyword))
+        .slice(0, 20)
+    })
 
   const uploadModal = useAppUploadInstallModal({
     async onInstalled() {
@@ -325,6 +368,11 @@ export function useAppsPanel() {
     bulkActionPending,
     searchText,
     compactMode,
+    sortOption,
+    sortDesc,
+    appsSortDropdownVisible,
+    setSortOption,
+    toggleSortDesc,
     searchResults,
     searchDropdownVisible,
     activeSearchIndex,
