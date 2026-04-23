@@ -953,8 +953,19 @@ label.config-default-changed-value {
   align-items: center;
 }
 
+.store-address-row {
+  align-items: center;
+}
+
 .store-address-input {
-  min-width: min(560px, 100%);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.store-address-confirm-btn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  white-space: nowrap;
 }
 
 .store-search-input-shell {

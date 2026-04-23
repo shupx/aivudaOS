@@ -2,6 +2,7 @@ export default {
   common: {
     refresh: '刷新',
     refreshing: '刷新中',
+    submit: '提交',
     cancel: '取消',
     close: '关闭',
     loadingShort: '...',

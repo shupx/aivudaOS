@@ -2,6 +2,7 @@ export default {
   common: {
     refresh: ' Refresh  ',
     refreshing: 'Refreshing',
+    submit: 'Submit',
     cancel: 'Cancel',
     close: 'Close',
     loadingShort: '...',

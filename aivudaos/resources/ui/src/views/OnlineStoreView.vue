@@ -8,6 +8,7 @@ const {
   loading,
   error,
   addressError,
+  savingAddress,
   storeAddress,
   searchText,
   normalizedStoreAddress,
@@ -32,7 +33,7 @@ const {
 
     <article class="store-setting-panel">
       <label class="muted" for="store-address-input">{{ t('store.addressLabel') }}</label>
-      <div class="panel-actions wrap">
+      <div class="panel-actions wrap store-address-row">
         <input
           id="store-address-input"
           v-model="storeAddress"
@@ -41,6 +42,14 @@ const {
           :placeholder="t('store.addressPlaceholder')"
           @keydown.enter.prevent="saveAddress"
         >
+        <button
+          type="button"
+          class="btn primary store-address-confirm-btn"
+          :disabled="savingAddress"
+          @click="saveAddress"
+        >
+          {{ savingAddress ? t('common.processing') : t('common.submit') }}
+        </button>
       </div>
       <p class="muted">
         {{ t('store.addressConnectionHint') }}
