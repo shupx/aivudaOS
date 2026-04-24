@@ -155,7 +155,7 @@ class CaddyConfigService:
             f"  encode zstd gzip\n"
             f"  uri strip_prefix {ui_base}\n"
             f"  root * \"{escaped_root}\"\n"
-            f"  try_files {{path}} /index.html\n"
+            f"  try_files {{path}} {{path}}/index.html /index.html\n"
             f"  file_server\n"
             f"}}\n"
         )
