@@ -12,11 +12,14 @@ const {
   storeAddress,
   searchText,
   normalizedStoreAddress,
+  storeCertificateDownloadUrl,
   showAddressManualCheckHint,
+  addressCertificateHintVisible,
   displayItems,
   hasItems,
   load,
   saveAddress,
+  openStoreCertificate,
 } = useOnlineStorePage()
 </script>
 
@@ -71,6 +74,26 @@ const {
         >
           {{ normalizedStoreAddress }}
         </a>
+        <span> / </span>
+        <a
+          :href="storeCertificateDownloadUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          @click="openStoreCertificate"
+        >
+          {{ t('store.addressDownloadCertificateLink') }}
+        </a>
+      </p>
+      <p v-if="addressCertificateHintVisible" class="muted">
+        {{ t('store.addressCertificateHintPrefix') }}
+        <a :href="t('systemSettings.caddyLocalCaChromeUrl')">
+          {{ t('systemSettings.caddyLocalCaChromeUrl') }}
+        </a>
+        {{ t('store.addressCertificateHintMiddle') }}
+        <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
+        {{ t('store.addressCertificateHintImport') }}
+        <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
+        {{ t('store.addressCertificateHintSuffix') }}
       </p>
     </article>
 

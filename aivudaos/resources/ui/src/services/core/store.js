@@ -70,6 +70,10 @@ export function buildStoreResourceUrl(baseUrl, path) {
   return buildStoreUrl(baseUrl, normalizeStorePath(path))
 }
 
+export function buildStoreCaddyLocalCaDownloadUrl(baseUrl) {
+  return buildStoreUrl(baseUrl, '/store/caddy-local-ca/root.crt')
+}
+
 export async function fetchStoreIndex(baseUrl) {
   return requestStoreJson(baseUrl, '/store/index')
 }

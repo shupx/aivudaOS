@@ -4,7 +4,11 @@ import {
   resolveAppStoreBaseUrl,
   saveAppStoreBaseUrl,
 } from '../services/core/config'
-import { fetchStoreIndex, normalizeStoreBaseUrl } from '../services/core/store'
+import {
+  buildStoreCaddyLocalCaDownloadUrl,
+  fetchStoreIndex,
+  normalizeStoreBaseUrl,
+} from '../services/core/store'
 import { useStoreDisplayFormat } from './useStoreDisplayFormat'
 
 export function useOnlineStorePage() {
@@ -18,13 +22,17 @@ export function useOnlineStorePage() {
   const storeAddress = ref('')
   const searchText = ref('')
   const items = ref([])
+  const addressCertificateHintVisible = ref(false)
 
   const hasItems = computed(() => items.value.length > 0)
   const normalizedStoreAddress = computed(() => normalizeStoreBaseUrl(storeAddress.value))
   const canOpenStoreAddress = computed(() => /^https?:\/\//.test(normalizedStoreAddress.value))
-  const showAddressManualCheckHint = computed(() => (
-    Boolean(addressError.value || error.value) && canOpenStoreAddress.value
+  const storeCertificateDownloadUrl = computed(() => (
+    canOpenStoreAddress.value
+      ? buildStoreCaddyLocalCaDownloadUrl(normalizedStoreAddress.value)
+      : ''
   ))
+  const showAddressManualCheckHint = computed(() => canOpenStoreAddress.value)
   const displayItems = computed(() => (
     items.value
       .map((item) => ({
@@ -53,6 +61,7 @@ export function useOnlineStorePage() {
     if (savingAddress.value) return
     savingAddress.value = true
     addressError.value = ''
+    addressCertificateHintVisible.value = false
     error.value = ''
     try {
       const cleanUrl = normalizeStoreBaseUrl(storeAddress.value)
@@ -70,6 +79,13 @@ export function useOnlineStorePage() {
     }
   }
 
+  function openStoreCertificate() {
+    if (!storeCertificateDownloadUrl.value || loading.value || savingAddress.value) return
+
+    addressCertificateHintVisible.value = true
+    error.value = ''
+  }
+
   onMounted(() => {
     load()
   })
@@ -83,12 +99,15 @@ export function useOnlineStorePage() {
     searchText,
     normalizedStoreAddress,
     canOpenStoreAddress,
+    storeCertificateDownloadUrl,
     showAddressManualCheckHint,
+    addressCertificateHintVisible,
     items,
     displayItems,
     hasItems,
     load,
     saveAddress,
+    openStoreCertificate,
   }
 }
 
