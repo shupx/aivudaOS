@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+UI_MOUNT_TYPE_QIANKUN = "qiankun"
+
 
 @dataclass
 class AppManifest:
@@ -16,6 +18,7 @@ class AppManifest:
     pre_uninstall: Optional[str] = None
     update_this_version: Optional[str] = None
     ui_index_path: str = ""
+    ui_mount_type: str = ""
     caddyfile_config_path: str = ""
     default_config_path: str = ""
     config_schema_path: str = ""
@@ -24,6 +27,12 @@ class AppManifest:
 
     @classmethod
     def from_dict(cls, app_id: str, raw: Dict[str, Any]) -> AppManifest:
+        ui_mount_type = str(raw.get("ui_mount_type") or "").strip()
+        if ui_mount_type and ui_mount_type != UI_MOUNT_TYPE_QIANKUN:
+            raise ValueError(
+                f"manifest.ui_mount_type must be '{UI_MOUNT_TYPE_QIANKUN}' when set"
+            )
+
         return cls(
             app_id=app_id,
             name=raw.get("name", app_id),
@@ -35,12 +44,16 @@ class AppManifest:
             pre_uninstall=raw.get("pre_uninstall"),
             update_this_version=raw.get("update_this_version"),
             ui_index_path=str(raw.get("ui_index_path") or ""),
+            ui_mount_type=ui_mount_type,
             caddyfile_config_path=str(raw.get("caddyfile_config_path") or ""),
             default_config_path=str(raw.get("default_config_path") or ""),
             config_schema_path=str(raw.get("config_schema_path") or ""),
             default_config=raw.get("default_config") or {},
             config_schema=raw.get("config_schema") or {},
         )
+
+    def is_panelhub_mountable(self, has_builtin_ui: bool) -> bool:
+        return bool(has_builtin_ui) and self.ui_mount_type == UI_MOUNT_TYPE_QIANKUN
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -64,6 +77,8 @@ class AppManifest:
             d["update_this_version"] = self.update_this_version
         if self.ui_index_path:
             d["ui_index_path"] = self.ui_index_path
+        if self.ui_mount_type:
+            d["ui_mount_type"] = self.ui_mount_type
         if self.caddyfile_config_path:
             d["caddyfile_config_path"] = self.caddyfile_config_path
         return d
@@ -86,4 +101,3 @@ class AppRuntimeState:
     pid: Optional[int]
     last_started_at: Optional[int]
     last_stopped_at: Optional[int]
-

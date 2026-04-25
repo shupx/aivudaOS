@@ -131,6 +131,7 @@ Caddy 托管前端静态文件并反代 `/aivuda_os/api`，其中 HTTP 仅监听
 
 - 后端会根据各 app active 版本的 `manifest.ui_index_path` 自动生成 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/caddy/{app_id}.ui.caddy`
 - 在安装、卸载、切换版本时会自动重写顶层 Caddyfile 的 import 区块并 reload Caddy
+- 如 manifest 额外声明 `ui_mount_type: qiankun`，AivudaOS 会将其视为可被 PanelHub 自动发现的 qiankun 子应用入口
 
 ## App 运行模式（systemd / popen）
 
@@ -238,6 +239,7 @@ App 启动时会注入配置路径相关环境变量：
 - `WS /aivuda_os/api/apps/operations/{operation_id}/interactive/ws` — 安装交互输入通道（query 带 `token`）
 - `GET /aivuda_os/api/apps/{app_id}/icon` — 获取应用图标（由 manifest `icon` 字段指定，缺省回退默认图标）
 - `GET /{app_id}/ui/` — 获取应用内置 UI 首页（由 Caddy 静态托管，manifest `ui_index_path` 可选）
+- `GET /aivuda_os/api/apps/installed` / `GET /aivuda_os/api/apps/{app_id}/status` 会额外返回 `panelhub_mountable`，用于区分“有内置 UI”和“可被 PanelHub 挂载”
 - `GET /{app_id}/ui/{asset_path}` — 获取内置 UI 静态资源（由 Caddy 静态托管）
 - `GET /aivuda_os/api/apps/configs/active` — 获取所有已安装 app 的 active 配置、schema 与约束（统一参数页使用）
 - `GET  /aivuda_os/api/apps/{app_id}/config` — 读取应用配置（可选 query: `app_version`）

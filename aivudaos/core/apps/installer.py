@@ -114,7 +114,10 @@ class InstallerService:
             if not app_id:
                 raise PackageFormatError("manifest.yaml 缺少 app_id")
 
-            manifest = AppManifest.from_dict(app_id, manifest_raw)
+            try:
+                manifest = AppManifest.from_dict(app_id, manifest_raw)
+            except ValueError as exc:
+                raise PackageFormatError(str(exc)) from exc
             version = manifest.version
 
             existing_versions = self._versioning.list_versions(app_id)

@@ -151,15 +151,20 @@ class RuntimeService:
         cfg = self._config.get_app_config(app_id, active_ver) if active_ver else None
 
         # Include manifest for the active version
+        manifest: Optional[AppManifest] = None
         manifest_info: Optional[Dict[str, Any]] = None
         try:
-            m = self._get_manifest(app_id, active_ver)
-            manifest_info = m.to_dict()
+            manifest = self._get_manifest(app_id, active_ver)
+            manifest_info = manifest.to_dict()
         except Exception:
             pass
 
         runtime_state = self.get_runtime_state(app_id)
-        built_in_ui_entry = self.get_app_ui_entry_path(app_id)
+        install_path = self._versioning.active_install_path(app_id)
+        built_in_ui_entry = self._resolve_app_ui_entry_path(install_path, manifest)
+        panelhub_mountable = bool(
+            manifest and manifest.is_panelhub_mountable(built_in_ui_entry is not None)
+        )
 
         return {
             "app_id": app_id,
@@ -181,6 +186,7 @@ class RuntimeService:
             },
             "manifest": manifest_info,
             "has_builtin_ui": built_in_ui_entry is not None,
+            "panelhub_mountable": panelhub_mountable,
         }
 
     def get_installed_list(self) -> List[Dict[str, Any]]:
@@ -205,13 +211,18 @@ class RuntimeService:
                 active_ver = self._versioning.active_version(aid)
                 # Attempt to read manifest name
                 name = aid
+                manifest: Optional[AppManifest] = None
                 try:
-                    m = self._get_manifest(aid, active_ver)
-                    name = m.name
+                    manifest = self._get_manifest(aid, active_ver)
+                    name = manifest.name
                 except Exception:
                     pass
                 runtime_state = self.get_runtime_state(aid)
-                built_in_ui_entry = self.get_app_ui_entry_path(aid)
+                install_path = self._versioning.active_install_path(aid)
+                built_in_ui_entry = self._resolve_app_ui_entry_path(install_path, manifest)
+                panelhub_mountable = bool(
+                    manifest and manifest.is_panelhub_mountable(built_in_ui_entry is not None)
+                )
                 seen[aid] = {
                     "app_id": aid,
                     "name": name,
@@ -226,6 +237,7 @@ class RuntimeService:
                     "last_started_at": runtime_state.last_started_at,
                     "last_stopped_at": runtime_state.last_stopped_at,
                     "has_builtin_ui": built_in_ui_entry is not None,
+                    "panelhub_mountable": panelhub_mountable,
                 }
             seen[aid]["versions"].append(row["version"])
 
@@ -1075,6 +1087,16 @@ class RuntimeService:
         try:
             manifest = self._get_manifest(app_id)
         except AppNotInstalledError:
+            return None
+
+        return self._resolve_app_ui_entry_path(install_path, manifest)
+
+    def _resolve_app_ui_entry_path(
+        self,
+        install_path: Optional[Path],
+        manifest: Optional[AppManifest],
+    ) -> Optional[Path]:
+        if install_path is None or manifest is None:
             return None
 
         return self._resolve_manifest_relative_file(
