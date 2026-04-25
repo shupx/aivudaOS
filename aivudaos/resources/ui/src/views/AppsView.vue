@@ -104,7 +104,7 @@ const {
         <button
           class="apps-bulk-icon-btn"
           type="button"
-          title="Sort Apps"
+          :title="t('apps.sortTooltip')"
           @click="appsSortDropdownVisible = !appsSortDropdownVisible"
         >
             <svg class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
@@ -114,19 +114,19 @@ const {
             class="apps-search-result-item"
             @click="setSortOption('name')"
           >
-            Name {{ sortOption === 'name' ? (sortDesc ? '↓' : '↑') : '' }}
+            {{ t('apps.sortByName') }} {{ sortOption === 'name' ? (sortDesc ? '↓' : '↑') : '' }}
           </button>
           <button
             class="apps-search-result-item"
             @click="setSortOption('autostart')"
           >
-            Autostart {{ sortOption === 'autostart' ? (sortDesc ? '↓' : '↑') : '' }}
+            {{ t('apps.sortByAutostart') }} {{ sortOption === 'autostart' ? (sortDesc ? '↓' : '↑') : '' }}
           </button>
           <button
             class="apps-search-result-item"
             @click="setSortOption('installed_at')"
           >
-            Installation Time {{ sortOption === 'installed_at' ? (sortDesc ? '↓' : '↑') : '' }}
+            {{ t('apps.sortByInstallationTime') }} {{ sortOption === 'installed_at' ? (sortDesc ? '↓' : '↑') : '' }}
           </button>
         </div>
       </div>

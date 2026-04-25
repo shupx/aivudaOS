@@ -126,8 +126,10 @@ export function useAppsPanel() {
   const route = useRoute()
   const router = useRouter()
 
-  const sortOption = ref(localStorage.getItem('APPS_SORT_OPTION') || 'name') // name | autostart | installed_at
-  const sortDesc = ref(localStorage.getItem('APPS_SORT_DESC') === '1')
+  const storedSortOption = localStorage.getItem('APPS_SORT_OPTION') || 'name'
+  const storedSortDesc = localStorage.getItem('APPS_SORT_DESC')
+  const sortOption = ref(storedSortOption) // name | autostart | installed_at
+  const sortDesc = ref(storedSortDesc === null ? storedSortOption === 'installed_at' : storedSortDesc === '1')
   const appsSortDropdownVisible = ref(false)
 
   const apps = computed(() => {
@@ -183,9 +185,9 @@ export function useAppsPanel() {
         toggleSortDesc()
       } else {
         sortOption.value = opt
-        sortDesc.value = false
+        sortDesc.value = opt === 'installed_at'
         localStorage.setItem('APPS_SORT_OPTION', opt)
-        localStorage.setItem('APPS_SORT_DESC', '0')
+        localStorage.setItem('APPS_SORT_DESC', sortDesc.value ? '1' : '0')
       }
       appsSortDropdownVisible.value = false
     }
