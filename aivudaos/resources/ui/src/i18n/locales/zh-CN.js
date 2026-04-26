@@ -227,6 +227,7 @@ export default {
     start: '启动',
     autostart: '自启动',
     iconAlt: '应用图标',
+    openConfig: '打开 {name} 的配置参数',
     openBuiltInUi: 'open UI',
   },
   appBuiltInUi: {

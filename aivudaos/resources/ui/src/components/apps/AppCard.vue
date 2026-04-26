@@ -20,8 +20,10 @@ const iconLoadFailed = ref(false)
 const { t } = useI18n()
 
 const description = computed(() => props.app.description || t('appCard.noDescription'))
+const appDisplayName = computed(() => props.app.name || props.app.app_id)
 const hasBuiltInUi = computed(() => Boolean(props.app.has_builtin_ui))
 const builtInUiHref = computed(() => `/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
+const configButtonTitle = computed(() => t('appCard.openConfig', { name: appDisplayName.value }))
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
@@ -47,6 +49,13 @@ function onAutostartChange(nextValue) {
 function goDetail() {
   if (!props.clickable) return
   router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}`)
+}
+
+function goConfigCenter() {
+  router.push({
+    path: '/dashboard/apps/configs',
+    query: { app_id: props.app.app_id },
+  })
 }
 
 function goBuiltInUi() {
@@ -87,7 +96,17 @@ function onIconError() {
           :alt="t('appCard.iconAlt')"
           @error="onIconError"
         >
-        <h3>{{ app.name || app.app_id }}</h3>
+        <h3>
+          <button
+            class="app-name-button"
+            type="button"
+            :title="configButtonTitle"
+            :aria-label="configButtonTitle"
+            @click.stop="goConfigCenter"
+          >
+            {{ appDisplayName }}
+          </button>
+        </h3>
       </div>
       <div class="app-header-actions">
         <span class="app-version">{{ app.active_version || '-' }}</span>

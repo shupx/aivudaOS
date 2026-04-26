@@ -227,6 +227,7 @@ export default {
     start: 'Start',
     autostart: 'Autostart',
     iconAlt: 'app icon',
+    openConfig: 'Open config for {name}',
     openBuiltInUi: 'open UI',
   },
   appBuiltInUi: {

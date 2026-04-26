@@ -1160,9 +1160,38 @@ label.config-default-changed-value {
   white-space: nowrap;
 }
 
+.app-name-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-name-button:hover,
+.app-name-button:focus-visible {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.app-name-button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
 .app-card-compact .app-title-wrap {
   align-items: flex-start;
   min-width: 0;
+}
+
+.app-card-compact .app-name-button {
+  width: 100%;
 }
 
 .app-card-compact .app-title-wrap h3 {
