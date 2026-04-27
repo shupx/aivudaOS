@@ -873,10 +873,24 @@ label.config-default-changed-value {
   width: min(132ch, 96vw);
   min-width: 720px;
   min-height: 280px;
+  height: min(82vh, 820px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.config-array-editor-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .config-array-editor-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   display: grid;
+  align-content: start;
   gap: 10px;
 }
 
@@ -920,6 +934,14 @@ label.config-default-changed-value {
 
 .config-array-editor-item::placeholder {
   color: #94a3b8;
+}
+
+.config-array-editor-json {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  resize: none;
+  box-sizing: border-box;
 }
 
 .config-app-title-row td {

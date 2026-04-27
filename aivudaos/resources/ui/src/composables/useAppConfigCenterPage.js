@@ -44,6 +44,7 @@ export function useAppConfigCenterPage() {
   const arrayEditorContext = ref(null)
   const arrayEditorMode = ref('rows') // 'rows' | 'json'
   const arrayEditorJsonText = ref('')
+  const arrayEditorValueType = ref('array')
   const arrayEditorCopySuccess = ref(false)
   const collapsedGroups = ref({})
   const touchedGroups = ref({})
@@ -289,6 +290,14 @@ export function useAppConfigCenterPage() {
   }
 
   function getArrayPreviewText(value) {
+    if (isRecord(value)) {
+      const json = JSON.stringify(value)
+      if (!json || json === '{}') {
+        return t('appConfigCenter.objectPreviewEmpty')
+      }
+      return truncatePreviewText(json)
+    }
+
     if (!Array.isArray(value) || !value.length) {
       return t('appConfigCenter.arrayPreviewEmpty')
     }
@@ -305,30 +314,41 @@ export function useAppConfigCenterPage() {
     if (value.length > 3) {
       preview += ', ...'
     }
-    if (preview.length > 180) {
-      preview = `${preview.slice(0, 177)}...`
-    }
-    return preview
+    return truncatePreviewText(preview)
   }
 
   function isArrayEditableRow(row) {
-    return row?.type === 'array'
+    return row?.type === 'array' || row?.type === 'object'
   }
 
   function isArrayEditableMagnet(group) {
-    return String(group?.value_type || '') === 'array'
+    const valueType = String(group?.value_type || '')
+    return valueType === 'array' || valueType === 'object'
   }
 
   function openArrayEditorForRow(row) {
     if (!row || row.readonly || !isArrayEditableRow(row)) return
+    const valueType = row.type === 'object' ? 'object' : 'array'
+    const currentValue = getCellValue(row)
     arrayEditorContext.value = {
       kind: 'row',
       row,
     }
-    arrayEditorTitle.value = t('appConfigCenter.arrayEditorTitle', {
+    arrayEditorTitle.value = t(valueType === 'object' ? 'appConfigCenter.objectEditorTitle' : 'appConfigCenter.arrayEditorTitle', {
       path: row.path || '-',
     })
-    const prepared = prepareArrayEditor(Array.isArray(getCellValue(row)) ? getCellValue(row) : [], row?.schemaObj?.items)
+    arrayEditorValueType.value = valueType
+    if (valueType === 'object') {
+      arrayEditorItems.value = []
+      arrayEditorPlaceholder.value = ''
+      arrayEditorItemType.value = 'object'
+      arrayEditorMode.value = 'json'
+      arrayEditorJsonText.value = JSON.stringify(isRecord(currentValue) ? currentValue : {}, null, 2)
+      arrayEditorVisible.value = true
+      return
+    }
+
+    const prepared = prepareArrayEditor(Array.isArray(currentValue) ? currentValue : [], row?.schemaObj?.items)
     arrayEditorItemType.value = prepared.itemType
     arrayEditorPlaceholder.value = prepared.placeholder
     arrayEditorItems.value = prepared.items
@@ -341,14 +361,27 @@ export function useAppConfigCenterPage() {
 
   function openArrayEditorForMagnet(group) {
     if (!group || !isArrayEditableMagnet(group)) return
+    const valueType = String(group?.value_type || '') === 'object' ? 'object' : 'array'
+    const currentValue = getMagnetValue(group)
     arrayEditorContext.value = {
       kind: 'magnet',
       group,
     }
-    arrayEditorTitle.value = t('appConfigCenter.arrayEditorTitle', {
+    arrayEditorTitle.value = t(valueType === 'object' ? 'appConfigCenter.objectEditorTitle' : 'appConfigCenter.arrayEditorTitle', {
       path: group.path || '-',
     })
-    const prepared = prepareArrayEditor(Array.isArray(getMagnetValue(group)) ? getMagnetValue(group) : [], null)
+    arrayEditorValueType.value = valueType
+    if (valueType === 'object') {
+      arrayEditorItems.value = []
+      arrayEditorPlaceholder.value = ''
+      arrayEditorItemType.value = 'object'
+      arrayEditorMode.value = 'json'
+      arrayEditorJsonText.value = JSON.stringify(isRecord(currentValue) ? currentValue : {}, null, 2)
+      arrayEditorVisible.value = true
+      return
+    }
+
+    const prepared = prepareArrayEditor(Array.isArray(currentValue) ? currentValue : [], null)
     arrayEditorItemType.value = prepared.itemType
     arrayEditorPlaceholder.value = prepared.placeholder
     arrayEditorItems.value = prepared.items
@@ -360,23 +393,24 @@ export function useAppConfigCenterPage() {
   }
 
   function toggleArrayEditorMode() {
+    if (arrayEditorValueType.value !== 'array') return
     if (arrayEditorMode.value === 'rows') {
       try {
         const values = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
         arrayEditorJsonText.value = JSON.stringify(values, null, 2)
         arrayEditorMode.value = 'json'
       } catch (err) {
-        error.value = 'Failed to convert to JSON'
+        error.value = t('appConfigCenter.arrayEditorConvertFailed')
       }
     } else {
       try {
         const values = JSON.parse(arrayEditorJsonText.value)
-        if (!Array.isArray(values)) throw new Error('Must be an array')
+        if (!Array.isArray(values)) throw new Error(t('appConfigCenter.arrayEditorArrayRequired'))
         const prepared = prepareArrayEditor(values, null)
         arrayEditorItems.value = prepared.items
         arrayEditorMode.value = 'rows'
       } catch (err) {
-        error.value = 'Invalid JSON'
+        error.value = t('appConfigCenter.arrayEditorInvalidJson')
       }
     }
   }
@@ -396,10 +430,10 @@ export function useAppConfigCenterPage() {
           arrayEditorCopySuccess.value = false
         }, 2000)
       }).catch(() => {
-         error.value = 'Failed to copy'
+         error.value = t('appConfigCenter.arrayEditorCopyFailed')
       })
     } catch(err) {
-      error.value = 'Invalid value to copy'
+      error.value = t('appConfigCenter.arrayEditorInvalidCopyValue')
     }
   }
 
@@ -412,6 +446,7 @@ export function useAppConfigCenterPage() {
     arrayEditorContext.value = null
     arrayEditorMode.value = 'rows'
     arrayEditorJsonText.value = ''
+    arrayEditorValueType.value = 'array'
   }
 
   async function saveArrayEditor() {
@@ -425,7 +460,12 @@ export function useAppConfigCenterPage() {
     try {
       if (arrayEditorMode.value === 'json') {
         const parsed = JSON.parse(arrayEditorJsonText.value)
-        if (!Array.isArray(parsed)) throw new Error('Must be an array')
+        if (arrayEditorValueType.value === 'array' && !Array.isArray(parsed)) {
+          throw new Error(t('appConfigCenter.arrayEditorArrayRequired'))
+        }
+        if (arrayEditorValueType.value === 'object' && !isRecord(parsed)) {
+          throw new Error(t('appConfigCenter.objectEditorObjectRequired'))
+        }
         nextValue = parsed
       } else {
         nextValue = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
@@ -1265,6 +1305,7 @@ export function useAppConfigCenterPage() {
     arrayEditorPlaceholder,
     arrayEditorMode,
     arrayEditorJsonText,
+    arrayEditorValueType,
     arrayEditorCopySuccess,
     toggleArrayEditorMode,
     copyArrayEditorJson,
@@ -1425,6 +1466,12 @@ function compactArrayPreviewItem(value) {
     return ''
   }
   return String(value)
+}
+
+function truncatePreviewText(text, maxLength = 180) {
+  const value = String(text || '')
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`
 }
 
 function groupIdForPath(appId, fullPath) {
