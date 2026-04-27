@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -95,6 +96,7 @@ class MagnetService:
 
     def recompute(self, updated_by: str = "system") -> Dict[str, Any]:
         current = self._read_registry()
+        self._ensure_sys_parameters_for_app_sys_paths(updated_by)
         previous_groups = {
             str(g.get("path")): g
             for g in (current.data.get("groups") or [])
@@ -201,6 +203,53 @@ class MagnetService:
             "group_id": group_id,
             "version": updated.version,
         }
+
+    def _ensure_sys_parameters_for_app_sys_paths(self, updated_by: str) -> None:
+        sys_cfg = self._config.get_sys_config()
+        sys_data = deepcopy(sys_cfg.data)
+        sys_schema_map = _read_sys_schema_map(sys_data)
+        changed = False
+
+        for app_id, app_version in self._list_active_apps():
+            app_cfg = self._config.get_app_config(app_id, app_version)
+            manifest = self._get_manifest(app_id, app_version)
+            schema = manifest.get("config_schema") or {}
+            defaults = self._config.get_app_default_config(
+                app_id,
+                app_version,
+                fallback=manifest.get("default_config") or {},
+            )
+            current_data = app_cfg.data if app_cfg.version > 0 else {}
+
+            for path, leaf_schema in _flatten_schema_leaves(schema).items():
+                if not path.startswith("sys."):
+                    continue
+
+                if not _nested_has(sys_data, path):
+                    if _nested_has(current_data, path):
+                        value = _nested_get(current_data, path)
+                    elif _nested_has(defaults, path):
+                        value = _nested_get(defaults, path)
+                    elif isinstance(leaf_schema, dict) and "default" in leaf_schema:
+                        value = leaf_schema.get("default")
+                    else:
+                        value = _schema_default_for_type(leaf_schema)
+                    _nested_set(sys_data, path, deepcopy(value))
+                    changed = True
+
+                if path not in sys_schema_map:
+                    sys_schema_map[path] = deepcopy(leaf_schema)
+                    changed = True
+
+        if not changed:
+            return
+
+        _write_sys_schema_map(sys_data, sys_schema_map)
+        self._config.update_sys_config(
+            sys_data,
+            expected_version=sys_cfg.version,
+            username=updated_by,
+        )
 
     def _pick_value(
         self,
@@ -469,6 +518,18 @@ def _nested_get(data: Any, dotted_path: str) -> Any:
     return current
 
 
+def _nested_has(data: Any, dotted_path: str) -> bool:
+    current = data
+    for part in str(dotted_path).split("."):
+        key = part.strip()
+        if not key:
+            return False
+        if not isinstance(current, dict) or key not in current:
+            return False
+        current = current[key]
+    return True
+
+
 def _nested_set(data: Dict[str, Any], dotted_path: str, value: Any) -> None:
     parts = [part.strip() for part in str(dotted_path).split(".") if part.strip()]
     if not parts:
@@ -542,6 +603,25 @@ def _stable_group_id(path: str) -> str:
     return f"magnet__{safe}"
 
 
+def _schema_default_for_type(schema: Any) -> Any:
+    schema_type = _extract_schema_type(schema)
+    if schema_type == "string":
+        return ""
+    if schema_type == "integer":
+        return 0
+    if schema_type == "number":
+        return 0
+    if schema_type == "boolean":
+        return False
+    if schema_type == "array":
+        return []
+    if schema_type == "object":
+        return {}
+    if schema_type == "null":
+        return None
+    return None
+
+
 def _read_sys_schema_map(sys_cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     raw = sys_cfg.get("_sys_schema")
     if not isinstance(raw, dict):
@@ -555,3 +635,10 @@ def _read_sys_schema_map(sys_cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             continue
         output[key] = value
     return output
+
+
+def _write_sys_schema_map(sys_cfg: Dict[str, Any], schema_map: Dict[str, Dict[str, Any]]) -> None:
+    if schema_map:
+        sys_cfg["_sys_schema"] = dict(schema_map)
+    elif "_sys_schema" in sys_cfg:
+        del sys_cfg["_sys_schema"]

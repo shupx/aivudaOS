@@ -33,7 +33,7 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 其中：
 
 - `os.yaml`：系统运行参数（例如 runtime 模式），不参与磁吸。
-- `sys.yaml`：公用业务参数（允许增删改），参与磁吸；默认包含 `role.id=1`。
+- `sys.yaml`：公用业务参数（允许增删改），参与磁吸；默认包含 `role.id=1`。active app 的 schema 中若声明 `sys.*` 参数，后端会在磁吸重算时自动补齐到这里，且不会因 app 切换或卸载自动删除。
 
 `os.yaml` 默认还会生成 `avahi_hostname`（格式 `robot-xxx`，3 位十六进制，小写），并用于 `.local` 访问域名。
 
