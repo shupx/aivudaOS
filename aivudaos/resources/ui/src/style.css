@@ -1807,7 +1807,6 @@ body.dark-mode {
 }
 
 body.dark-mode .app-config-center-header-sticky,
-body.dark-mode .actions-panel,
 body.dark-mode .log-panel,
 body.dark-mode .modal-card,
 body.dark-mode .main-content,
@@ -1817,19 +1816,77 @@ body.dark-mode .empty-box {
   color: #f8fafc;
 }
 
+body.dark-mode .actions-panel {
+  background-color: #18181b;
+  border-color: #3f3f46;
+  color: #f8fafc;
+}
+
 body.dark-mode .config-table th,
 body.dark-mode .config-table td {
-  border-color: #334155;
-  background-color: #1e293b;
+  border-color: #3f3f46;
+  background-color: #18181b;
   color: #f8fafc;
 }
 
 body.dark-mode .config-table th {
-  background-color: #0f172a;
+  background-color: #09090b;
+}
+
+body.dark-mode tr.config-row-app-0:not(.config-app-title-row):not(.config-group-row) td {
+  background-color: #17161d;
+}
+
+body.dark-mode tr.config-row-app-1:not(.config-app-title-row):not(.config-group-row) td {
+  background-color: #14181c;
+}
+
+body.dark-mode tr.config-row-app-2:not(.config-app-title-row):not(.config-group-row) td {
+  background-color: #181716;
+}
+
+body.dark-mode tr.config-row-app-3:not(.config-app-title-row):not(.config-group-row) td {
+  background-color: #16161a;
+}
+
+body.dark-mode .config-group-row.config-row-app-0 td {
+  background-color: #201c2b;
+}
+
+body.dark-mode .config-group-row.config-row-app-1 td {
+  background-color: #172329;
+}
+
+body.dark-mode .config-group-row.config-row-app-2 td {
+  background-color: #272016;
+}
+
+body.dark-mode .config-group-row.config-row-app-3 td {
+  background-color: #20202a;
+}
+
+body.dark-mode .config-app-title-row.config-row-app-0 td {
+  background-color: #2a223b;
+  border-top-color: #a78bfa;
+}
+
+body.dark-mode .config-app-title-row.config-row-app-1 td {
+  background-color: #1d3138;
+  border-top-color: #34d399;
+}
+
+body.dark-mode .config-app-title-row.config-row-app-2 td {
+  background-color: #352919;
+  border-top-color: #f59e0b;
+}
+
+body.dark-mode .config-app-title-row.config-row-app-3 td {
+  background-color: #262637;
+  border-top-color: #60a5fa;
 }
 
 body.dark-mode .config-table tr:hover td {
-  background-color: #334155;
+  background-color: #27272a;
 }
 
 body.dark-mode .input,
@@ -1837,8 +1894,8 @@ body.dark-mode .select-input,
 body.dark-mode .file-input,
 body.dark-mode .text-area,
 body.dark-mode textarea {
-  background-color: #0f172a;
-  border-color: #334155;
+  background-color: #18181b;
+  border-color: #3f3f46;
   color: #f8fafc;
 }
 
@@ -1847,7 +1904,7 @@ body.dark-mode .select-input:focus,
 body.dark-mode .text-area:focus,
 body.dark-mode textarea:focus {
   border-color: #3b82f6;
-  background-color: #1e293b;
+  background-color: #27272a;
 }
 
 body.dark-mode .tree-toggle-btn,
