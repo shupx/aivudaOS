@@ -3,6 +3,30 @@ import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { useAppsPanel } from '../composables/useAppsPanel'
+import {
+  NSpace,
+  NButton,
+  NInput,
+  NIcon,
+  NDropdown,
+  NAlert,
+  NEmpty,
+  NText,
+  NGrid,
+  NGi
+} from 'naive-ui'
+import {
+  Upload,
+  RefreshCw,
+  Search,
+  X,
+  ArrowUpDown,
+  LayoutGrid,
+  List,
+  RotateCcw,
+  Play,
+  Square
+} from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -55,37 +79,49 @@ const {
   cancelCurrentUpload,
   submitInteractiveInput,
 } = useAppsPanel()
+
+const sortOptions = [
+  { label: t('apps.sortByName') + (sortOption.value === 'name' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'name' },
+  { label: t('apps.sortByAutostart') + (sortOption.value === 'autostart' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'autostart' },
+  { label: t('apps.sortByInstallationTime') + (sortOption.value === 'installed_at' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'installed_at' }
+]
+
+const handleSortSelect = (key) => {
+  setSortOption(key)
+}
 </script>
 
 <template>
-  <section class="apps-panel">
-    <header class="panel-header">
-      <div class="panel-actions panel-title-actions">
-        <h2>{{ t('apps.title') }}</h2>
-        <button class="btn btn-stable-refresh" :disabled="loading" @click="refresh">
-          {{ loading ? t('common.refreshing') : t('common.refresh') }}
-        </button>
-      </div>
-      <div class="panel-actions wrap">
-        <button class="link-btn" @click="openUploadModal">{{ t('apps.uploadLink') }}</button>
-      </div>
-    </header>
+  <section>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+      <NSpace align="center">
+        <NText style="font-size: 20px; font-weight: 600;">{{ t('apps.title') }}</NText>
+        <NButton secondary size="small" :loading="loading" @click="refresh">
+          <template #icon><NIcon><RefreshCw /></NIcon></template>
+          {{ t('common.refresh') }}
+        </NButton>
+      </NSpace>
+      <NButton type="primary" size="small" @click="openUploadModal">
+        <template #icon><NIcon><Upload /></NIcon></template>
+        {{ t('apps.uploadLink') }}
+      </NButton>
+    </div>
 
-    <div class="apps-search-row">
-      <div class="apps-search-box">
-        <div class="search-input-shell">
-          <input
-            id="apps-search-input"
-            v-model="searchText"
-            class="select-input apps-search-input"
-            type="text"
-            :placeholder="t('apps.searchPlaceholder')"
-            @focus="openSearchDropdown"
-            @keydown="handleSearchKeydown"
-          >
-          <button v-if="searchText" class="search-clear-btn" @click="searchText = ''">x</button>
-        </div>
-        <div v-if="searchDropdownVisible" class="apps-search-results-dropdown">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
+      <div style="position: relative; width: 320px; max-width: 100%;">
+        <NInput
+          v-model:value="searchText"
+          :placeholder="t('apps.searchPlaceholder')"
+          clearable
+          @focus="openSearchDropdown"
+          @keydown="handleSearchKeydown"
+        >
+          <template #prefix>
+            <NIcon><Search /></NIcon>
+          </template>
+        </NInput>
+        <!-- Custom Dropdown for Search Results -->
+        <div v-if="searchDropdownVisible && searchResults.length > 0" class="apps-search-results-dropdown">
           <button
             v-for="(app, index) in searchResults"
             :key="`search-${app.app_id}`"
@@ -95,96 +131,55 @@ const {
           >
             {{ app.name || app.app_id }}
           </button>
-          <div v-if="!searchResults.length" class="apps-search-result-empty">
-            {{ t('apps.searchEmpty') }}
-          </div>
         </div>
       </div>
-      <div class="apps-sort-box" style="position: relative;">
-        <button
-          class="apps-bulk-icon-btn"
-          type="button"
-          :title="t('apps.sortTooltip')"
-          @click="appsSortDropdownVisible = !appsSortDropdownVisible"
-        >
-            <svg class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
-        </button>
-        <div v-if="appsSortDropdownVisible" class="apps-search-results-dropdown" style="right: 0; left: auto; top: 100%; margin-top: 4px; width: max-content; min-width: 160px;">
-          <button
-            class="apps-search-result-item"
-            @click="setSortOption('name')"
-          >
-            {{ t('apps.sortByName') }} {{ sortOption === 'name' ? (sortDesc ? '↓' : '↑') : '' }}
-          </button>
-          <button
-            class="apps-search-result-item"
-            @click="setSortOption('autostart')"
-          >
-            {{ t('apps.sortByAutostart') }} {{ sortOption === 'autostart' ? (sortDesc ? '↓' : '↑') : '' }}
-          </button>
-          <button
-            class="apps-search-result-item"
-            @click="setSortOption('installed_at')"
-          >
-            {{ t('apps.sortByInstallationTime') }} {{ sortOption === 'installed_at' ? (sortDesc ? '↓' : '↑') : '' }}
-          </button>
-        </div>
-      </div>
-      <button
-        class="apps-bulk-icon-btn"
-        type="button"
-        :title="t('apps.compactToggleTooltip')"
-        :aria-label="t('apps.compactToggleTooltip')"
-        :aria-pressed="compactMode"
-        @click="toggleCompactMode"
-      >
-        <!-- When in compact mode, show a list icon/larger grid to toggle back. When in normal mode, show a tighter grid icon -->
-        <svg v-if="compactMode" class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-        <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
-      </button>
 
-      <div class="apps-bulk-actions-row">
-        <button
-          class="apps-bulk-icon-btn"
-          type="button"
-          :title="t('apps.restartAutostartTooltip')"
-          :aria-label="t('apps.restartAutostartTooltip')"
-          :disabled="Boolean(bulkActionPending)"
-          @click="restartEnabledApps"
-        >
-          <svg v-if="bulkActionPending === 'restartAutostart'" class="apps-bulk-icon-symbol animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-          <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-        </button>
-        <button
-          class="apps-bulk-icon-btn"
-          type="button"
-          :title="t('apps.startAutostartTooltip')"
-          :aria-label="t('apps.startAutostartTooltip')"
-          :disabled="Boolean(bulkActionPending)"
-          @click="startEnabledApps"
-        >
-          <svg v-if="bulkActionPending === 'startAutostart'" class="apps-bulk-icon-symbol animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-          <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-        </button>
-        <button
-          class="apps-bulk-icon-btn apps-bulk-icon-btn-danger"
-          type="button"
-          :title="t('apps.stopAllTooltip')"
-          :aria-label="t('apps.stopAllTooltip')"
-          :disabled="Boolean(bulkActionPending)"
-          @click="stopEveryApp"
-        >
-          <svg v-if="bulkActionPending === 'stopAll'" class="apps-bulk-icon-symbol animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-          <svg v-else class="apps-bulk-icon-symbol" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
-        </button>
+      <NDropdown trigger="click" :options="sortOptions" @select="handleSortSelect">
+        <NButton quaternary circle>
+          <template #icon><NIcon><ArrowUpDown /></NIcon></template>
+        </NButton>
+      </NDropdown>
+
+      <NButton quaternary circle @click="toggleCompactMode" :title="t('apps.compactToggleTooltip')">
+        <template #icon><NIcon><component :is="compactMode ? List : LayoutGrid" /></NIcon></template>
+      </NButton>
+
+      <div style="margin-left: auto;">
+        <NSpace :size="4">
+          <NButton
+            quaternary circle
+            :title="t('apps.restartAutostartTooltip')"
+            :disabled="Boolean(bulkActionPending)"
+            :loading="bulkActionPending === 'restartAutostart'"
+            @click="restartEnabledApps"
+          >
+            <template #icon><NIcon><RotateCcw /></NIcon></template>
+          </NButton>
+          <NButton
+            quaternary circle
+            :title="t('apps.startAutostartTooltip')"
+            :disabled="Boolean(bulkActionPending)"
+            :loading="bulkActionPending === 'startAutostart'"
+            @click="startEnabledApps"
+          >
+            <template #icon><NIcon><Play /></NIcon></template>
+          </NButton>
+          <NButton
+            quaternary circle type="error"
+            :title="t('apps.stopAllTooltip')"
+            :disabled="Boolean(bulkActionPending)"
+            :loading="bulkActionPending === 'stopAll'"
+            @click="stopEveryApp"
+          >
+            <template #icon><NIcon><Square /></NIcon></template>
+          </NButton>
+        </NSpace>
       </div>
     </div>
 
-    <p v-if="error" class="error-text">{{ error }}</p>
+    <NAlert v-if="error" type="error" style="margin-bottom: 24px;">{{ error }}</NAlert>
 
-    <div v-if="!apps.length && !loading" class="empty-box">
-      {{ t('apps.noInstalledApps') }}
-    </div>
+    <NEmpty v-if="!apps.length && !loading" :description="t('apps.noInstalledApps')" style="margin-top: 48px;" />
 
     <div class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
       <AppCard

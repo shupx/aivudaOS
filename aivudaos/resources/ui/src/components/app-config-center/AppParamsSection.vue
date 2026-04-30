@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
+import { NCard, NButton } from 'naive-ui'
 
 const { t } = useI18n()
 
@@ -170,15 +171,13 @@ const props = defineProps({
 </script>
 
 <template>
-  <article class="actions-panel">
-    <header class="log-header">
-      <h3>{{ t('appConfigCenter.tableTitle') }}</h3>
-    </header>
+  <NCard style="margin-bottom: 24px;">
+    <template #header>
+      <span style="font-size: 16px; font-weight: 600;">{{ t('appConfigCenter.tableTitle') }}</span>
+    </template>
 
-    <div class="panel-actions wrap">
-      <button class="tree-toggle-btn" :title="areAllGroupsCollapsed() ? t('appConfigCenter.expand') : t('appConfigCenter.collapse')" @click="toggleAllGroupsCollapsed">
-        {{ areAllGroupsCollapsed() ? '+' : '-' }}
-      </button>
+    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+      <NButton size="small" :title="areAllGroupsCollapsed() ? t('appConfigCenter.expand') : t('appConfigCenter.collapse')" @click="toggleAllGroupsCollapsed">{{ areAllGroupsCollapsed() ? '+' : '-' }}</NButton>
       <label class="muted" for="config-center-app-select-inline">{{ t('appConfigCenter.filterApp') }}</label>
       <select
         id="config-center-app-select-inline"
@@ -355,9 +354,9 @@ const props = defineProps({
           @click="selectTextareaContent"
         ></textarea>
         <div class="panel-actions">
-          <button class="btn" @click="closeDefaultValueModal">{{ t('common.close') }}</button>
+          <NButton @click="closeDefaultValueModal">{{ t('common.close') }}</NButton>
         </div>
       </section>
     </div>
-  </article>
+  </NCard>
 </template>

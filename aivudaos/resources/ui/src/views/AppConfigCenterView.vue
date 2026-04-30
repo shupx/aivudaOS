@@ -5,6 +5,8 @@ import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
+import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
+import { ArrowLeft, RefreshCw, Plus, Trash2 } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const systemColumnWidths = ref([260, 320, 110, 180, 260, 120, 100])
@@ -219,19 +221,22 @@ const systemEnumDrafts = useDeferredFieldDrafts({
 
 <template>
   <section class="apps-panel app-config-center-page">
-    <header class="panel-header app-config-center-header-sticky">
-      <div class="app-config-center-header-row">
-        <h2>{{ t('appConfigCenter.title') }}</h2>
-        <div class="panel-actions wrap">
-          <button class="btn" @click="goBackApps">{{ t('appConfigCenter.backToApps') }}</button>
-          <button class="btn btn-stable-refresh" :disabled="loading" @click="loadAllConfigs">
-            {{ loading ? t('common.loadingShort') : t('common.refresh') }}
-          </button>
-        </div>
+    <header class="panel-header app-config-center-header-sticky" style="margin-bottom: 24px;">
+      <div class="app-config-center-header-row" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <NSpace align="center">
+          <NButton quaternary circle @click="goBackApps" :title="t('appConfigCenter.backToApps')">
+             <template #icon><NIcon><ArrowLeft /></NIcon></template>
+          </NButton>
+          <NText style="font-size: 20px; font-weight: 600;">{{ t('appConfigCenter.title') }}</NText>
+        </NSpace>
+        <NButton secondary size="small" :loading="loading" @click="loadAllConfigs">
+          <template #icon><NIcon><RefreshCw /></NIcon></template>
+          {{ t('common.refresh') }}
+        </NButton>
       </div>
 
-      <p v-if="error" class="error-text">{{ error }}</p>
-      <p v-else-if="success" class="ok-text">{{ success }}</p>
+      <NAlert v-if="error" type="error" style="margin-top: 12px;">{{ error }}</NAlert>
+      <NAlert v-else-if="success" type="success" style="margin-top: 12px;">{{ success }}</NAlert>
     </header>
 
     <div class="app-config-center-magnet-sticky">
@@ -260,7 +265,10 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       </header>
 
       <div class="panel-actions wrap" style="margin-bottom: 10px;">
-        <button class="btn" @click="openSystemAddModal">{{ t('appConfigCenter.systemAdd') }}</button>
+        <NButton size="small" type="primary" @click="openSystemAddModal">
+          <template #icon><NIcon><Plus /></NIcon></template>
+          {{ t('appConfigCenter.systemAdd') }}
+        </NButton>
       </div>
 
       <div v-if="!systemRows.length" class="empty-box">{{ t('appConfigCenter.systemEmpty') }}</div>
@@ -340,9 +348,9 @@ const systemEnumDrafts = useDeferredFieldDrafts({
               <td>{{ row.description || '-' }}</td>
               <td>{{ getNeedRestartText(row) }}</td>
               <td>
-                <button class="btn" :disabled="row.readonly" @click="confirmRemoveSystemParam(row)">
-                  {{ t('appConfigCenter.systemDelete') }}
-                </button>
+                <NButton size="small" type="error" quaternary :disabled="row.readonly" @click="confirmRemoveSystemParam(row)" :title="t('appConfigCenter.systemDelete')">
+                  <template #icon><NIcon><Trash2 /></NIcon></template>
+                </NButton>
               </td>
             </tr>
         </tbody>

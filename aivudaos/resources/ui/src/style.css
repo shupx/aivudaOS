@@ -285,8 +285,9 @@ input {
   gap: 4px;
   background: #ffffff;
   border: 1px solid #dbe2ea;
-  border-radius: 12px;
-  padding: 10px 12px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+  padding: 16px;
 }
 
 .app-config-center-header-row {
@@ -424,10 +425,11 @@ input {
   width: min(560px, 100%);
   background: #ffffff;
   border: 1px solid #dbe2ea;
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 20px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 24px;
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .modal-card.modal-wide {
@@ -500,19 +502,23 @@ input {
 }
 
 .log-panel {
+  background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+  padding: 16px;
   display: grid;
   gap: 10px;
 }
 
 .actions-panel {
+  background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+  padding: 16px;
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .actions-grid {
@@ -1585,4 +1591,90 @@ label.config-default-changed-value {
     flex: 0 1 auto;
     min-width: 120px;
   }
+}
+
+/* Dark Mode Overrides for Legacy Custom CSS */
+body.dark-mode {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+body.dark-mode .app-config-center-header-sticky,
+body.dark-mode .actions-panel,
+body.dark-mode .log-panel,
+body.dark-mode .modal-card,
+body.dark-mode .main-content,
+body.dark-mode .empty-box {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+body.dark-mode .config-table th,
+body.dark-mode .config-table td {
+  border-color: #334155;
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+body.dark-mode .config-table th {
+  background-color: #0f172a;
+}
+
+body.dark-mode .config-table tr:hover td {
+  background-color: #334155;
+}
+
+body.dark-mode .input,
+body.dark-mode .select-input,
+body.dark-mode .file-input,
+body.dark-mode .text-area,
+body.dark-mode textarea {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+body.dark-mode .input:focus,
+body.dark-mode .select-input:focus,
+body.dark-mode .text-area:focus,
+body.dark-mode textarea:focus {
+  border-color: #3b82f6;
+  background-color: #1e293b;
+}
+
+body.dark-mode .tree-toggle-btn,
+body.dark-mode .btn-array-editor {
+  background-color: #334155;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+body.dark-mode .tree-toggle-btn:hover,
+body.dark-mode .btn-array-editor:hover {
+  background-color: #475569;
+}
+
+body.dark-mode .table-col-resize-line {
+  background-color: #334155;
+}
+
+body.dark-mode .config-disabled-text {
+  color: #64748b;
+}
+
+body.dark-mode .muted {
+  color: #94a3b8;
+}
+
+body.dark-mode .link-btn {
+  color: #60a5fa;
+}
+
+body.dark-mode .link-btn:hover {
+  color: #93c5fd;
+}
+
+body.dark-mode .config-clipped-textarea {
+  background-color: transparent;
 }

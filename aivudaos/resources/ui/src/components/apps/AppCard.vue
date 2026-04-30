@@ -2,8 +2,17 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import SwitchToggle from './SwitchToggle.vue'
 import { buildApiPath } from '../../services/core/api'
+import {
+  NCard,
+  NSpace,
+  NText,
+  NButton,
+  NSwitch,
+  NAvatar,
+  NTag
+} from 'naive-ui'
+import { ExternalLink } from 'lucide-vue-next'
 
 const props = defineProps({
   app: { type: Object, required: true },
@@ -51,7 +60,8 @@ function goDetail() {
   router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}`)
 }
 
-function goConfigCenter() {
+function goConfigCenter(e) {
+  e.stopPropagation()
   router.push({
     path: '/dashboard/apps/configs',
     query: { app_id: props.app.app_id },
@@ -69,6 +79,7 @@ function onBuiltInUiClick(event) {
   if (event.button !== 0) return
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
 
+  event.stopPropagation()
   event.preventDefault()
   goBuiltInUi()
 }
@@ -79,69 +90,88 @@ function onIconError() {
 </script>
 
 <template>
-  <article
+  <NCard
     :id="cardId || undefined"
-    class="app-card"
-    :class="{ 'card-clickable': clickable, 'app-card-highlighted': highlighted, 'app-card-compact': compact }"
-    :tabindex="clickable ? 0 : -1"
+    hoverable
+    :style="{ borderColor: highlighted ? '#f59e0b' : undefined, borderWidth: highlighted ? '2px' : '1px', cursor: clickable ? 'pointer' : 'default', display: 'flex', flexDirection: 'column' }"
+    :content-style="{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, gap: '16px' }"
     @click="goDetail"
-    @keydown.enter.prevent="goDetail"
-    @keydown.space.prevent="goDetail"
   >
-    <header class="app-card-header">
-      <div class="app-title-wrap">
-        <img
-          class="app-icon"
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+        <NAvatar
           :src="iconSrc"
-          :alt="t('appCard.iconAlt')"
+          :size="compact ? 36 : 48"
+          fallback-src="/app-default-icon.png"
           @error="onIconError"
-        >
-        <h3>
-          <button
-            class="app-name-button"
-            type="button"
+          style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
+        />
+        <div style="min-width: 0; display: flex; flex-direction: column;">
+          <NText
+            strong
+            style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;"
             :title="configButtonTitle"
-            :aria-label="configButtonTitle"
             @click.stop="goConfigCenter"
+            class="app-name-hover"
           >
             {{ appDisplayName }}
-          </button>
-        </h3>
-      </div>
-      <div class="app-header-actions">
-        <span class="app-version">{{ app.active_version || '-' }}</span>
-      </div>
-    </header>
-
-    <div v-if="!compact" class="app-meta">
-      <p><strong>{{ t('appCard.appId') }}:</strong> {{ app.app_id }}</p>
-      <p><strong>{{ t('appCard.description') }}:</strong> {{ description }}</p>
-      <p><strong>{{ t('appCard.status') }}:</strong> {{ app.running ? t('appCard.running') : t('appCard.stopped') }}</p>
-    </div>
-
-    <div class="app-card-footer">
-      <a
-        v-if="hasBuiltInUi"
-        class="app-ui-text-btn"
-        :href="builtInUiHref"
-        :title="t('appCard.openBuiltInUi')"
-        :aria-label="t('appCard.openBuiltInUi')"
-        @click.stop="onBuiltInUiClick"
-      >
-        {{ t('appCard.openBuiltInUi') }}
-      </a>
-
-      <div class="switch-row">
-        <div class="switch-item" @click.stop>
-          <span v-if="!compact">{{ t('appCard.start') }}</span>
-          <SwitchToggle :model-value="Boolean(app.running)" :disabled="busy" @update:model-value="onRunningChange" />
-        </div>
-
-        <div class="switch-item switch-item-autostart" @click.stop>
-          <span v-if="!compact">{{ t('appCard.autostart') }}</span>
-          <SwitchToggle :model-value="Boolean(app.autostart)" :disabled="busy" @update:model-value="onAutostartChange" />
+          </NText>
+          <NText v-if="compact" depth="3" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            {{ app.active_version || '-' }}
+          </NText>
         </div>
       </div>
+      <div v-if="!compact" style="flex-shrink: 0;">
+        <NTag type="info" size="small">{{ app.active_version || '-' }}</NTag>
+      </div>
     </div>
-  </article>
+
+    <div v-if="!compact" style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; flex: 1;">
+      <NText depth="3" style="font-size: 12px;">{{ app.app_id }}</NText>
+      <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">
+        {{ description }}
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto;">
+      <div style="min-width: 0;">
+        <NButton
+          v-if="hasBuiltInUi"
+          size="small"
+          tag="a"
+          :href="builtInUiHref"
+          @click.stop="onBuiltInUiClick"
+        >
+          {{ t('appCard.openBuiltInUi') }}
+        </NButton>
+      </div>
+      <div style="display: flex; gap: 16px; align-items: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;" @click.stop>
+          <NText v-if="!compact" style="font-size: 12px;" depth="3">{{ t('appCard.start') }}</NText>
+          <NSwitch
+            :value="Boolean(app.running)"
+            :disabled="busy"
+            @update:value="onRunningChange"
+            size="small"
+            :theme-overrides="{ railColorActive: '#16a34a' }"
+          />
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;" @click.stop>
+          <NText v-if="!compact" style="font-size: 12px;" depth="3">{{ t('appCard.autostart') }}</NText>
+          <NSwitch :value="Boolean(app.autostart)" :disabled="busy" @update:value="onAutostartChange" size="small">
+             <template #checked-icon>
+                A
+             </template>
+          </NSwitch>
+        </div>
+      </div>
+    </div>
+  </NCard>
 </template>
+
+<style scoped>
+.app-name-hover:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+</style>

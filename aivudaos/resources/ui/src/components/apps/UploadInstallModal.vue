@@ -1,5 +1,8 @@
 <script setup>
 import { useUploadInstallModalView } from '../../composables/useUploadInstallModalView'
+import { NModal, NCard, NSpace, NButton, NInput, NText, NAlert, NLog } from 'naive-ui'
+import { ref, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -27,10 +30,11 @@ const emit = defineEmits([
   'cancel-operation',
 ])
 
+const { t } = useI18n()
+
+// We can bypass some composable logic because NModal and NLog handle scrolling better, 
+// but we still need the core logic.
 const {
-  t,
-  logRef,
-  onLogScroll,
   shouldShowOutput,
   onFileChange,
   closeByOverlay,
@@ -41,76 +45,73 @@ const {
 </script>
 
 <template>
-  <div v-if="visible" class="modal-overlay" @click.self="closeByOverlay">
-    <section class="modal-card modal-resizable">
-      <header class="modal-header">
-        <h3>{{ t('apps.uploadModalTitle') }}</h3>
-      </header>
+  <NModal :show="visible" @mask-click="closeByOverlay" :mask-closable="!busy">
+    <NCard
+      style="width: min(600px, 95vw);"
+      :title="t('apps.uploadModalTitle')"
+      :bordered="false"
+      size="huge"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <NText v-if="hint" depth="3">{{ hint }}</NText>
 
-      <p v-if="hint" class="muted">{{ hint }}</p>
-
-      <div v-if="showFilePicker" class="field">
-        <label>{{ t('apps.packageFile') }}</label>
-        <input
-          class="file-input"
-          type="file"
-          accept=".tar.gz,.zip"
-          @change="onFileChange"
-        >
-      </div>
-      <p class="muted">{{ fileName || t('apps.noFileSelected') }}</p>
-
-      <p v-if="error" class="error-text">{{ error }}</p>
-      <p
-        v-if="status"
-        :class="statusDone ? 'ok-text' : 'muted'"
-      >
-        {{ t('common.status') }}：{{ status }}
-      </p>
-      <pre
-        v-if="shouldShowOutput"
-        ref="logRef"
-        class="log-output small"
-        @scroll="onLogScroll"
-      ></pre>
-
-      <div v-if="busy" class="field">
-        <label>{{ t('apps.interactiveInputLabel') }}</label>
-        <div class="panel-actions">
+        <div v-if="showFilePicker" style="display: flex; flex-direction: column; gap: 8px;">
+          <NText>{{ t('apps.packageFile') }}</NText>
           <input
-            class="input"
-            :type="interactiveMaskInput ? 'password' : 'text'"
-            autocomplete="off"
-            :placeholder="t('apps.interactiveInputPlaceholder')"
-            :value="interactiveInput"
-            @input="onInteractiveInput"
-            @keydown="onInteractiveKeydown"
+            type="file"
+            accept=".tar.gz,.zip"
+            @change="onFileChange"
+            style="border: 1px solid #dbe2ea; border-radius: 10px; padding: 8px; width: 100%; box-sizing: border-box; background: #fff;"
           >
-          <button
-            class="btn"
-            type="button"
-            @click="onInteractiveMaskChange(!interactiveMaskInput)"
-          >
-            {{ interactiveMaskInput ? t('apps.interactiveShowInput') : t('apps.interactiveHideInput') }}
-          </button>
-          <button
-            class="btn"
-            @click="$emit('interactive-submit')"
-          >
-            {{ t('apps.interactiveSend') }}
-          </button>
+        </div>
+        <NText depth="3" style="font-size: 13px;">{{ fileName || t('apps.noFileSelected') }}</NText>
+
+        <NAlert v-if="error" type="error">{{ error }}</NAlert>
+        <NText v-if="status" :type="statusDone ? 'success' : 'default'">
+          {{ t('common.status') }}：{{ status }}
+        </NText>
+
+        <NLog
+          v-if="shouldShowOutput"
+          :log="output"
+          :rows="12"
+          trim
+          style="border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; --n-text-color: #e2e8f0; color: #e2e8f0;"
+        />
+
+        <div v-if="busy" style="display: flex; flex-direction: column; gap: 8px;">
+          <NText>{{ t('apps.interactiveInputLabel') }}</NText>
+          <div style="display: flex; gap: 8px;">
+            <NInput
+              :type="interactiveMaskInput ? 'password' : 'text'"
+              :placeholder="t('apps.interactiveInputPlaceholder')"
+              :value="interactiveInput"
+              @update:value="(val) => emit('interactive-input', val)"
+              @keydown.enter="emit('interactive-submit')"
+              style="flex: 1;"
+            />
+            <NButton @click="emit('interactive-mask-change', !interactiveMaskInput)">
+              {{ interactiveMaskInput ? t('apps.interactiveShowInput') : t('apps.interactiveHideInput') }}
+            </NButton>
+            <NButton type="primary" @click="emit('interactive-submit')">
+              {{ t('apps.interactiveSend') }}
+            </NButton>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;">
+          <NButton :disabled="busy" @click="emit('close')">{{ t('common.cancel') }}</NButton>
+          <NButton v-if="busy" type="error" :loading="cancelBusy" @click="emit('cancel-operation')">
+            {{ t('apps.exitInstall') }}
+          </NButton>
+          <NButton type="primary" :disabled="busy || !fileName" :loading="busy" @click="emit('submit')">
+            {{ t('apps.uploadAndInstall') }}
+          </NButton>
         </div>
       </div>
-
-      <footer class="panel-actions">
-        <button class="btn" :disabled="busy" @click="$emit('close')">{{ t('common.cancel') }}</button>
-        <button v-if="busy" class="btn danger" @click="$emit('cancel-operation')">
-          {{ cancelBusy ? t('common.processing') : t('apps.exitInstall') }}
-        </button>
-        <button class="btn primary" :disabled="busy || !fileName" @click="$emit('submit')">
-          {{ busy ? t('apps.uploading') : t('apps.uploadAndInstall') }}
-        </button>
-      </footer>
-    </section>
-  </div>
+    </NCard>
+  </NModal>
 </template>
+

@@ -10,7 +10,7 @@ export const appState = reactive({
   locale: DEFAULT_LOCALE,
   user: null,
   role: null,
-  sidebarCollapsed: false,
+  sidebarCollapsed: true,
   activeMenu: 'apps',
   gatewayOnline: false,
   lastSyncAt: null,

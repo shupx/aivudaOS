@@ -2,6 +2,10 @@
 import { useI18n } from 'vue-i18n'
 import SwitchToggle from '../components/apps/SwitchToggle.vue'
 import { useSystemSettingsPage } from '../composables/useSystemSettingsPage'
+import {
+  NCard, NSpace, NButton, NText, NAlert, NIcon, NGrid, NGi, NTag, NModal, NInput, NCheckbox, NSelect, NDataTable
+} from 'naive-ui'
+import { RefreshCw, Download, Play, Square, Trash2, RotateCcw } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const {
@@ -65,252 +69,208 @@ const {
 </script>
 
 <template>
-  <section class="apps-panel">
-    <header class="panel-header">
-      <h2>{{ t('systemSettings.title') }}</h2>
-      <div class="panel-actions wrap">
-        <button class="btn btn-stable-refresh" :disabled="loading || saving" @click="load">
-          {{ loading ? t('common.loadingShort') : t('common.refresh') }}
-        </button>
-      </div>
-    </header>
+  <section>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+      <NText style="font-size: 20px; font-weight: 600;">{{ t('systemSettings.title') }}</NText>
+      <NButton secondary size="small" :loading="loading || saving" @click="load">
+        <template #icon><NIcon><RefreshCw /></NIcon></template>
+        {{ t('common.refresh') }}
+      </NButton>
+    </div>
 
-    <p v-if="error" class="error-text">{{ error }}</p>
-    <p v-if="success" class="ok-text">
-      <span>{{ success }}</span>
+    <NAlert v-if="error" type="error" style="margin-bottom: 24px;">{{ error }}</NAlert>
+    <NAlert v-if="success" type="success" style="margin-bottom: 24px;">
+      {{ success }}
       <template v-if="successLinks.length">
         <span
           v-for="(link, index) in successLinks"
           :key="`success-link-${link.url}`"
         >
           <span>{{ index === 0 ? ' ' : ' / ' }}</span>
-          <a :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
+          <a :href="link.url" target="_blank" rel="noopener noreferrer" style="color: #10b981; text-decoration: underline;">{{ link.label }}</a>
         </span>
       </template>
-    </p>
+    </NAlert>
 
-    <article class="actions-panel">
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.currentUser') }}</span>
-        <span class="muted">{{ username || '-' }}</span>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.passwordlessSudo') }}</span>
-        <SwitchToggle
-          :model-value="enabled"
-          :disabled="loading || saving"
-          @update:model-value="toggleEnabled"
-        />
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.reloginAction') }}</span>
-        <button class="btn danger" :disabled="loading || saving || reloginPending" @click="reloginNow">
-          {{ reloginPending ? t('common.processing') : t('systemSettings.reloginNow') }}
-        </button>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.aptSourcesAction') }}</span>
-        <button class="btn" :disabled="loading || saving" @click="openAptSourcesModal">
-          {{ t('systemSettings.aptSourcesButton') }}
-        </button>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.caddyLocalCaLabel') }}</span>
-        <a
-          :href="caddyLocalCaDownloadUrl"
-          :aria-disabled="loading || saving"
-          @click.prevent="downloadCaddyLocalCa"
-        >
-          {{ t('systemSettings.caddyLocalCaDownloadLink') }}
-        </a>
-      </div>
-
-      <p v-if="caddyLocalCaHintVisible" class="muted">
-        {{ t('systemSettings.caddyLocalCaHintPrefix') }}
-        <a :href="t('systemSettings.caddyLocalCaChromeUrl')">
-          {{ t('systemSettings.caddyLocalCaChromeUrl') }}
-        </a>
-        {{ t('systemSettings.caddyLocalCaHintMiddle') }}
-        <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
-        {{ t('systemSettings.caddyLocalCaHintImport') }}
-        <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
-        {{ t('systemSettings.caddyLocalCaHintSuffix') }}
-      </p>
-    </article>
-
-    <article class="actions-panel">
-      <header class="log-header">
-        <h3>{{ t('systemSettings.aivudaosServiceTitle') }}</h3>
-      </header>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.serviceInstalledLabel') }}</span>
-        <span class="muted">
-          {{ serviceInstalled ? t('systemSettings.statusEnabled') : t('systemSettings.statusDisabled') }}
-        </span>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.serviceRunningLabel') }}</span>
-        <span class="muted">
-          {{ serviceRunning ? t('appCard.running') : t('appCard.stopped') }}
-        </span>
-      </div>
-
-      <div class="setting-row">
-        <span class="setting-row-label">{{ t('systemSettings.serviceAutostartLabel') }}</span>
-        <SwitchToggle
-          :model-value="serviceAutostartEnabled"
-          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
-          @update:model-value="toggleServiceAutostart"
-        />
-      </div>
-
-      <div class="panel-actions wrap">
-        <button
-          class="btn danger"
-          :disabled="loading || saving || !serviceInstalled || !serviceRunning || Boolean(serviceActionPending)"
-          @click="triggerServiceAction('stop')"
-        >
-          {{ serviceActionPending === 'stop' ? t('common.processing') : t('systemSettings.serviceStopButton') }}
-        </button>
-        <button
-          class="btn danger"
-          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
-          @click="triggerServiceAction('uninstall')"
-        >
-          {{ serviceActionPending === 'uninstall' ? t('common.processing') : t('systemSettings.serviceUninstallButton') }}
-        </button>
-        <button
-          class="btn"
-          :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
-          @click="triggerServiceAction('restart')"
-        >
-          {{ serviceActionPending === 'restart' ? t('common.processing') : t('systemSettings.serviceRestartButton') }}
-        </button>
-      </div>
-    </article>
-
-    <article class="actions-panel">
-      <header class="log-header">
-        <h3>{{ t('systemSettings.osParamsTitle') }}</h3>
-      </header>
-
-      <div v-if="!osRows.length" class="empty-box">{{ t('systemSettings.osParamsEmpty') }}</div>
-      <div v-else class="table-wrap">
-        <table class="config-table compact">
-          <thead>
-            <tr>
-              <th>{{ t('appConfigCenter.colPath') }}</th>
-              <th>{{ t('appConfigCenter.colCurrent') }}</th>
-              <th>{{ t('appConfigCenter.colType') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in osRows" :key="`os:${row.path}`">
-              <td class="mono-cell">{{ row.path }}</td>
-              <td>
-                <div class="config-edit-cell">
-                  <label v-if="row.type === 'boolean'" class="check-item">
-                    <input
-                      :checked="Boolean(getOsCellValue(row))"
-                      type="checkbox"
-                      @change="onOsBooleanChange(row, $event?.target?.checked)"
-                    >
-                    {{ Boolean(getOsCellValue(row)) ? 'true' : 'false' }}
-                  </label>
-                  <select
-                    v-else-if="getOsEnumOptions(row).length"
-                    class="select-input"
-                    :value="String(getOsCellValue(row) ?? '')"
-                    @change="onOsEnumChange(row, $event?.target?.value || '')"
-                  >
-                    <option
-                      v-for="item in getOsEnumOptions(row)"
-                      :key="`os-enum-${row.path}-${item.value}`"
-                      :value="item.value"
-                      :disabled="item.disabled"
-                    >
-                      {{ item.value }}
-                    </option>
-                  </select>
-                  <input
-                    v-else
-                    class="input"
-                    :value="displayOsValue(row)"
-                    @change="onOsTextChange(row, $event?.target?.value || '')"
-                  >
-                  <p v-if="getOsCellError(row)" class="error-text">
-                    {{ t('systemSettings.osInvalidValue') }}: {{ getOsCellError(row) }}
-                  </p>
-                </div>
-              </td>
-              <td>{{ row.type || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </article>
-
-    <!-- Password Modal -->
-    <div v-if="showPasswordModal" class="modal-overlay" @click.self="closePasswordModal">
-      <section class="modal-card">
-        <header class="modal-header">
-          <h3>{{ t('systemSettings.confirmPasswordTitle') }}</h3>
-        </header>
-
-        <p class="muted">
-          {{ enabled ? t('systemSettings.confirmDisableHint') : t('systemSettings.confirmEnableHint') }}
-        </p>
-
-        <div class="field">
-          <label for="modal-password-input">{{ t('systemSettings.sudoPassword') }}</label>
-          <div class="inline-row">
-            <input
-              id="modal-password-input"
-              v-model="sudoPassword"
-              class="mono-input"
-              :type="showSudoPassword ? 'text' : 'password'"
-              :placeholder="t('systemSettings.sudoPasswordPlaceholder')"
-              :disabled="saving"
-              autocomplete="current-password"
-              @keydown.enter="submitToggle"
-            >
-            <button
-              class="btn"
-              type="button"
-              :disabled="saving"
-              @click="showSudoPassword = !showSudoPassword"
-            >
-              {{ showSudoPassword ? t('systemSettings.hidePassword') : t('systemSettings.showPassword') }}
-            </button>
+    <NGrid x-gap="24" y-gap="24" cols="1" responsive="screen" style="margin-bottom: 24px;">
+      <NGi>
+        <NCard :title="t('systemSettings.currentUser')">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.currentUser') }}</NText>
+              <NText depth="3">{{ username || '-' }}</NText>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.passwordlessSudo') }}</NText>
+              <SwitchToggle
+                :model-value="enabled"
+                :disabled="loading || saving"
+                @update:model-value="toggleEnabled"
+              />
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.reloginAction') }}</NText>
+              <NButton type="error" size="small" :loading="reloginPending" :disabled="loading || saving" @click="reloginNow">
+                {{ t('systemSettings.reloginNow') }}
+              </NButton>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.aptSourcesAction') }}</NText>
+              <NButton size="small" :disabled="loading || saving" @click="openAptSourcesModal">
+                {{ t('systemSettings.aptSourcesButton') }}
+              </NButton>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.caddyLocalCaLabel') }}</NText>
+              <NButton size="small" tag="a" :href="caddyLocalCaDownloadUrl" :disabled="loading || saving" @click.prevent="downloadCaddyLocalCa">
+                <template #icon><NIcon><Download /></NIcon></template>
+                {{ t('systemSettings.caddyLocalCaDownloadLink') }}
+              </NButton>
+            </div>
+            <NAlert v-if="caddyLocalCaHintVisible" type="info">
+              {{ t('systemSettings.caddyLocalCaHintPrefix') }}
+              <a :href="t('systemSettings.caddyLocalCaChromeUrl')" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+                {{ t('systemSettings.caddyLocalCaChromeUrl') }}
+              </a>
+              {{ t('systemSettings.caddyLocalCaHintMiddle') }}
+              <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
+              {{ t('systemSettings.caddyLocalCaHintImport') }}
+              <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
+              {{ t('systemSettings.caddyLocalCaHintSuffix') }}
+            </NAlert>
           </div>
-        </div>
+        </NCard>
+      </NGi>
 
-        <div class="panel-actions">
-          <button
-            class="btn"
-            :disabled="saving"
-            @click="closePasswordModal"
-          >
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            class="btn primary"
-            :disabled="saving || !sudoPassword.trim()"
-            @click="submitToggle"
-          >
-            {{ saving ? t('common.processing') : t('systemSettings.confirm') }}
-          </button>
-        </div>
-      </section>
-    </div>
+      <NGi>
+        <NCard :title="t('systemSettings.aivudaosServiceTitle')">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.serviceInstalledLabel') }}</NText>
+              <NTag :type="serviceInstalled ? 'success' : 'default'">
+                {{ serviceInstalled ? t('systemSettings.statusEnabled') : t('systemSettings.statusDisabled') }}
+              </NTag>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.serviceRunningLabel') }}</NText>
+              <NTag :type="serviceRunning ? 'success' : 'error'">
+                {{ serviceRunning ? t('appCard.running') : t('appCard.stopped') }}
+              </NTag>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <NText style="min-width: 160px;">{{ t('systemSettings.serviceAutostartLabel') }}</NText>
+              <SwitchToggle
+                :model-value="serviceAutostartEnabled"
+                :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+                @update:model-value="toggleServiceAutostart"
+              />
+            </div>
+            <div style="display: flex; justify-content: flex-start; gap: 8px; margin-top: 8px; padding-left: 176px;">
+              <NButton
+                type="error" size="small"
+                :loading="serviceActionPending === 'stop'"
+                :disabled="loading || saving || !serviceInstalled || !serviceRunning || Boolean(serviceActionPending)"
+                @click="triggerServiceAction('stop')"
+              >
+                <template #icon><NIcon><Square /></NIcon></template>
+                {{ t('systemSettings.serviceStopButton') }}
+              </NButton>
+              <NButton
+                type="error" size="small"
+                :loading="serviceActionPending === 'uninstall'"
+                :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+                @click="triggerServiceAction('uninstall')"
+              >
+                <template #icon><NIcon><Trash2 /></NIcon></template>
+                {{ t('systemSettings.serviceUninstallButton') }}
+              </NButton>
+              <NButton
+                size="small"
+                :loading="serviceActionPending === 'restart'"
+                :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+                @click="triggerServiceAction('restart')"
+              >
+                <template #icon><NIcon><RotateCcw /></NIcon></template>
+                {{ t('systemSettings.serviceRestartButton') }}
+              </NButton>
+            </div>
+          </div>
+        </NCard>
+      </NGi>
 
-    <div v-if="showAptSourcesModal" class="modal-overlay">
+      <NGi>
+        <NCard :title="t('systemSettings.osParamsTitle')">
+          <div v-if="!osRows.length">
+             <NText depth="3">{{ t('systemSettings.osParamsEmpty') }}</NText>
+          </div>
+          <div v-else class="table-wrap">
+            <table class="config-table compact" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>{{ t('appConfigCenter.colPath') }}</th>
+                  <th>{{ t('appConfigCenter.colCurrent') }}</th>
+                  <th>{{ t('appConfigCenter.colType') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in osRows" :key="`os:${row.path}`">
+                  <td class="mono-cell">{{ row.path }}</td>
+                  <td>
+                    <div class="config-edit-cell">
+                      <NCheckbox
+                        v-if="row.type === 'boolean'"
+                        :checked="Boolean(getOsCellValue(row))"
+                        @update:checked="(val) => onOsBooleanChange(row, val)"
+                      >
+                        {{ Boolean(getOsCellValue(row)) ? 'true' : 'false' }}
+                      </NCheckbox>
+                      <NSelect
+                        v-else-if="getOsEnumOptions(row).length"
+                        size="small"
+                        :value="String(getOsCellValue(row) ?? '')"
+                        :options="getOsEnumOptions(row).map(o => ({ label: o.value, value: o.value, disabled: o.disabled }))"
+                        @update:value="(val) => onOsEnumChange(row, val)"
+                      />
+                      <NInput
+                        v-else
+                        size="small"
+                        :value="displayOsValue(row)"
+                        @update:value="(val) => onOsTextChange(row, val)"
+                      />
+                      <p v-if="getOsCellError(row)" class="error-text" style="margin-top: 4px; font-size: 12px;">
+                        {{ t('systemSettings.osInvalidValue') }}: {{ getOsCellError(row) }}
+                      </p>
+                    </div>
+                  </td>
+                  <td><NTag size="small">{{ row.type || '-' }}</NTag></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </NCard>
+      </NGi>
+    </NGrid>
+
+    <NModal v-model:show="showPasswordModal" preset="card" style="width: 400px;" :title="t('systemSettings.confirmPasswordTitle')" @after-leave="closePasswordModal">
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <NText depth="3">{{ enabled ? t('systemSettings.confirmDisableHint') : t('systemSettings.confirmEnableHint') }}</NText>
+        <NInput
+          v-model:value="sudoPassword"
+          type="password"
+          show-password-on="click"
+          :placeholder="t('systemSettings.sudoPasswordPlaceholder')"
+          :disabled="saving"
+          @keydown.enter="submitToggle"
+        />
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+          <NButton @click="closePasswordModal" :disabled="saving">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="saving" :disabled="!sudoPassword.trim()" @click="submitToggle">{{ t('systemSettings.confirm') }}</NButton>
+        </div>
+      </div>
+    </NModal>
+
+    <!-- Keeping AptSourcesModal partially custom because it uses complex apt editors not easily replaced by standard inputs -->
+    <div v-if="showAptSourcesModal" class="modal-overlay" style="z-index: 100;">
       <section class="modal-card modal-wide apt-modal">
         <header class="modal-header">
           <h3>{{ t('systemSettings.aptSourcesTitle') }}</h3>
@@ -327,12 +287,12 @@ const {
         <p class="muted">{{ aptSourcesPath }}</p>
 
         <div class="panel-actions wrap">
-          <button class="btn" :disabled="aptSourcesLoading || aptSourcesWriting" @click="loadAptSources">
-            {{ aptSourcesLoading ? t('common.loadingShort') : t('systemSettings.aptRead') }}
-          </button>
-          <button class="btn primary" :disabled="aptSourcesLoading || aptSourcesWriting" @click="requestWriteAptSources">
-            {{ aptSourcesWriting ? t('common.processing') : t('systemSettings.aptWrite') }}
-          </button>
+          <NButton :loading="aptSourcesLoading" :disabled="aptSourcesWriting" @click="loadAptSources">
+            {{ t('systemSettings.aptRead') }}
+          </NButton>
+          <NButton type="primary" :loading="aptSourcesWriting" :disabled="aptSourcesLoading" @click="requestWriteAptSources">
+            {{ t('systemSettings.aptWrite') }}
+          </NButton>
         </div>
 
         <div class="field">
@@ -389,50 +349,23 @@ const {
           <pre class="log-output">{{ aptUpdateOutput }}</pre>
         </div>
 
-        <div v-if="showAptPasswordModal" class="modal-overlay modal-overlay-inner" @click.self="closeAptPasswordModal">
-          <section class="modal-card">
-            <header class="modal-header">
-              <h3>{{ t('systemSettings.aptConfirmPasswordTitle') }}</h3>
-            </header>
-
-            <p class="muted">
-              {{ aptPendingAction === 'restore' ? t('systemSettings.aptConfirmRestoreHint') : t('systemSettings.aptConfirmWriteHint') }}
-            </p>
-
-            <div class="field">
-              <label for="apt-modal-password-input">{{ t('systemSettings.sudoPassword') }}</label>
-              <div class="inline-row">
-                <input
-                  id="apt-modal-password-input"
-                  v-model="aptSudoPassword"
-                  class="mono-input"
-                  :type="showAptSudoPassword ? 'text' : 'password'"
-                  :placeholder="t('systemSettings.sudoPasswordPlaceholder')"
-                  :disabled="aptSourcesWriting"
-                  autocomplete="current-password"
-                  @keydown.enter="submitAptAction"
-                >
-                <button
-                  class="btn"
-                  type="button"
-                  :disabled="aptSourcesWriting"
-                  @click="showAptSudoPassword = !showAptSudoPassword"
-                >
-                  {{ showAptSudoPassword ? t('systemSettings.hidePassword') : t('systemSettings.showPassword') }}
-                </button>
-              </div>
-            </div>
-
-            <div class="panel-actions">
-              <button class="btn" :disabled="aptSourcesWriting" @click="closeAptPasswordModal">
-                {{ t('common.cancel') }}
-              </button>
-              <button class="btn primary" :disabled="aptSourcesWriting || !aptSudoPassword.trim()" @click="submitAptAction">
-                {{ aptSourcesWriting ? t('common.processing') : t('systemSettings.confirm') }}
-              </button>
-            </div>
-          </section>
-        </div>
+        <NModal v-model:show="showAptPasswordModal" preset="card" style="width: 400px;" :title="t('systemSettings.aptConfirmPasswordTitle')" @after-leave="closeAptPasswordModal">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+             <NText depth="3">{{ aptPendingAction === 'restore' ? t('systemSettings.aptConfirmRestoreHint') : t('systemSettings.aptConfirmWriteHint') }}</NText>
+             <NInput
+               v-model:value="aptSudoPassword"
+               type="password"
+               show-password-on="click"
+               :placeholder="t('systemSettings.sudoPasswordPlaceholder')"
+               :disabled="aptSourcesWriting"
+               @keydown.enter="submitAptAction"
+             />
+             <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+               <NButton @click="closeAptPasswordModal" :disabled="aptSourcesWriting">{{ t('common.cancel') }}</NButton>
+               <NButton type="primary" :loading="aptSourcesWriting" :disabled="!aptSudoPassword.trim()" @click="submitAptAction">{{ t('systemSettings.confirm') }}</NButton>
+             </div>
+          </div>
+        </NModal>
       </section>
     </div>
   </section>

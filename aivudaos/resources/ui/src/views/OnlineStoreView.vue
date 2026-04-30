@@ -2,6 +2,8 @@
 import { useI18n } from 'vue-i18n'
 import StoreAppCard from '../components/store/StoreAppCard.vue'
 import { useOnlineStorePage } from '../composables/useOnlineStorePage'
+import { NCard, NSpace, NButton, NInput, NText, NAlert, NIcon, NEmpty } from 'naive-ui'
+import { RefreshCw, Search, Send, ExternalLink, Download } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const {
@@ -24,99 +26,79 @@ const {
 </script>
 
 <template>
-  <section class="apps-panel">
-    <header class="panel-header">
-      <div class="panel-actions panel-title-actions">
-        <h2>{{ t('store.title') }}</h2>
-        <button class="btn btn-stable-refresh" :disabled="loading" @click="load">
-          {{ loading ? t('common.refreshing') : t('common.refresh') }}
-        </button>
-      </div>
-    </header>
-
-    <article class="store-setting-panel">
-      <label class="muted" for="store-address-input">{{ t('store.addressLabel') }}</label>
-      <div class="panel-actions wrap store-address-row">
-        <input
-          id="store-address-input"
-          v-model="storeAddress"
-          class="select-input store-address-input"
-          type="text"
-          :placeholder="t('store.addressPlaceholder')"
-          @keydown.enter.prevent="saveAddress"
-        >
-        <button
-          type="button"
-          class="btn primary store-address-confirm-btn"
-          :disabled="savingAddress"
-          @click="saveAddress"
-        >
-          {{ savingAddress ? t('common.processing') : t('common.submit') }}
-        </button>
-      </div>
-      <p class="muted">
-        {{ t('store.addressConnectionHint') }}
-        <a
-          href="https://pypi.org/project/aivudaappstore/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          https://pypi.org/project/aivudaappstore/
-        </a>
-      </p>
-      <p v-if="addressError" class="error-text">{{ addressError }}</p>
-      <p v-if="showAddressManualCheckHint" class="muted">
-        {{ t('store.addressManualCheckHint') }}
-        <a
-          :href="normalizedStoreAddress"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {{ normalizedStoreAddress }}
-        </a>
-        <span> / </span>
-        <a
-          :href="storeCertificateDownloadUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          @click="openStoreCertificate"
-        >
-          {{ t('store.addressDownloadCertificateLink') }}
-        </a>
-      </p>
-      <p v-if="addressCertificateHintVisible" class="muted">
-        {{ t('store.addressCertificateHintPrefix') }}
-        <a :href="t('systemSettings.caddyLocalCaChromeUrl')">
-          {{ t('systemSettings.caddyLocalCaChromeUrl') }}
-        </a>
-        {{ t('store.addressCertificateHintMiddle') }}
-        <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
-        {{ t('store.addressCertificateHintImport') }}
-        <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
-        {{ t('store.addressCertificateHintSuffix') }}
-      </p>
-    </article>
-
-    <article class="store-setting-panel">
-      <div class="panel-actions wrap store-inline-form-row">
-        <div class="search-input-shell store-search-input-shell">
-          <input
-            id="store-search-input"
-            v-model="searchText"
-            class="select-input search-input-with-clear"
-            type="text"
-            :placeholder="t('store.searchPlaceholder')"
-          >
-          <button v-if="String(searchText || '')" type="button" class="search-clear-btn" @click="searchText = ''">x</button>
-        </div>
-      </div>
-    </article>
-
-    <p v-if="error" class="error-text">{{ error }}</p>
-
-    <div v-if="!hasItems && !loading" class="empty-box">
-      {{ t('store.empty') }}
+  <section>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+      <NText style="font-size: 20px; font-weight: 600;">{{ t('store.title') }}</NText>
+      <NButton secondary size="small" :loading="loading" @click="load">
+        <template #icon><NIcon><RefreshCw /></NIcon></template>
+        {{ t('common.refresh') }}
+      </NButton>
     </div>
+
+    <NSpace vertical :size="16" style="margin-bottom: 24px;">
+      <NCard>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <NText depth="3" style="font-size: 13px;">{{ t('store.addressLabel') }}</NText>
+          <div style="display: flex; gap: 8px;">
+            <NInput
+              v-model:value="storeAddress"
+              :placeholder="t('store.addressPlaceholder')"
+              @keydown.enter.prevent="saveAddress"
+              style="flex: 1;"
+            />
+            <NButton type="primary" :loading="savingAddress" @click="saveAddress">
+              <template #icon><NIcon><Send /></NIcon></template>
+              {{ t('common.submit') }}
+            </NButton>
+          </div>
+          <NText depth="3" style="font-size: 13px; margin-top: 4px;">
+            {{ t('store.addressConnectionHint') }}
+            <a href="https://pypi.org/project/aivudaappstore/" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">https://pypi.org/project/aivudaappstore/</a>
+          </NText>
+          <NAlert v-if="addressError" type="error" style="margin-top: 8px;">{{ addressError }}</NAlert>
+
+          <NAlert v-if="showAddressManualCheckHint" type="info" style="margin-top: 8px;">
+            {{ t('store.addressManualCheckHint') }}
+            <a :href="normalizedStoreAddress" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+              {{ normalizedStoreAddress }} <NIcon><ExternalLink size="14"/></NIcon>
+            </a>
+             /
+            <a :href="storeCertificateDownloadUrl" target="_blank" rel="noopener noreferrer" @click="openStoreCertificate" style="color: #3b82f6;">
+              {{ t('store.addressDownloadCertificateLink') }} <NIcon><Download size="14"/></NIcon>
+            </a>
+          </NAlert>
+
+          <NAlert v-if="addressCertificateHintVisible" type="warning" style="margin-top: 8px;">
+            {{ t('store.addressCertificateHintPrefix') }}
+            <a :href="t('systemSettings.caddyLocalCaChromeUrl')" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+              {{ t('systemSettings.caddyLocalCaChromeUrl') }}
+            </a>
+            {{ t('store.addressCertificateHintMiddle') }}
+            <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
+            {{ t('store.addressCertificateHintImport') }}
+            <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
+            {{ t('store.addressCertificateHintSuffix') }}
+          </NAlert>
+        </div>
+      </NCard>
+
+      <NCard>
+         <NInput
+            v-model:value="searchText"
+            :placeholder="t('store.searchPlaceholder')"
+            clearable
+            style="max-width: 480px;"
+          >
+            <template #prefix>
+              <NIcon><Search /></NIcon>
+            </template>
+          </NInput>
+      </NCard>
+    </NSpace>
+
+    <NAlert v-if="error" type="error" style="margin-bottom: 24px;">{{ error }}</NAlert>
+
+    <NEmpty v-if="!hasItems && !loading" :description="t('store.empty')" style="margin-top: 48px;" />
 
     <div class="apps-grid">
       <StoreAppCard

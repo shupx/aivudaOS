@@ -1,6 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { NCard, NAvatar, NText, NTag } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -19,25 +23,39 @@ function goDetail() {
 </script>
 
 <template>
-  <article
-    class="app-card card-clickable"
-    tabindex="0"
+  <NCard
+    hoverable
     @click="goDetail"
-    @keydown.enter.prevent="goDetail"
-    @keydown.space.prevent="goDetail"
+    :style="{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }"
+    :content-style="{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, gap: '16px' }"
   >
-    <header class="app-card-header">
-      <div class="app-title-wrap">
-        <img class="app-icon" src="/app-default-icon.png" alt="store app icon">
-        <h3>{{ title }}</h3>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+        <NAvatar
+          src="/app-default-icon.png"
+          :size="48"
+          style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
+        />
+        <div style="min-width: 0; display: flex; flex-direction: column;">
+          <NText
+            strong
+            style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+          >
+            {{ title }}
+          </NText>
+        </div>
       </div>
-      <span class="app-version">{{ item.version || '-' }}</span>
-    </header>
-
-    <div class="app-meta">
-      <p><strong>{{ $t('store.appId') }}:</strong> {{ item.app_id }}</p>
-      <p><strong>{{ $t('store.description') }}:</strong> {{ description || $t('store.noDescription') }}</p>
-      <p><strong>{{ $t('store.updatedAt') }}:</strong> {{ item.updated_at_display || '-' }}</p>
+      <div style="flex-shrink: 0;">
+        <NTag type="info" size="small">{{ item.version || '-' }}</NTag>
+      </div>
     </div>
-  </article>
+
+    <div style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; flex: 1;">
+      <NText depth="3" style="font-size: 12px;">{{ item.app_id }}</NText>
+      <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">
+        {{ description || t('store.noDescription') }}
+      </div>
+      <NText depth="3" style="font-size: 12px; margin-top: auto;">{{ t('store.updatedAt') }}: {{ item.updated_at_display || '-' }}</NText>
+    </div>
+  </NCard>
 </template>
