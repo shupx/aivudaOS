@@ -17,6 +17,12 @@ const systemResizeLineLefts = ref([])
 let stopSystemColumnResize = null
 let systemResizeFrame = 0
 
+const objectEditorRows = computed(() => {
+  const text = String(arrayEditorJsonText.value || '')
+  const lineCount = text ? text.split('\n').length : 1
+  return Math.min(Math.max(lineCount + 1, 8), 28)
+})
+
 function startSystemColumnResize(index, event) {
   event.preventDefault()
   const startX = event.clientX
@@ -521,7 +527,10 @@ const systemEnumDrafts = useDeferredFieldDrafts({
     />
 
     <div v-if="arrayEditorVisible" class="modal-overlay">
-      <section class="modal-card modal-wide modal-resizable config-array-editor-modal">
+      <section
+        class="modal-card modal-wide modal-resizable config-array-editor-modal"
+        :class="{ 'config-array-editor-modal-object': arrayEditorValueType === 'object' }"
+      >
         <header class="modal-header">
           <h3>{{ arrayEditorTitle }}</h3>
             <div class="modal-header-actions" style="display: flex; gap: 4px;">
@@ -583,6 +592,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
             <textarea
               class="text-area config-array-editor-json"
               v-model="arrayEditorJsonText"
+              :rows="objectEditorRows"
             ></textarea>
           </template>
         </div>

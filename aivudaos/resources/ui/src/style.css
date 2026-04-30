@@ -1064,6 +1064,12 @@ label.config-default-changed-value {
   overflow: hidden;
 }
 
+.config-array-editor-modal-object {
+  min-height: 0;
+  height: auto;
+  max-height: min(82vh, 820px);
+}
+
 .config-array-editor-body {
   min-height: 0;
   display: flex;
@@ -1127,6 +1133,19 @@ label.config-default-changed-value {
   height: 100%;
   resize: none;
   box-sizing: border-box;
+}
+
+.config-array-editor-modal-object .config-array-editor-body {
+  min-height: 0;
+}
+
+.config-array-editor-modal-object .config-array-editor-json {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 220px;
+  max-height: min(64vh, 680px);
+  overflow-y: auto;
+  resize: vertical;
 }
 
 .config-app-title-row td {
