@@ -101,16 +101,16 @@ const {
       />
     </div>
 
-    <NCard v-if="app" :title="t('appDetail.logTitle')" style="margin-bottom: 24px;">
+    <NCard v-if="app" class="app-detail-log-card" :title="t('appDetail.logTitle')" style="margin-bottom: 24px;">
       <template #header-extra>
-        <NSpace>
-          <NButton size="small" :loading="logBusy" @click="loadLogs">
+        <NSpace class="app-detail-log-actions" :wrap="true">
+          <NButton class="app-detail-log-action-btn" size="small" :loading="logBusy" @click="loadLogs">
             <template #icon><NIcon><Download /></NIcon></template>
-            {{ t('appDetail.pullLatest') }}
+            <span class="app-detail-log-action-label">{{ t('appDetail.pullLatest') }}</span>
           </NButton>
-          <NButton size="small" @click="clearAndReloadLogs">
+          <NButton class="app-detail-log-action-btn" size="small" @click="clearAndReloadLogs">
             <template #icon><NIcon><RefreshCw /></NIcon></template>
-            {{ t('appDetail.clearAndReload') }}
+            <span class="app-detail-log-action-label">{{ t('appDetail.clearAndReload') }}</span>
           </NButton>
         </NSpace>
       </template>
@@ -264,3 +264,57 @@ const {
     </NModal>
   </section>
 </template>
+
+<style scoped>
+.app-detail-log-card :deep(.n-card-header) {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.app-detail-log-card :deep(.n-card-header__main),
+.app-detail-log-card :deep(.n-card-header__extra),
+.app-detail-log-card :deep(.n-card__content) {
+  min-width: 0;
+}
+
+.app-detail-log-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+.app-detail-log-action-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-detail-log-action-btn :deep(.n-button__content) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-detail-log-action-label {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .app-detail-log-card :deep(.n-card-header) {
+    flex-wrap: wrap;
+  }
+
+  .app-detail-log-card :deep(.n-card-header__extra) {
+    width: 100%;
+  }
+
+  .app-detail-log-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+</style>
