@@ -106,6 +106,7 @@ const props = defineProps({
   magnets: { type: Array, default: () => [] },
   magnetConflicts: { type: Array, default: () => [] },
   collapsed: { type: Boolean, default: true },
+  highlightedMagnetPath: { type: String, default: '' },
   toggleCollapsed: { type: Function, required: true },
   getMagnetRowId: { type: Function, required: true },
   getMagnetValue: { type: Function, required: true },
@@ -186,7 +187,12 @@ const magnetBooleanDrafts = useDeferredFieldDrafts({
               </tr>
             </thead>
             <tbody>
-              <tr v-for="group in magnets" :id="getMagnetRowId(group.path)" :key="group.group_id">
+              <tr
+                v-for="group in magnets"
+                :id="getMagnetRowId(group.path)"
+                :key="group.group_id"
+                :class="{ 'magnet-row-highlighted': highlightedMagnetPath === group.path }"
+              >
                 <td class="mono-cell">{{ group.path }}</td>
                 <td>
                   <label v-if="group.value_type === 'boolean'" class="check-item">
@@ -234,3 +240,38 @@ const magnetBooleanDrafts = useDeferredFieldDrafts({
     </div>
   </NCard>
 </template>
+
+<style scoped>
+.magnet-row-highlighted td {
+  background: #fef3c7;
+  box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.22), inset 0 -1px 0 rgba(245, 158, 11, 0.22);
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+  animation: magnet-row-highlight-pulse 2.2s ease;
+}
+
+@keyframes magnet-row-highlight-pulse {
+  0% {
+    background: #fde68a;
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.38);
+  }
+
+  55% {
+    background: #fef3c7;
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.28);
+  }
+
+  100% {
+    background: #fef3c7;
+    box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.22), inset 0 -1px 0 rgba(245, 158, 11, 0.22);
+  }
+}
+
+:global(body.dark-mode) .magnet-row-highlighted td {
+  background: rgba(245, 158, 11, 0.2);
+  box-shadow: inset 0 1px 0 rgba(251, 191, 36, 0.3), inset 0 -1px 0 rgba(251, 191, 36, 0.3);
+}
+
+:global(body.dark-mode) .magnet-row-highlighted {
+  animation: none;
+}
+</style>

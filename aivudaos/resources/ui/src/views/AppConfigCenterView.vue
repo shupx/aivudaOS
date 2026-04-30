@@ -119,6 +119,7 @@ const {
   magnets,
   magnetConflicts,
   magnetCollapsed,
+  highlightedMagnetPath,
   loadAllConfigs,
   goBackApps,
   setSelectedAppId,
@@ -244,6 +245,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         :magnets="magnets"
         :magnet-conflicts="magnetConflicts"
         :collapsed="magnetCollapsed"
+        :highlighted-magnet-path="highlightedMagnetPath"
         :toggle-collapsed="toggleMagnetCollapsed"
         :get-magnet-row-id="getMagnetRowId"
         :get-magnet-value="getMagnetValue"

@@ -30,6 +30,7 @@ export function useAppConfigCenterPage() {
   const magnetConflicts = ref([])
   const magnetSaving = ref(false)
   const magnetCollapsed = ref(true)
+  const highlightedMagnetPath = ref('')
   const sysDraftData = ref({})
   const sysOriginalData = ref({})
   const sysVersion = ref(0)
@@ -49,6 +50,7 @@ export function useAppConfigCenterPage() {
   const collapsedGroups = ref({})
   const touchedGroups = ref({})
   let needRestartToastTimer = null
+  let magnetHighlightTimer = null
   const showSystemAddModal = ref(false)
   const newSystemPath = ref('')
   const newSystemValue = ref('')
@@ -1015,13 +1017,39 @@ export function useAppConfigCenterPage() {
     return `magnet-row-${safe}`
   }
 
+  function setHighlightedMagnetPath(path) {
+    highlightedMagnetPath.value = String(path || '').trim()
+    if (magnetHighlightTimer) {
+      clearTimeout(magnetHighlightTimer)
+      magnetHighlightTimer = null
+    }
+    if (!highlightedMagnetPath.value) return
+    magnetHighlightTimer = window.setTimeout(() => {
+      highlightedMagnetPath.value = ''
+      magnetHighlightTimer = null
+    }, 2600)
+  }
+
+  async function findMagnetRowElement(path, retries = 8) {
+    const rowId = getMagnetRowId(path)
+    for (let attempt = 0; attempt < retries; attempt += 1) {
+      await nextTick()
+      const element = document.getElementById(rowId)
+      if (element) return element
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 60)
+      })
+    }
+    return null
+  }
+
   async function jumpToMagnetByPath(path) {
     const targetPath = String(path || '').trim()
     if (!targetPath) return
     openMagnetPanel()
-    await nextTick()
-    const element = document.getElementById(getMagnetRowId(targetPath))
+    const element = await findMagnetRowElement(targetPath)
     if (!element) return
+    setHighlightedMagnetPath(targetPath)
     element.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
 
@@ -1280,6 +1308,7 @@ export function useAppConfigCenterPage() {
     magnetConflicts,
     magnetSaving,
     magnetCollapsed,
+    highlightedMagnetPath,
     loadAllConfigs,
     goBackApps,
     toggleMagnetCollapsed,
