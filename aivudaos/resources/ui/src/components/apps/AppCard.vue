@@ -91,6 +91,7 @@ function onIconError() {
 
 <template>
   <NCard
+    class="apps-app-card"
     :id="cardId || undefined"
     hoverable
     :style="{ borderColor: highlighted ? '#f59e0b' : undefined, borderWidth: highlighted ? '2px' : '1px', cursor: clickable ? 'pointer' : 'default', display: 'flex', flexDirection: 'column' }"
@@ -101,7 +102,7 @@ function onIconError() {
       <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
         <NAvatar
           :src="iconSrc"
-          :size="compact ? 36 : 48"
+          :size="compact ? 36 : 40"
           fallback-src="/app-default-icon.png"
           @error="onIconError"
           style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
@@ -170,6 +171,15 @@ function onIconError() {
 </template>
 
 <style scoped>
+.apps-app-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.apps-app-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}
+
 .app-name-hover:hover {
   color: #2563eb;
   text-decoration: underline;

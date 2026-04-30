@@ -678,7 +678,7 @@ input {
 }
 
 .app-detail-card-wrap {
-  max-width: min(780px, 100%);
+  max-width: min(620px, 100%);
 }
 
 .config-center-section {
@@ -718,12 +718,6 @@ input {
 
 .config-section-icon-btn {
   flex: 0 0 auto;
-}
-
-.config-section-header-hint {
-  min-width: 0;
-  white-space: normal;
-  text-align: right;
 }
 
 .config-section-body {
@@ -950,12 +944,26 @@ input {
 }
 
 .config-default-value-modal-textarea {
-  min-height: 320px;
-  height: min(60vh, 560px);
-  resize: vertical;
+  min-height: 0;
+  height: auto;
+  max-height: min(70vh, 720px);
+  resize: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+  overflow-y: auto;
+}
+
+.config-default-value-modal-card {
+  width: min(1000px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.config-default-value-modal-textarea-json {
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 2;
 }
 
 .config-edit-cell {
@@ -1723,11 +1731,6 @@ label.config-default-changed-value {
   .log-panel {
     padding: 14px;
   }
-
-  .config-section-header-hint {
-    width: 100%;
-    text-align: left;
-  }
 }
 
 @media (max-width: 720px) {
@@ -1851,4 +1854,17 @@ body.dark-mode .config-clipped-textarea {
 body.dark-mode .log-output {
   background-color: #020617;
   border-color: #334155;
+}
+
+.apps-upload-btn {
+  min-width: 0;
+  max-width: min(100%, 240px);
+}
+
+.apps-upload-btn-label {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }

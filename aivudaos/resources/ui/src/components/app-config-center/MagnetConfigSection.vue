@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
-import { NCard, NButton, NText, NIcon } from 'naive-ui'
+import { NCard, NButton, NIcon } from 'naive-ui'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 
 const { t } = useI18n()
@@ -164,9 +164,6 @@ const magnetBooleanDrafts = useDeferredFieldDrafts({
             </template>
           </NButton>
         </div>
-        <NText depth="3" class="config-section-header-hint">
-          {{ collapsed ? t('appConfigCenter.magnetCollapsedHint') : t('appConfigCenter.magnetDesc') }}
-        </NText>
       </div>
     </template>
 

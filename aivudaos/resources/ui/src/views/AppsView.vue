@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
@@ -80,11 +81,11 @@ const {
   submitInteractiveInput,
 } = useAppsPanel()
 
-const sortOptions = [
+const sortOptions = computed(() => [
   { label: t('apps.sortByName') + (sortOption.value === 'name' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'name' },
   { label: t('apps.sortByAutostart') + (sortOption.value === 'autostart' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'autostart' },
-  { label: t('apps.sortByInstallationTime') + (sortOption.value === 'installed_at' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'installed_at' }
-]
+  { label: t('apps.sortByInstallationTime') + (sortOption.value === 'installed_at' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'installed_at' },
+])
 
 const handleSortSelect = (key) => {
   setSortOption(key)
@@ -93,7 +94,7 @@ const handleSortSelect = (key) => {
 
 <template>
   <section>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
       <NSpace align="center">
         <NText style="font-size: 20px; font-weight: 600;">{{ t('apps.title') }}</NText>
         <NButton secondary size="small" :loading="loading" @click="refresh">
@@ -101,9 +102,9 @@ const handleSortSelect = (key) => {
           {{ t('common.refresh') }}
         </NButton>
       </NSpace>
-      <NButton type="primary" size="small" @click="openUploadModal">
+      <NButton type="primary" size="small" class="apps-upload-btn" @click="openUploadModal">
         <template #icon><NIcon><Upload /></NIcon></template>
-        {{ t('apps.uploadLink') }}
+        <span class="apps-upload-btn-label">{{ t('apps.uploadLink') }}</span>
       </NButton>
     </div>
 

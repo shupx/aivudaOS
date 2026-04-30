@@ -13,6 +13,7 @@ const tableRef = ref(null)
 const headerRefs = ref([])
 const resizeLineLefts = ref([])
 const expandedDefaultValue = ref('')
+const expandedDefaultIsJson = ref(false)
 let stopColumnResize = null
 let resizeFrame = 0
 
@@ -71,11 +72,47 @@ function selectTextareaContent(event) {
 }
 
 function openDefaultValueModal(value) {
-  expandedDefaultValue.value = String(value ?? '')
+  const normalized = formatExpandedValue(value)
+  expandedDefaultValue.value = normalized.text
+  expandedDefaultIsJson.value = normalized.isJson
 }
 
 function closeDefaultValueModal() {
   expandedDefaultValue.value = ''
+  expandedDefaultIsJson.value = false
+}
+
+function formatExpandedValue(value) {
+  if (value === null || value === undefined) {
+    return { text: '', isJson: false }
+  }
+
+  if (typeof value === 'object') {
+    return {
+      text: JSON.stringify(value, null, 2),
+      isJson: true,
+    }
+  }
+
+  const rawText = String(value)
+  const trimmed = rawText.trim()
+  if (!trimmed) {
+    return { text: '', isJson: false }
+  }
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed && typeof parsed === 'object') {
+        return {
+          text: JSON.stringify(parsed, null, 2),
+          isJson: true,
+        }
+      }
+    } catch {}
+  }
+
+  return { text: rawText, isJson: false }
 }
 
 function rowDraftKey(row) {
@@ -167,6 +204,11 @@ const props = defineProps({
   onTextChange: { type: Function, required: true },
   jumpToMagnetByPath: { type: Function, required: true },
   valueToInlineText: { type: Function, required: true },
+})
+
+const expandedDefaultRows = computed(() => {
+  const lineCount = String(expandedDefaultValue.value || '').split('\n').length
+  return Math.min(Math.max(lineCount, 6), 24)
 })
 </script>
 
@@ -340,14 +382,16 @@ const props = defineProps({
     </div>
 
     <div v-if="expandedDefaultValue !== ''" class="modal-overlay" @click.self="closeDefaultValueModal">
-      <section class="modal-card modal-wide modal-resizable">
+      <section class="modal-card modal-wide config-default-value-modal-card">
         <header class="modal-header">
           <h3>{{ t('appConfigCenter.colDefault') }}</h3>
           <button class="modal-close-btn" @click="closeDefaultValueModal">×</button>
         </header>
         <textarea
           class="text-area config-default-value-modal-textarea"
+          :class="{ 'config-default-value-modal-textarea-json': expandedDefaultIsJson }"
           :value="expandedDefaultValue"
+          :rows="expandedDefaultRows"
           readonly
           spellcheck="false"
           @focus="selectTextareaContent"

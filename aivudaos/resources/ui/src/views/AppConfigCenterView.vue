@@ -398,7 +398,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           >
         </div>
 
-        <div class="field config-array-editor-body">
+        <div class="field">
           <label>{{ t('appConfigCenter.colSchema') }}</label>
           <select v-model="newSystemSchemaType" class="select-input">
             <option value="">{{ t('appConfigCenter.schemaTypeNone') }}</option>
