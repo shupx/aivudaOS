@@ -14,8 +14,10 @@ const headerRefs = ref([])
 const resizeLineLefts = ref([])
 const expandedDefaultValue = ref('')
 const expandedDefaultIsJson = ref(false)
+const defaultValueCopySuccess = ref(false)
 let stopColumnResize = null
 let resizeFrame = 0
+let defaultValueCopyTimer = null
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -67,19 +69,37 @@ function queueResizeLineUpdate() {
   })
 }
 
-function selectTextareaContent(event) {
-  event?.target?.select?.()
-}
-
 function openDefaultValueModal(value) {
   const normalized = formatExpandedValue(value)
   expandedDefaultValue.value = normalized.text
   expandedDefaultIsJson.value = normalized.isJson
+  defaultValueCopySuccess.value = false
 }
 
 function closeDefaultValueModal() {
   expandedDefaultValue.value = ''
   expandedDefaultIsJson.value = false
+  defaultValueCopySuccess.value = false
+  if (defaultValueCopyTimer) {
+    clearTimeout(defaultValueCopyTimer)
+    defaultValueCopyTimer = null
+  }
+}
+
+async function copyExpandedDefaultValue() {
+  const text = String(expandedDefaultValue.value || '')
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    defaultValueCopySuccess.value = true
+    if (defaultValueCopyTimer) {
+      clearTimeout(defaultValueCopyTimer)
+    }
+    defaultValueCopyTimer = window.setTimeout(() => {
+      defaultValueCopySuccess.value = false
+      defaultValueCopyTimer = null
+    }, 2000)
+  } catch {}
 }
 
 function formatExpandedValue(value) {
@@ -147,6 +167,10 @@ const enumDrafts = useDeferredFieldDrafts({
 onBeforeUnmount(() => {
   if (stopColumnResize) {
     stopColumnResize()
+  }
+  if (defaultValueCopyTimer) {
+    clearTimeout(defaultValueCopyTimer)
+    defaultValueCopyTimer = null
   }
   if (resizeFrame) {
     window.cancelAnimationFrame(resizeFrame)
@@ -385,7 +409,20 @@ const expandedDefaultRows = computed(() => {
       <section class="modal-card modal-wide config-default-value-modal-card">
         <header class="modal-header">
           <h3>{{ t('appConfigCenter.colDefault') }}</h3>
-          <button class="modal-close-btn" @click="closeDefaultValueModal">×</button>
+          <div class="modal-header-actions" style="display: flex; gap: 4px;">
+            <button
+              class="link-btn"
+              style="padding: 4px; display: inline-flex; align-items: center; color: var(--text-color-muted, #888); border: none; background: transparent; outline: none; border-radius: 4px; transition: color 0.2s; cursor: pointer;"
+              :style="defaultValueCopySuccess ? 'color: var(--success-color, #10b981) !important;' : ''"
+              @mouseenter="!defaultValueCopySuccess ? $event.currentTarget.style.color='var(--text-color, #333)' : null"
+              @mouseleave="!defaultValueCopySuccess ? $event.currentTarget.style.color='var(--text-color-muted, #888)' : null"
+              @click="copyExpandedDefaultValue"
+              :title="t('appConfigCenter.arrayEditorCopyContents')"
+            >
+              <svg v-if="!defaultValueCopySuccess" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </button>
+          </div>
         </header>
         <textarea
           class="text-area config-default-value-modal-textarea"
@@ -394,8 +431,6 @@ const expandedDefaultRows = computed(() => {
           :rows="expandedDefaultRows"
           readonly
           spellcheck="false"
-          @focus="selectTextareaContent"
-          @click="selectTextareaContent"
         ></textarea>
         <div class="panel-actions">
           <NButton @click="closeDefaultValueModal">{{ t('common.close') }}</NButton>
