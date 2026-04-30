@@ -8,6 +8,9 @@ export default {
     loadingShort: '...',
     status: 'Status',
     processing: 'Processing...',
+    lightMode: 'Light Mode',
+    darkMode: 'Dark Mode',
+    followSystem: 'Follow System',
   },
   dashboard: {
     systemStatus: 'System Status',
@@ -17,6 +20,7 @@ export default {
     systemSettings: 'System Settings',
     logout: 'Logout',
     language: 'Language',
+    theme: 'Theme',
     languageOptionZh: '简体中文',
     languageOptionEn: 'English',
   },

@@ -8,6 +8,9 @@ export default {
     loadingShort: '...',
     status: '状态',
     processing: '处理中...',
+    lightMode: '浅色模式',
+    darkMode: '深色模式',
+    followSystem: '跟随系统',
   },
   dashboard: {
     systemStatus: '系统状态',
@@ -17,6 +20,7 @@ export default {
     systemSettings: '系统设置',
     logout: '退出登录',
     language: '语言',
+    theme: '主题',
     languageOptionZh: '简体中文',
     languageOptionEn: 'English',
   },

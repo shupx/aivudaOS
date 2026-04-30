@@ -3,7 +3,7 @@ import { h, computed, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useDashboard } from '../composables/useDashboard'
-import { isDarkMode, toggleTheme } from '../state/themeState'
+import { isDarkMode, themeMode, setThemeMode } from '../state/themeState'
 import {
   NLayout,
   NLayoutSider,
@@ -27,6 +27,7 @@ import {
   Languages,
   Moon,
   Sun,
+  Monitor,
   ChevronLeft,
   ChevronRight
 } from 'lucide-vue-next'
@@ -122,9 +123,25 @@ const userOptions = computed(() => [
     ]
   },
   {
-    label: isDarkMode.value ? t('common.lightMode', 'Light Mode') : t('common.darkMode', 'Dark Mode'),
-    key: 'toggle-theme',
-    icon: isDarkMode.value ? renderIcon(Sun) : renderIcon(Moon)
+    label: t('dashboard.theme'),
+    key: 'theme',
+    icon: themeMode.value === 'system'
+      ? renderIcon(Monitor)
+      : (isDarkMode.value ? renderIcon(Moon) : renderIcon(Sun)),
+    children: [
+      {
+        label: t('common.lightMode'),
+        key: 'theme-light',
+      },
+      {
+        label: t('common.darkMode'),
+        key: 'theme-dark',
+      },
+      {
+        label: t('common.followSystem'),
+        key: 'theme-system',
+      }
+    ]
   },
   {
     type: 'divider',
@@ -142,8 +159,12 @@ const handleUserAction = (key) => {
     doLogout()
   } else if (key.startsWith('lang-')) {
     changeLocale(key.replace('lang-', ''))
-  } else if (key === 'toggle-theme') {
-    toggleTheme()
+  } else if (key === 'theme-light') {
+    setThemeMode('light')
+  } else if (key === 'theme-dark') {
+    setThemeMode('dark')
+  } else if (key === 'theme-system') {
+    setThemeMode('system')
   }
 }
 
