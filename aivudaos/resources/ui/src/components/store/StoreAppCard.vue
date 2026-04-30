@@ -24,6 +24,7 @@ function goDetail() {
 
 <template>
   <NCard
+    class="store-app-card"
     hoverable
     @click="goDetail"
     :style="{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }"
@@ -33,7 +34,7 @@ function goDetail() {
       <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
         <NAvatar
           src="/app-default-icon.png"
-          :size="48"
+          :size="40"
           style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
         />
         <div style="min-width: 0; display: flex; flex-direction: column;">
@@ -59,3 +60,14 @@ function goDetail() {
     </div>
   </NCard>
 </template>
+
+<style scoped>
+.store-app-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.store-app-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}
+</style>

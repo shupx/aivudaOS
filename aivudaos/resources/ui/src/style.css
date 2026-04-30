@@ -1144,7 +1144,7 @@ label.config-default-changed-value {
 
 .apps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -1486,7 +1486,7 @@ label.config-default-changed-value {
 }
 
 .apps-grid-compact {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
 }
 
 .app-card-compact .app-icon {
@@ -1617,6 +1617,33 @@ label.config-default-changed-value {
   justify-content: flex-start;
   gap: 10px;
   padding: 8px 0;
+  min-width: 0;
+}
+
+.setting-row-wrap {
+  flex-wrap: wrap;
+}
+
+.setting-row-label-fixed {
+  min-width: min(160px, 100%);
+  flex: 0 1 160px;
+}
+
+.setting-row-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.setting-actions-row {
+  align-items: flex-start;
+}
+
+.setting-actions-wrap {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .setting-row-label {
@@ -1746,6 +1773,11 @@ label.config-default-changed-value {
     min-width: 0;
     width: 100%;
     flex: 1 1 220px;
+  }
+
+  .setting-row-label-fixed {
+    flex-basis: 100%;
+    min-width: 0;
   }
 }
 

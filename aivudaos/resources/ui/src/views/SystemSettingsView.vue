@@ -96,32 +96,32 @@ const {
       <NGi>
         <NCard :title="t('systemSettings.currentUser')">
           <div style="display: flex; flex-direction: column; gap: 16px;">
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.currentUser') }}</NText>
-              <NText depth="3">{{ username || '-' }}</NText>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.currentUser') }}</NText>
+              <NText depth="3" class="setting-row-content">{{ username || '-' }}</NText>
             </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.passwordlessSudo') }}</NText>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.passwordlessSudo') }}</NText>
               <SwitchToggle
                 :model-value="enabled"
                 :disabled="loading || saving"
                 @update:model-value="toggleEnabled"
               />
             </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.reloginAction') }}</NText>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.reloginAction') }}</NText>
               <NButton type="error" size="small" :loading="reloginPending" :disabled="loading || saving" @click="reloginNow">
                 {{ t('systemSettings.reloginNow') }}
               </NButton>
             </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.aptSourcesAction') }}</NText>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.aptSourcesAction') }}</NText>
               <NButton size="small" :disabled="loading || saving" @click="openAptSourcesModal">
                 {{ t('systemSettings.aptSourcesButton') }}
               </NButton>
             </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.caddyLocalCaLabel') }}</NText>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.caddyLocalCaLabel') }}</NText>
               <NButton size="small" tag="a" :href="caddyLocalCaDownloadUrl" :disabled="loading || saving" @click.prevent="downloadCaddyLocalCa">
                 <template #icon><NIcon><Download /></NIcon></template>
                 {{ t('systemSettings.caddyLocalCaDownloadLink') }}
@@ -145,27 +145,7 @@ const {
       <NGi>
         <NCard :title="t('systemSettings.aivudaosServiceTitle')">
           <div style="display: flex; flex-direction: column; gap: 16px;">
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.serviceInstalledLabel') }}</NText>
-              <NTag :type="serviceInstalled ? 'success' : 'default'">
-                {{ serviceInstalled ? t('systemSettings.statusEnabled') : t('systemSettings.statusDisabled') }}
-              </NTag>
-            </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.serviceRunningLabel') }}</NText>
-              <NTag :type="serviceRunning ? 'success' : 'error'">
-                {{ serviceRunning ? t('appCard.running') : t('appCard.stopped') }}
-              </NTag>
-            </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <NText style="min-width: 160px;">{{ t('systemSettings.serviceAutostartLabel') }}</NText>
-              <SwitchToggle
-                :model-value="serviceAutostartEnabled"
-                :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
-                @update:model-value="toggleServiceAutostart"
-              />
-            </div>
-            <div style="display: flex; justify-content: flex-start; gap: 8px; margin-top: 8px; padding-left: 176px;">
+            <div class="setting-actions-wrap">
               <NButton
                 type="error" size="small"
                 :loading="serviceActionPending === 'stop'"
@@ -193,6 +173,26 @@ const {
                 <template #icon><NIcon><RotateCcw /></NIcon></template>
                 {{ t('systemSettings.serviceRestartButton') }}
               </NButton>
+            </div>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.serviceInstalledLabel') }}</NText>
+              <NTag :type="serviceInstalled ? 'success' : 'default'">
+                {{ serviceInstalled ? t('systemSettings.statusEnabled') : t('systemSettings.statusDisabled') }}
+              </NTag>
+            </div>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.serviceRunningLabel') }}</NText>
+              <NTag :type="serviceRunning ? 'success' : 'error'">
+                {{ serviceRunning ? t('appCard.running') : t('appCard.stopped') }}
+              </NTag>
+            </div>
+            <div class="setting-row setting-row-wrap">
+              <NText class="setting-row-label-fixed">{{ t('systemSettings.serviceAutostartLabel') }}</NText>
+              <SwitchToggle
+                :model-value="serviceAutostartEnabled"
+                :disabled="loading || saving || !serviceInstalled || Boolean(serviceActionPending)"
+                @update:model-value="toggleServiceAutostart"
+              />
             </div>
           </div>
         </NCard>
