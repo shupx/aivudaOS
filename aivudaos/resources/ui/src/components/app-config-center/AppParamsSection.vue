@@ -11,6 +11,7 @@ const tableWrapRef = ref(null)
 const tableRef = ref(null)
 const headerRefs = ref([])
 const resizeLineLefts = ref([])
+const expandedDefaultValue = ref('')
 let stopColumnResize = null
 let resizeFrame = 0
 
@@ -62,6 +63,18 @@ function queueResizeLineUpdate() {
   resizeFrame = window.requestAnimationFrame(() => {
     updateResizeLines()
   })
+}
+
+function selectTextareaContent(event) {
+  event?.target?.select?.()
+}
+
+function openDefaultValueModal(value) {
+  expandedDefaultValue.value = String(value ?? '')
+}
+
+function closeDefaultValueModal() {
+  expandedDefaultValue.value = ''
 }
 
 function rowDraftKey(row) {
@@ -297,7 +310,19 @@ const props = defineProps({
                   <p v-if="getCellError(item.row)" class="error-text">{{ t('appConfigCenter.invalidValue') }}: {{ getCellError(item.row) }}</p>
                 </div>
               </td>
-              <td class="mono-cell">{{ getDefaultText(item.row) }}</td>
+              <td
+                class="mono-cell config-clipped-cell config-clipped-cell-clickable"
+                :title="t('appConfigCenter.colDefault')"
+                @click="openDefaultValueModal(getDefaultText(item.row))"
+              >
+                <textarea
+                  class="config-clipped-textarea"
+                  :value="getDefaultText(item.row)"
+                  readonly
+                  spellcheck="false"
+                  tabindex="-1"
+                ></textarea>
+              </td>
               <td>{{ item.row.type || '-' }}</td>
               <td>{{ getRangeText(item.row) }}</td>
               <td>{{ getDescriptionText(item.row) }}</td>
@@ -313,6 +338,26 @@ const props = defineProps({
         :style="{ left: `${left}px` }"
         @pointerdown="startColumnResize(index, $event)"
       ></span>
+    </div>
+
+    <div v-if="expandedDefaultValue !== ''" class="modal-overlay" @click.self="closeDefaultValueModal">
+      <section class="modal-card modal-wide modal-resizable">
+        <header class="modal-header">
+          <h3>{{ t('appConfigCenter.colDefault') }}</h3>
+          <button class="modal-close-btn" @click="closeDefaultValueModal">×</button>
+        </header>
+        <textarea
+          class="text-area config-default-value-modal-textarea"
+          :value="expandedDefaultValue"
+          readonly
+          spellcheck="false"
+          @focus="selectTextareaContent"
+          @click="selectTextareaContent"
+        ></textarea>
+        <div class="panel-actions">
+          <button class="btn" @click="closeDefaultValueModal">{{ t('common.close') }}</button>
+        </div>
+      </section>
     </div>
   </article>
 </template>

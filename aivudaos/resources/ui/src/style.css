@@ -781,6 +781,52 @@ input {
   word-break: break-word;
 }
 
+.config-clipped-cell {
+  position: relative;
+  overflow: hidden;
+}
+
+.config-clipped-cell-clickable {
+  cursor: pointer;
+}
+
+.config-clipped-cell-clickable:hover {
+  background: #f8fafc;
+}
+
+.config-clipped-textarea {
+  position: absolute;
+  inset: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  outline: none;
+}
+
+.config-clipped-textarea:focus {
+  outline: none;
+}
+
+.config-default-value-modal-textarea {
+  min-height: 320px;
+  height: min(60vh, 560px);
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .config-edit-cell {
   display: grid;
   gap: 4px;
