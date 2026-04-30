@@ -28,19 +28,19 @@ const {
             <template #icon>
               <NIcon><LayoutGrid /></NIcon>
             </template>
-            {{ t('appBuiltInUi.backToApps') }}
+            <span class="built-in-ui-action-label">{{ t('appBuiltInUi.backToApps') }}</span>
           </NButton>
           <NButton class="built-in-ui-action-btn" @click="backToDetail">
             <template #icon>
               <NIcon><FileText /></NIcon>
             </template>
-            {{ t('appBuiltInUi.backToDetail') }}
+            <span class="built-in-ui-action-label">{{ t('appBuiltInUi.backToDetail') }}</span>
           </NButton>
           <NButton class="built-in-ui-action-btn built-in-ui-refresh-btn" @click="reloadFrame">
             <template #icon>
               <NIcon><RefreshCw /></NIcon>
             </template>
-            {{ t('appBuiltInUi.reload') }}
+            <span class="built-in-ui-action-label">{{ t('appBuiltInUi.reload') }}</span>
           </NButton>
         </NButtonGroup>
       </div>
@@ -67,13 +67,23 @@ const {
 </template>
 
 <style scoped>
+.panel-header {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
 .built-in-ui-actions {
   display: flex;
   justify-content: flex-end;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .built-in-ui-action-group {
   display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  max-width: 100%;
   border-radius: 14px;
   padding: 1px;
   background: rgba(148, 163, 184, 0.22);
@@ -82,6 +92,24 @@ const {
 
 .built-in-ui-action-btn {
   min-width: 0;
+}
+
+.built-in-ui-action-label {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.built-in-ui-action-group :deep(.n-button) {
+  min-width: 0;
+}
+
+.built-in-ui-action-group :deep(.n-button__content) {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .built-in-ui-action-group :deep(.n-button:first-child) {
@@ -100,5 +128,21 @@ const {
 
 .built-in-ui-refresh-btn:hover :deep(.n-icon) {
   transform: rotate(90deg);
+}
+
+@media (max-width: 760px) {
+  .built-in-ui-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .built-in-ui-action-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .built-in-ui-action-group :deep(.n-button) {
+    flex: 1 1 0;
+  }
 }
 </style>
