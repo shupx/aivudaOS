@@ -46,14 +46,16 @@ const {
 <template>
   <NModal :show="visible" @mask-click="closeByOverlay" :mask-closable="!busy">
     <NCard
+      class="upload-install-modal-card"
       style="width: min(720px, 95vw);"
+      :content-style="{ display: 'flex', flexDirection: 'column', gap: '16px', minHeight: '0' }"
       :title="t('apps.uploadModalTitle')"
       :bordered="false"
       size="huge"
       role="dialog"
       aria-modal="true"
     >
-      <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="upload-install-modal-body" style="display: flex; flex-direction: column; gap: 16px;">
         <NText v-if="hint" depth="3">{{ hint }}</NText>
 
         <div v-if="showFilePicker" style="display: flex; flex-direction: column; gap: 8px;">

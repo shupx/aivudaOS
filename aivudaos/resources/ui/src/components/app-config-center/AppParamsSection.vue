@@ -171,7 +171,7 @@ const props = defineProps({
 </script>
 
 <template>
-  <NCard style="margin-bottom: 24px;">
+  <NCard class="config-center-card" style="margin-bottom: 24px;">
     <template #header>
       <span style="font-size: 16px; font-weight: 600;">{{ t('appConfigCenter.tableTitle') }}</span>
     </template>

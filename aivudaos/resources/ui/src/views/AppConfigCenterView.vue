@@ -221,7 +221,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
 
 <template>
   <section class="apps-panel app-config-center-page">
-    <header class="panel-header app-config-center-header-sticky" style="margin-bottom: 24px;">
+    <header class="panel-header app-config-center-header-sticky config-center-shell" style="margin-bottom: 24px;">
       <div class="app-config-center-header-row" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
         <NSpace align="center">
           <NButton quaternary circle @click="goBackApps" :title="t('appConfigCenter.backToApps')">
@@ -239,7 +239,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       <NAlert v-else-if="success" type="success" style="margin-top: 12px;">{{ success }}</NAlert>
     </header>
 
-    <div class="app-config-center-magnet-sticky">
+    <div class="app-config-center-magnet-sticky config-center-shell">
       <MagnetConfigSection
         :magnets="magnets"
         :magnet-conflicts="magnetConflicts"
@@ -259,7 +259,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       />
     </div>
 
-    <article class="actions-panel config-center-section">
+    <article class="actions-panel config-center-section config-center-shell">
       <header class="log-header">
         <h3>{{ t('appConfigCenter.systemTitle') }}</h3>
       </header>

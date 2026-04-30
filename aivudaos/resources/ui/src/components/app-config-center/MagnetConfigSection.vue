@@ -143,7 +143,7 @@ const magnetBooleanDrafts = useDeferredFieldDrafts({
 </script>
 
 <template>
-  <NCard style="margin-bottom: 24px;">
+  <NCard class="config-center-card" style="margin-bottom: 24px;">
     <template #header>
       <div class="config-section-header">
         <div class="config-section-title-group">

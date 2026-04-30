@@ -276,6 +276,20 @@ input {
   --config-center-header-height: 64px;
   gap: 8px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.apps-panel > *,
+.app-config-center-page > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.config-center-shell {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-config-center-header-sticky {
@@ -308,6 +322,8 @@ input {
 .app-config-center-magnet-sticky {
   position: static;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .panel-header {
@@ -526,6 +542,19 @@ input {
   min-width: 0;
 }
 
+.config-center-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.config-center-card .n-card__content,
+.config-center-card .n-card-header,
+.config-center-card .n-card-header__main,
+.config-center-card .n-card-header__extra {
+  min-width: 0;
+}
+
 .actions-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -654,6 +683,8 @@ input {
 
 .config-center-section {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .config-center-toolbar {
@@ -697,6 +728,25 @@ input {
 
 .config-section-body {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.upload-install-modal-card {
+  resize: both;
+  overflow: hidden;
+  min-width: min(560px, 92vw);
+  min-height: 320px;
+  max-width: 95vw;
+  max-height: 90vh;
+}
+
+.upload-install-modal-card .n-card__content {
+  min-height: 0;
+}
+
+.upload-install-modal-body {
+  min-height: 0;
 }
 
 .text-area {
@@ -788,11 +838,13 @@ input {
   overflow-x: auto;
   overflow-y: visible;
   min-width: 0;
+  width: 100%;
   max-width: 100%;
 }
 
 .config-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
