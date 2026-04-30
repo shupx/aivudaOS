@@ -1863,7 +1863,7 @@ body.dark-mode .btn-array-editor:hover {
 }
 
 body.dark-mode .table-col-resize-line {
-  background-color: #334155;
+  background-color: transparent;
 }
 
 body.dark-mode .config-disabled-text {
