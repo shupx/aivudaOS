@@ -275,6 +275,7 @@ input {
   --config-center-sticky-top: 0px;
   --config-center-header-height: 64px;
   gap: 8px;
+  min-width: 0;
 }
 
 .app-config-center-header-sticky {
@@ -295,6 +296,8 @@ input {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .app-config-center-header-sticky .error-text,
@@ -304,6 +307,7 @@ input {
 
 .app-config-center-magnet-sticky {
   position: static;
+  min-width: 0;
 }
 
 .panel-header {
@@ -519,6 +523,7 @@ input {
   padding: 16px;
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .actions-grid {
@@ -624,10 +629,74 @@ input {
   background: #0b1020;
   color: #d1e3ff;
   padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  scrollbar-gutter: stable;
+}
+
+.app-log-output {
+  min-height: 420px;
+  max-height: min(72vh, 680px);
+}
+
+.modal-log-output {
+  min-height: 320px;
+  max-height: min(58vh, 560px);
+  resize: vertical;
+}
+
+.app-detail-card-wrap {
+  max-width: min(780px, 100%);
+}
+
+.config-center-section {
+  min-width: 0;
+}
+
+.config-center-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.config-center-filter-select {
+  min-width: min(360px, 100%);
+  max-width: 100%;
+}
+
+.config-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.config-section-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.config-section-icon-btn {
+  flex: 0 0 auto;
+}
+
+.config-section-header-hint {
+  min-width: 0;
+  white-space: normal;
+  text-align: right;
+}
+
+.config-section-body {
+  min-width: 0;
 }
 
 .text-area {
@@ -717,6 +786,9 @@ input {
 
 .table-wrap {
   overflow-x: auto;
+  overflow-y: visible;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .config-table {
@@ -732,6 +804,7 @@ input {
 
 .resizable-table-wrap {
   position: relative;
+  min-width: 0;
 }
 
 .config-table th,
@@ -1559,6 +1632,7 @@ label.config-default-changed-value {
     height: auto;
     overflow: visible;
     align-self: start;
+    padding: 12px;
   }
 
   .sidebar-top {
@@ -1590,6 +1664,33 @@ label.config-default-changed-value {
   .sidebar-bottom .select-input {
     flex: 0 1 auto;
     min-width: 120px;
+  }
+
+  .app-config-center-header-sticky,
+  .actions-panel,
+  .log-panel {
+    padding: 14px;
+  }
+
+  .config-section-header-hint {
+    width: 100%;
+    text-align: left;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-log-output {
+    min-height: 320px;
+  }
+
+  .modal-log-output {
+    min-height: 260px;
+  }
+
+  .config-center-filter-select {
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 220px;
   }
 }
 
@@ -1667,6 +1768,22 @@ body.dark-mode .muted {
   color: #94a3b8;
 }
 
+body.dark-mode .config-group-label,
+body.dark-mode .config-leaf-label {
+  color: #f8fafc;
+}
+
+body.dark-mode .config-default-changed-label {
+  color: #fbbf24;
+}
+
+body.dark-mode input.config-default-changed-value,
+body.dark-mode select.config-default-changed-value,
+body.dark-mode button.config-default-changed-value,
+body.dark-mode label.config-default-changed-value {
+  color: #fbbf24;
+}
+
 body.dark-mode .link-btn {
   color: #60a5fa;
 }
@@ -1677,4 +1794,9 @@ body.dark-mode .link-btn:hover {
 
 body.dark-mode .config-clipped-textarea {
   background-color: transparent;
+}
+
+body.dark-mode .log-output {
+  background-color: #020617;
+  border-color: #334155;
 }

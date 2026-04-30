@@ -176,12 +176,12 @@ const props = defineProps({
       <span style="font-size: 16px; font-weight: 600;">{{ t('appConfigCenter.tableTitle') }}</span>
     </template>
 
-    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+    <div class="config-center-toolbar" style="margin-bottom: 16px;">
       <NButton size="small" :title="areAllGroupsCollapsed() ? t('appConfigCenter.expand') : t('appConfigCenter.collapse')" @click="toggleAllGroupsCollapsed">{{ areAllGroupsCollapsed() ? '+' : '-' }}</NButton>
       <label class="muted" for="config-center-app-select-inline">{{ t('appConfigCenter.filterApp') }}</label>
       <select
         id="config-center-app-select-inline"
-        class="select-input"
+        class="select-input config-center-filter-select"
         :value="selectedAppId"
         @change="setSelectedAppId($event?.target?.value || '')"
       >

@@ -259,12 +259,12 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       />
     </div>
 
-    <article class="actions-panel">
+    <article class="actions-panel config-center-section">
       <header class="log-header">
         <h3>{{ t('appConfigCenter.systemTitle') }}</h3>
       </header>
 
-      <div class="panel-actions wrap" style="margin-bottom: 10px;">
+      <div class="panel-actions wrap config-center-toolbar" style="margin-bottom: 10px;">
         <NButton size="small" type="primary" @click="openSystemAddModal">
           <template #icon><NIcon><Plus /></NIcon></template>
           {{ t('appConfigCenter.systemAdd') }}

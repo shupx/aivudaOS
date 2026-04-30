@@ -2,7 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
-import { NCard, NButton, NText } from 'naive-ui'
+import { NCard, NButton, NText, NIcon } from 'naive-ui'
+import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -144,77 +145,95 @@ const magnetBooleanDrafts = useDeferredFieldDrafts({
 <template>
   <NCard style="margin-bottom: 24px;">
     <template #header>
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 16px; font-weight: 600;">{{ t('appConfigCenter.magnetTitle') }}</span>
-        <NButton size="small" @click="toggleCollapsed">
-          {{ collapsed ? t('appConfigCenter.expand') : t('appConfigCenter.collapse') }}
-        </NButton>
+      <div class="config-section-header">
+        <div class="config-section-title-group">
+          <span style="font-size: 16px; font-weight: 600;">{{ t('appConfigCenter.magnetTitle') }}</span>
+          <NButton
+            quaternary
+            circle
+            size="small"
+            class="config-section-icon-btn"
+            :title="collapsed ? t('appConfigCenter.expand') : t('appConfigCenter.collapse')"
+            @click="toggleCollapsed"
+          >
+            <template #icon>
+              <NIcon>
+                <ChevronRight v-if="collapsed" />
+                <ChevronDown v-else />
+              </NIcon>
+            </template>
+          </NButton>
+        </div>
+        <NText depth="3" class="config-section-header-hint">
+          {{ collapsed ? t('appConfigCenter.magnetCollapsedHint') : t('appConfigCenter.magnetDesc') }}
+        </NText>
       </div>
     </template>
 
-    <div style="display: flex; flex-direction: column; gap: 16px;">
-      <span class="muted">{{ t('appConfigCenter.magnetDesc') }}</span>
+    <div class="config-section-body">
+      <div v-if="!collapsed" style="display: flex; flex-direction: column; gap: 16px;">
+        <span class="muted">{{ t('appConfigCenter.magnetDesc') }}</span>
 
-      <div v-if="collapsed" class="muted"></div>
-      <div v-else-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
-      <div ref="tableWrapRef" v-else class="table-wrap resizable-table-wrap">
-        <table class="config-table compact config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
-          <colgroup>
-            <col v-for="(width, index) in columnWidths" :key="`magnet-col-${index}`" :style="{ width: `${width}px` }">
-          </colgroup>
-          <thead>
-            <tr>
-              <th :ref="setHeaderRef(0)">{{ t('appConfigCenter.colPath') }}</th>
-              <th :ref="setHeaderRef(1)">{{ t('appConfigCenter.colCurrent') }}</th>
-              <th :ref="setHeaderRef(2)">{{ t('appConfigCenter.colType') }}</th>
-              <th :ref="setHeaderRef(3)">{{ t('appConfigCenter.magnetBindings') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="group in magnets" :id="getMagnetRowId(group.path)" :key="group.group_id">
-              <td class="mono-cell">{{ group.path }}</td>
-              <td>
-                <label v-if="group.value_type === 'boolean'" class="check-item">
-                  <input
-                    :checked="magnetBooleanDrafts.getDraftValue(group)"
-                    type="checkbox"
-                    @change="magnetBooleanDrafts.setDraftValue(group, $event?.target?.checked)"
-                    @blur="magnetBooleanDrafts.commitDraft(group)"
+        <div v-if="!magnets.length" class="empty-box">{{ t('appConfigCenter.magnetEmpty') }}</div>
+        <div ref="tableWrapRef" v-else class="table-wrap resizable-table-wrap">
+          <table class="config-table compact config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
+            <colgroup>
+              <col v-for="(width, index) in columnWidths" :key="`magnet-col-${index}`" :style="{ width: `${width}px` }">
+            </colgroup>
+            <thead>
+              <tr>
+                <th :ref="setHeaderRef(0)">{{ t('appConfigCenter.colPath') }}</th>
+                <th :ref="setHeaderRef(1)">{{ t('appConfigCenter.colCurrent') }}</th>
+                <th :ref="setHeaderRef(2)">{{ t('appConfigCenter.colType') }}</th>
+                <th :ref="setHeaderRef(3)">{{ t('appConfigCenter.magnetBindings') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="group in magnets" :id="getMagnetRowId(group.path)" :key="group.group_id">
+                <td class="mono-cell">{{ group.path }}</td>
+                <td>
+                  <label v-if="group.value_type === 'boolean'" class="check-item">
+                    <input
+                      :checked="magnetBooleanDrafts.getDraftValue(group)"
+                      type="checkbox"
+                      @change="magnetBooleanDrafts.setDraftValue(group, $event?.target?.checked)"
+                      @blur="magnetBooleanDrafts.commitDraft(group)"
+                    >
+                    {{ magnetBooleanDrafts.getDraftValue(group) ? 'true' : 'false' }}
+                  </label>
+                  <NButton
+                    v-else-if="isArrayEditableMagnet(group)"
+                    size="small"
+                    style="width: 100%; justify-content: flex-start; font-family: monospace;"
+                    @click="openArrayEditorForMagnet(group)"
                   >
-                  {{ magnetBooleanDrafts.getDraftValue(group) ? 'true' : 'false' }}
-                </label>
-                <NButton
-                  v-else-if="isArrayEditableMagnet(group)"
-                  size="small"
-                  style="width: 100%; justify-content: flex-start; font-family: monospace;"
-                  @click="openArrayEditorForMagnet(group)"
-                >
-                  {{ getArrayPreviewText(getMagnetValue(group)) }}
-                </NButton>
-                <input
-                  v-else
-                  class="input"
-                  :value="magnetTextDrafts.getDraftValue(group)"
-                  @input="magnetTextDrafts.setDraftValue(group, $event?.target?.value || '')"
-                  @blur="magnetTextDrafts.commitDraft(group)"
-                  @keyup.enter="magnetTextDrafts.commitDraft(group)"
-                >
-              </td>
-              <td>{{ group.value_type || '-' }}</td>
-              <td>{{ getMagnetBindingsText(group.bindings || []) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <span
-          v-for="(left, index) in resizeLineLefts"
-          :key="`magnet-col-line-${index}`"
-          class="table-col-resize-line"
-          :style="{ left: `${left}px` }"
-          @pointerdown="startColumnResize(index, $event)"
-        ></span>
-      </div>
+                    {{ getArrayPreviewText(getMagnetValue(group)) }}
+                  </NButton>
+                  <input
+                    v-else
+                    class="input"
+                    :value="magnetTextDrafts.getDraftValue(group)"
+                    @input="magnetTextDrafts.setDraftValue(group, $event?.target?.value || '')"
+                    @blur="magnetTextDrafts.commitDraft(group)"
+                    @keyup.enter="magnetTextDrafts.commitDraft(group)"
+                  >
+                </td>
+                <td>{{ group.value_type || '-' }}</td>
+                <td>{{ getMagnetBindingsText(group.bindings || []) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <span
+            v-for="(left, index) in resizeLineLefts"
+            :key="`magnet-col-line-${index}`"
+            class="table-col-resize-line"
+            :style="{ left: `${left}px` }"
+            @pointerdown="startColumnResize(index, $event)"
+          ></span>
+        </div>
 
-      <p v-if="!collapsed && magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
+        <p v-if="magnetConflicts.length" class="error-text">{{ t('appConfigCenter.magnetConflictsHint') }}</p>
+      </div>
     </div>
   </NCard>
 </template>

@@ -1,7 +1,6 @@
 <script setup>
 import { useUploadInstallModalView } from '../../composables/useUploadInstallModalView'
-import { NModal, NCard, NSpace, NButton, NInput, NText, NAlert, NLog } from 'naive-ui'
-import { ref, watch, nextTick } from 'vue'
+import { NModal, NCard, NButton, NInput, NText, NAlert } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
@@ -32,10 +31,10 @@ const emit = defineEmits([
 
 const { t } = useI18n()
 
-// We can bypass some composable logic because NModal and NLog handle scrolling better, 
-// but we still need the core logic.
 const {
   shouldShowOutput,
+  logRef,
+  onLogScroll,
   onFileChange,
   closeByOverlay,
   onInteractiveInput,
@@ -47,7 +46,7 @@ const {
 <template>
   <NModal :show="visible" @mask-click="closeByOverlay" :mask-closable="!busy">
     <NCard
-      style="width: min(600px, 95vw);"
+      style="width: min(720px, 95vw);"
       :title="t('apps.uploadModalTitle')"
       :bordered="false"
       size="huge"
@@ -73,26 +72,25 @@ const {
           {{ t('common.status') }}：{{ status }}
         </NText>
 
-        <NLog
+        <pre
           v-if="shouldShowOutput"
-          :log="output"
-          :rows="12"
-          trim
-          style="border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; --n-text-color: #e2e8f0; color: #e2e8f0;"
-        />
+          ref="logRef"
+          class="log-output modal-log-output"
+          @scroll="onLogScroll"
+        ></pre>
 
         <div v-if="busy" style="display: flex; flex-direction: column; gap: 8px;">
           <NText>{{ t('apps.interactiveInputLabel') }}</NText>
           <div style="display: flex; gap: 8px;">
-            <NInput
-              :type="interactiveMaskInput ? 'password' : 'text'"
-              :placeholder="t('apps.interactiveInputPlaceholder')"
-              :value="interactiveInput"
-              @update:value="(val) => emit('interactive-input', val)"
-              @keydown.enter="emit('interactive-submit')"
-              style="flex: 1;"
-            />
-            <NButton @click="emit('interactive-mask-change', !interactiveMaskInput)">
+              <NInput
+                :type="interactiveMaskInput ? 'password' : 'text'"
+                :placeholder="t('apps.interactiveInputPlaceholder')"
+                :value="interactiveInput"
+                @update:value="(val) => onInteractiveInput({ target: { value: val } })"
+                @keydown="onInteractiveKeydown"
+                style="flex: 1;"
+              />
+            <NButton @click="onInteractiveMaskChange(!interactiveMaskInput)">
               {{ interactiveMaskInput ? t('apps.interactiveShowInput') : t('apps.interactiveHideInput') }}
             </NButton>
             <NButton type="primary" @click="emit('interactive-submit')">
@@ -114,4 +112,3 @@ const {
     </NCard>
   </NModal>
 </template>
-

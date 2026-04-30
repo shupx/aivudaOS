@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
 import { useDomAppendLog } from '../composables/useDomAppendLog'
 import { useAppDetailPage } from '../composables/useAppDetailPage'
-import { NCard, NSpace, NButton, NText, NGrid, NGi, NSelect, NCheckbox, NLog, NModal, NInput, NIcon, NAlert } from 'naive-ui'
+import { NCard, NSpace, NButton, NText, NGrid, NGi, NSelect, NCheckbox, NModal, NInput, NIcon, NAlert } from 'naive-ui'
 import { ArrowLeft, RefreshCw, Download, FileUp, Settings, Trash2, PowerOff, MonitorPlay, Send } from 'lucide-vue-next'
 
 const { t } = useI18n()
@@ -91,7 +91,7 @@ const {
       <NText depth="3">{{ t('appDetail.notFound') }}</NText>
     </NCard>
 
-    <div v-else-if="app" style="margin-bottom: 24px;">
+    <div v-else-if="app" class="app-detail-card-wrap" style="margin-bottom: 24px;">
       <AppCard
         :app="app"
         :busy="Boolean(busyById[app.app_id])"
@@ -116,7 +116,11 @@ const {
       </template>
 
       <NAlert v-if="logError" type="error" style="margin-bottom: 12px;">{{ logError }}</NAlert>
-      <NLog :log="logText" :rows="16" trim style="border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; --n-text-color: #e2e8f0; color: #e2e8f0;" @scroll="onAppLogScroll" />
+      <pre
+        ref="appLogRef"
+        class="log-output app-log-output"
+        @scroll="onAppLogScroll"
+      ></pre>
     </NCard>
 
     <NCard v-if="app" :title="t('appDetail.actionsTitle')" style="margin-bottom: 24px;">
@@ -242,12 +246,11 @@ const {
             </div>
           </div>
 
-          <NLog
-            :log="actionLiveOutput"
-            :rows="14"
-            trim
-            style="border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; --n-text-color: #e2e8f0; color: #e2e8f0;"
-          />
+          <pre
+            ref="actionLogRef"
+            class="log-output modal-log-output"
+            @scroll="onActionLogScroll"
+          ></pre>
 
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;">
             <NButton :disabled="actionBusy" @click="closeActionOutputModal">{{ t('common.close') }}</NButton>
