@@ -1165,6 +1165,12 @@ label.config-default-changed-value {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 12px;
+  justify-content: start;
+}
+
+.apps-grid > * {
+  width: 100%;
+  max-width: 360px;
 }
 
 .store-setting-panel {
@@ -1506,6 +1512,10 @@ label.config-default-changed-value {
 
 .apps-grid-compact {
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+}
+
+.apps-grid-compact > * {
+  max-width: 360px;
 }
 
 .app-card-compact .app-icon {
