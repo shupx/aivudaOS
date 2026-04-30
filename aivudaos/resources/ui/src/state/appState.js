@@ -11,6 +11,7 @@ export const appState = reactive({
   user: null,
   role: null,
   sidebarCollapsed: true,
+  sidebarMode: 'icon',
   activeMenu: 'apps',
   gatewayOnline: false,
   lastSyncAt: null,

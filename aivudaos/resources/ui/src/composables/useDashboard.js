@@ -9,7 +9,8 @@ export function useDashboard() {
   const router = useRouter()
   const { refresh } = useAppsPanel()
 
-  const sidebarCollapsed = computed(() => appState.sidebarCollapsed)
+  const sidebarCollapsed = computed(() => appState.sidebarMode !== 'expanded')
+  const sidebarMode = computed(() => appState.sidebarMode || 'icon')
   const isStatusRoute = computed(() => route.path === '/dashboard/status')
   const isAppsRoute = computed(() => {
     return route.path.startsWith('/dashboard/apps') && !route.path.startsWith('/dashboard/apps/configs')
@@ -33,8 +34,22 @@ export function useDashboard() {
     }
   })
 
-  function toggleSidebar() {
-    appState.sidebarCollapsed = !appState.sidebarCollapsed
+  function collapseSidebar() {
+    if (appState.sidebarMode === 'expanded') {
+      appState.sidebarMode = 'icon'
+    } else if (appState.sidebarMode === 'icon') {
+      appState.sidebarMode = 'hidden'
+    }
+    appState.sidebarCollapsed = appState.sidebarMode !== 'expanded'
+  }
+
+  function expandSidebar() {
+    if (appState.sidebarMode === 'hidden') {
+      appState.sidebarMode = 'icon'
+    } else if (appState.sidebarMode === 'icon') {
+      appState.sidebarMode = 'expanded'
+    }
+    appState.sidebarCollapsed = appState.sidebarMode !== 'expanded'
   }
 
   function goStatus() {
@@ -68,6 +83,7 @@ export function useDashboard() {
 
   return {
     sidebarCollapsed,
+    sidebarMode,
     isStatusRoute,
     isAppsRoute,
     isConfigRoute,
@@ -81,7 +97,8 @@ export function useDashboard() {
     goConfigs,
     goStore,
     goSystemSettings,
-    toggleSidebar,
+    collapseSidebar,
+    expandSidebar,
     doLogout,
     changeLocale,
   }
