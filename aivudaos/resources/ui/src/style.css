@@ -1858,7 +1858,8 @@ body.dark-mode .log-output {
 
 .apps-upload-btn {
   min-width: 0;
-  max-width: min(100%, 240px);
+  max-width: 100%;
+  width: fit-content;
 }
 
 .apps-upload-btn-label {
@@ -1866,5 +1867,5 @@ body.dark-mode .log-output {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+  max-width: min(100%, 32ch);
 }

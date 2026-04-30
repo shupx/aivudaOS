@@ -112,6 +112,7 @@ const handleSortSelect = (key) => {
       <div style="position: relative; width: 320px; max-width: 100%;">
         <NInput
           v-model:value="searchText"
+          :input-props="{ name: 'apps-search', autocomplete: 'on' }"
           :placeholder="t('apps.searchPlaceholder')"
           clearable
           @focus="openSearchDropdown"

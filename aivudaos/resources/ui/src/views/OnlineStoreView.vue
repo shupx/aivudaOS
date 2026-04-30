@@ -42,6 +42,7 @@ const {
           <div style="display: flex; gap: 8px;">
             <NInput
               v-model:value="storeAddress"
+              :input-props="{ name: 'store-address', autocomplete: 'url' }"
               :placeholder="t('store.addressPlaceholder')"
               @keydown.enter.prevent="saveAddress"
               style="flex: 1;"
@@ -85,6 +86,7 @@ const {
       <NCard>
          <NInput
             v-model:value="searchText"
+            :input-props="{ name: 'store-search', autocomplete: 'on' }"
             :placeholder="t('store.searchPlaceholder')"
             clearable
             style="max-width: 480px;"
