@@ -1,9 +1,10 @@
 <script setup>
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StoreAppCard from '../components/store/StoreAppCard.vue'
 import { useOnlineStorePage } from '../composables/useOnlineStorePage'
-import { NCard, NSpace, NButton, NInput, NText, NAlert, NIcon, NEmpty } from 'naive-ui'
-import { RefreshCw, Search, Send, ExternalLink, Download } from 'lucide-vue-next'
+import { NCard, NSpace, NButton, NInput, NText, NAlert, NIcon, NEmpty, NDropdown } from 'naive-ui'
+import { RefreshCw, Search, Send, ExternalLink, Download, ArrowUpDown } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const {
@@ -17,12 +18,26 @@ const {
   storeCertificateDownloadUrl,
   showAddressManualCheckHint,
   addressCertificateHintVisible,
+  sortOption,
+  sortDesc,
   displayItems,
   hasItems,
   load,
   saveAddress,
   openStoreCertificate,
+  setSortOption,
 } = useOnlineStorePage()
+
+const sortOptions = computed(() => [
+  {
+    label: `${t('store.sortByUpdatedAt')}${sortOption.value === 'updated_at' ? (sortDesc.value ? ' ↓' : ' ↑') : ''}`,
+    key: 'updated_at',
+  },
+  {
+    label: `${t('store.sortByName')}${sortOption.value === 'name' ? (sortDesc.value ? ' ↓' : ' ↑') : ''}`,
+    key: 'name',
+  },
+])
 </script>
 
 <template>
@@ -84,17 +99,25 @@ const {
       </NCard>
 
       <NCard>
-         <NInput
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <NInput
             v-model:value="searchText"
             :input-props="{ name: 'store-search', autocomplete: 'on' }"
             :placeholder="t('store.searchPlaceholder')"
             clearable
-            style="max-width: 480px;"
+            style="flex: 1; min-width: 240px; max-width: 480px;"
           >
             <template #prefix>
               <NIcon><Search /></NIcon>
             </template>
           </NInput>
+
+          <NDropdown trigger="click" :options="sortOptions" @select="setSortOption">
+            <NButton quaternary circle :title="t('store.sortTooltip')">
+              <template #icon><NIcon><ArrowUpDown /></NIcon></template>
+            </NButton>
+          </NDropdown>
+        </div>
       </NCard>
     </NSpace>
 
