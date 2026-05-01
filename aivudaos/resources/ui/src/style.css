@@ -1162,15 +1162,20 @@ label.config-default-changed-value {
 }
 
 .apps-grid {
+  --app-card-min-width: min(260px, 100%);
+  --app-card-max-width: 360px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--app-card-min-width), 1fr));
   gap: 12px;
   justify-content: start;
 }
 
 .apps-grid > * {
   width: 100%;
-  max-width: 360px;
+}
+
+.apps-grid:has(> :only-child) {
+  grid-template-columns: minmax(var(--app-card-min-width), var(--app-card-max-width));
 }
 
 .store-setting-panel {
@@ -1511,11 +1516,7 @@ label.config-default-changed-value {
 }
 
 .apps-grid-compact {
-  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
-}
-
-.apps-grid-compact > * {
-  max-width: 360px;
+  --app-card-min-width: min(200px, 100%);
 }
 
 .app-card-compact .app-icon {
