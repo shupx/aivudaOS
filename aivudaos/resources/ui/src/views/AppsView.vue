@@ -52,6 +52,8 @@ const {
   handleSearchKeydown,
   refresh,
   toggleCompactMode,
+  isFavoriteApp,
+  toggleFavoriteApp,
   busyById,
   toggleRunning,
   toggleAutostart,
@@ -192,8 +194,10 @@ const handleSortSelect = (key) => {
         :card-id="`app-card-${app.app_id}`"
         :highlighted="highlightedAppId === app.app_id"
         :compact="compactMode"
+        :favorite="isFavoriteApp(app)"
         @toggle-running="toggleRunning"
         @toggle-autostart="toggleAutostart"
+        @toggle-favorite="toggleFavoriteApp"
       />
     </div>
 

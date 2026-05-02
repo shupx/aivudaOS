@@ -239,6 +239,9 @@ export default {
     iconAlt: 'app icon',
     openConfig: 'Open config for {name}',
     openBuiltInUi: 'open UI',
+    favorite: 'Favorite app',
+    unfavorite: 'Remove favorite',
+    favorited: 'Favorited',
   },
   appBuiltInUi: {
     title: 'Built-in UI: {appId}',

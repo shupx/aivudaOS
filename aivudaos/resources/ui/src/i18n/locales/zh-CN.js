@@ -239,6 +239,9 @@ export default {
     iconAlt: '应用图标',
     openConfig: '打开 {name} 的配置参数',
     openBuiltInUi: 'open UI',
+    favorite: '星标应用',
+    unfavorite: '取消星标',
+    favorited: '已星标',
   },
   appBuiltInUi: {
     title: '内置UI：{appId}',

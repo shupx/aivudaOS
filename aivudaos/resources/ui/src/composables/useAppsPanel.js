@@ -16,6 +16,21 @@ import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 
 let pollTimer = null
 const APPS_COMPACT_MODE_STORAGE_KEY = 'aivuda_ui_apps_compact_mode'
+const FAVORITE_APP_IDS_STORAGE_KEY = 'aivuda_ui_favorite_app_ids'
+
+function readFavoriteAppIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FAVORITE_APP_IDS_STORAGE_KEY) || '[]')
+    if (!Array.isArray(parsed)) return []
+    return [...new Set(parsed.map((item) => String(item || '').trim()).filter(Boolean))]
+  } catch {
+    return []
+  }
+}
+
+function writeFavoriteAppIds(appIds) {
+  localStorage.setItem(FAVORITE_APP_IDS_STORAGE_KEY, JSON.stringify(appIds))
+}
 
 function mergeAppsWithDetail(items) {
   return items.map((item) => {
@@ -131,11 +146,17 @@ export function useAppsPanel() {
   const sortOption = ref(storedSortOption) // name | autostart | installed_at
   const sortDesc = ref(storedSortDesc === null ? storedSortOption === 'installed_at' : storedSortDesc === '1')
   const appsSortDropdownVisible = ref(false)
+  const favoriteAppIds = ref(readFavoriteAppIds())
+  const favoriteAppIdSet = computed(() => new Set(favoriteAppIds.value))
 
   const apps = computed(() => {
     const list = [...appState.apps]
     const desc = sortDesc.value ? -1 : 1
     return list.sort((a, b) => {
+      const aFavorite = favoriteAppIdSet.value.has(String(a?.app_id || '')) ? 1 : 0
+      const bFavorite = favoriteAppIdSet.value.has(String(b?.app_id || '')) ? 1 : 0
+      if (aFavorite !== bFavorite) return bFavorite - aFavorite
+
       if (sortOption.value === 'autostart') {
         const aVal = a.autostart ? 1 : 0
         const bVal = b.autostart ? 1 : 0
@@ -332,6 +353,23 @@ export function useAppsPanel() {
     compactMode.value = !compactMode.value
   }
 
+  function isFavoriteApp(app) {
+    const appId = String(app?.app_id || '')
+    return Boolean(appId && favoriteAppIdSet.value.has(appId))
+  }
+
+  function toggleFavoriteApp(app) {
+    const appId = String(app?.app_id || '')
+    if (!appId) return
+
+    if (favoriteAppIdSet.value.has(appId)) {
+      favoriteAppIds.value = favoriteAppIds.value.filter((item) => item !== appId)
+    } else {
+      favoriteAppIds.value = [...favoriteAppIds.value, appId]
+    }
+    writeFavoriteAppIds(favoriteAppIds.value)
+  }
+
   async function runBulkAction(actionName, task) {
     appState.appsError = ''
     bulkActionPending.value = actionName
@@ -371,6 +409,7 @@ export function useAppsPanel() {
     bulkActionPending,
     searchText,
     compactMode,
+    favoriteAppIds,
     sortOption,
     sortDesc,
     appsSortDropdownVisible,
@@ -386,6 +425,8 @@ export function useAppsPanel() {
     handleSearchKeydown,
     refresh,
     toggleCompactMode,
+    isFavoriteApp,
+    toggleFavoriteApp,
     toggleRunning,
     toggleAutostart,
     restartEnabledApps,

@@ -10,9 +10,10 @@ import {
   NButton,
   NSwitch,
   NAvatar,
+  NIcon,
   NTag
 } from 'naive-ui'
-import { ExternalLink } from 'lucide-vue-next'
+import { Star } from 'lucide-vue-next'
 
 const props = defineProps({
   app: { type: Object, required: true },
@@ -21,9 +22,10 @@ const props = defineProps({
   cardId: { type: String, default: '' },
   highlighted: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
+  favorite: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['toggle-running', 'toggle-autostart'])
+const emit = defineEmits(['toggle-running', 'toggle-autostart', 'toggle-favorite'])
 const router = useRouter()
 const iconLoadFailed = ref(false)
 const { t } = useI18n()
@@ -33,6 +35,7 @@ const appDisplayName = computed(() => props.app.name || props.app.app_id)
 const hasBuiltInUi = computed(() => Boolean(props.app.has_builtin_ui))
 const builtInUiHref = computed(() => `/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
 const configButtonTitle = computed(() => t('appCard.openConfig', { name: appDisplayName.value }))
+const favoriteTitle = computed(() => props.favorite ? t('appCard.unfavorite') : t('appCard.favorite'))
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
@@ -53,6 +56,10 @@ function onRunningChange(nextValue) {
 
 function onAutostartChange(nextValue) {
   emit('toggle-autostart', props.app, nextValue)
+}
+
+function onFavoriteClick() {
+  emit('toggle-favorite', props.app)
 }
 
 function goDetail() {
@@ -98,7 +105,21 @@ function onIconError() {
     :content-style="{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, gap: '16px' }"
     @click="goDetail"
   >
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+    <button
+      class="app-favorite-button"
+      :class="{ 'app-favorite-button-active': favorite }"
+      type="button"
+      :title="favoriteTitle"
+      :aria-label="favoriteTitle"
+      :aria-pressed="favorite ? 'true' : 'false'"
+      @click.stop="onFavoriteClick"
+    >
+      <NIcon class="app-favorite-icon" :size="15">
+        <Star />
+      </NIcon>
+    </button>
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-right: 26px;">
       <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
         <NAvatar
           :src="iconSrc"
@@ -172,6 +193,8 @@ function onIconError() {
 
 <style scoped>
 .apps-app-card {
+  position: relative;
+  overflow: hidden;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
@@ -183,5 +206,47 @@ function onIconError() {
 .app-name-hover:hover {
   color: #2563eb;
   text-decoration: underline;
+}
+
+.app-favorite-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #cbd5e1;
+  cursor: pointer;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.app-favorite-button-active {
+  color: #f59e0b;
+}
+
+.app-favorite-button:hover,
+.app-favorite-button:focus-visible {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.app-favorite-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.24);
+}
+
+.app-favorite-icon {
+  display: flex;
+}
+
+.app-favorite-button-active .app-favorite-icon :deep(svg) {
+  fill: currentColor;
 }
 </style>
