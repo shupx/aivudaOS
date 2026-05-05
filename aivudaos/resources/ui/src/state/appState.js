@@ -20,6 +20,7 @@ export const appState = reactive({
   appsLoading: false,
   appsError: '',
   busyById: {},
+  restartBusyById: {},
 })
 
 export function setToken(token) {
@@ -73,12 +74,21 @@ export function setBusy(appId, busy) {
   }
 }
 
+export function setRestartBusy(appId, busy) {
+  appState.restartBusyById = {
+    ...appState.restartBusyById,
+    [appId]: Boolean(busy),
+  }
+}
+
 export function clearSession() {
   setToken('')
   setUserSession(null, null)
   appState.apps = []
   appState.appDetailsById = {}
   appState.appsError = ''
+  appState.busyById = {}
+  appState.restartBusyById = {}
   appState.gatewayOnline = false
   appState.lastSyncAt = null
 }

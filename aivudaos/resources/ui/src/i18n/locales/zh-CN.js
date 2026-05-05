@@ -235,6 +235,8 @@ export default {
     running: '运行中',
     stopped: '已停止',
     start: '启动',
+    restart: '重启应用',
+    restartLabel: '重启',
     autostart: '自启动',
     iconAlt: '应用图标',
     openConfig: '打开 {name} 的配置参数',

@@ -24,8 +24,10 @@ export function useAppDetailPage() {
     error,
     refresh,
     busyById,
+    restartBusyById,
     toggleRunning,
     toggleAutostart,
+    restartSingleApp,
   } = useAppsPanel()
 
   const app = computed(() => {
@@ -497,8 +499,10 @@ export function useAppDetailPage() {
     error,
     refresh,
     busyById,
+    restartBusyById,
     toggleRunning,
     toggleAutostart,
+    restartSingleApp,
     logText,
     logBusy,
     logError,

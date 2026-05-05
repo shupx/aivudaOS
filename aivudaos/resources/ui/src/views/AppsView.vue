@@ -55,8 +55,10 @@ const {
   isFavoriteApp,
   toggleFavoriteApp,
   busyById,
+  restartBusyById,
   toggleRunning,
   toggleAutostart,
+  restartSingleApp,
   restartEnabledApps,
   startEnabledApps,
   stopEveryApp,
@@ -191,13 +193,16 @@ const handleSortSelect = (key) => {
         :key="app.app_id"
         :app="app"
         :busy="Boolean(busyById[app.app_id])"
+        :restart-busy="Boolean(restartBusyById[app.app_id])"
         :card-id="`app-card-${app.app_id}`"
         :highlighted="highlightedAppId === app.app_id"
         :compact="compactMode"
         :favorite="isFavoriteApp(app)"
+        :show-restart="!compactMode"
         @toggle-running="toggleRunning"
         @toggle-autostart="toggleAutostart"
         @toggle-favorite="toggleFavoriteApp"
+        @restart-app="restartSingleApp"
       />
     </div>
 

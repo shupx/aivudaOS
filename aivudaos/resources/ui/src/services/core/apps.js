@@ -54,6 +54,13 @@ export async function startApp(appId) {
   })
 }
 
+export async function restartApp(appId) {
+  return request(`/api/apps/${encodeURIComponent(appId)}/restart`, {
+    method: 'POST',
+    auth: true,
+  })
+}
+
 export async function restartAutostartApps() {
   return request('/api/apps/bulk/restart-autostart', {
     method: 'POST',

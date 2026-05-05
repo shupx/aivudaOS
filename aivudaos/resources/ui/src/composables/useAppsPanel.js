@@ -1,10 +1,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import i18n from '../i18n'
-import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy } from '../state/appState'
+import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy, setRestartBusy } from '../state/appState'
 import {
   fetchAppStatus,
   fetchInstalledApps,
+  restartApp,
   restartAutostartApps,
   setAutostart,
   startAutostartApps,
@@ -113,6 +114,23 @@ async function toggleAutostart(app, nextValue) {
   }
 }
 
+async function restartSingleApp(app) {
+  const appId = app?.app_id
+  if (!appId) return
+
+  setBusy(appId, true)
+  setRestartBusy(appId, true)
+  try {
+    await restartApp(appId)
+    await refresh()
+  } catch (err) {
+    appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
+  } finally {
+    setRestartBusy(appId, false)
+    setBusy(appId, false)
+  }
+}
+
 function startPolling() {
   if (pollTimer) return
   pollTimer = setInterval(() => {
@@ -175,6 +193,7 @@ export function useAppsPanel() {
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
+  const restartBusyById = computed(() => appState.restartBusyById)
   const bulkActionPending = ref('')
   const searchText = ref('')
   const storedCompactMode = localStorage.getItem(APPS_COMPACT_MODE_STORAGE_KEY)
@@ -406,6 +425,7 @@ export function useAppsPanel() {
     loading,
     error,
     busyById,
+    restartBusyById,
     bulkActionPending,
     searchText,
     compactMode,
@@ -429,6 +449,7 @@ export function useAppsPanel() {
     toggleFavoriteApp,
     toggleRunning,
     toggleAutostart,
+    restartSingleApp,
     restartEnabledApps,
     startEnabledApps,
     stopEveryApp,

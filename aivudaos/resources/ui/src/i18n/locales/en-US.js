@@ -235,6 +235,8 @@ export default {
     running: 'Running',
     stopped: 'Stopped',
     start: 'Start',
+    restart: 'Restart app',
+    restartLabel: 'Restart',
     autostart: 'Autostart',
     iconAlt: 'app icon',
     openConfig: 'Open config for {name}',

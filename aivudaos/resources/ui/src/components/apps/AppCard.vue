@@ -13,19 +13,21 @@ import {
   NIcon,
   NTag
 } from 'naive-ui'
-import { Star } from 'lucide-vue-next'
+import { RotateCw, Star } from 'lucide-vue-next'
 
 const props = defineProps({
   app: { type: Object, required: true },
   busy: { type: Boolean, default: false },
+  restartBusy: { type: Boolean, default: false },
   clickable: { type: Boolean, default: true },
   cardId: { type: String, default: '' },
   highlighted: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
   favorite: { type: Boolean, default: false },
+  showRestart: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['toggle-running', 'toggle-autostart', 'toggle-favorite'])
+const emit = defineEmits(['toggle-running', 'toggle-autostart', 'toggle-favorite', 'restart-app'])
 const router = useRouter()
 const iconLoadFailed = ref(false)
 const { t } = useI18n()
@@ -60,6 +62,10 @@ function onAutostartChange(nextValue) {
 
 function onFavoriteClick() {
   emit('toggle-favorite', props.app)
+}
+
+function onRestartClick() {
+  emit('restart-app', props.app)
 }
 
 function goDetail() {
@@ -155,8 +161,8 @@ function onIconError() {
       </div>
     </div>
 
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto;">
-      <div style="min-width: 0;">
+    <div class="app-card-footer">
+      <div class="app-card-footer-extra">
         <NButton
           v-if="hasBuiltInUi"
           size="small"
@@ -167,9 +173,25 @@ function onIconError() {
           {{ t('appCard.openBuiltInUi') }}
         </NButton>
       </div>
-      <div style="display: flex; gap: 16px; align-items: center;">
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;" @click.stop>
-          <NText v-if="!compact" style="font-size: 12px;" depth="3">{{ t('appCard.start') }}</NText>
+      <div class="app-card-actions">
+        <div v-if="showRestart" class="app-card-action" @click.stop>
+          <NText v-if="!compact" class="app-card-action-label" depth="3">{{ t('appCard.restartLabel') }}</NText>
+          <NButton
+            class="app-restart-button"
+            quaternary
+            size="small"
+            :disabled="busy"
+            :title="t('appCard.restart')"
+            :aria-label="t('appCard.restart')"
+            @click.stop="onRestartClick"
+          >
+            <template #icon>
+              <NIcon :class="{ 'app-restart-icon-spinning': restartBusy }"><RotateCw /></NIcon>
+            </template>
+          </NButton>
+        </div>
+        <div class="app-card-action" @click.stop>
+          <NText v-if="!compact" class="app-card-action-label" depth="3">{{ t('appCard.start') }}</NText>
           <NSwitch
             :value="Boolean(app.running)"
             :disabled="busy"
@@ -178,8 +200,8 @@ function onIconError() {
             :theme-overrides="{ railColorActive: '#16a34a' }"
           />
         </div>
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;" @click.stop>
-          <NText v-if="!compact" style="font-size: 12px;" depth="3">{{ t('appCard.autostart') }}</NText>
+        <div class="app-card-action" @click.stop>
+          <NText v-if="!compact" class="app-card-action-label" depth="3">{{ t('appCard.autostart') }}</NText>
           <NSwitch :value="Boolean(app.autostart)" :disabled="busy" @update:value="onAutostartChange" size="small">
              <template #checked-icon>
                 A
@@ -248,5 +270,77 @@ function onIconError() {
 
 .app-favorite-button-active .app-favorite-icon :deep(svg) {
   fill: currentColor;
+}
+
+.app-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-end;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.app-card-action {
+  min-width: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-card-action-label {
+  height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.app-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.app-card-footer-extra {
+  min-width: 0;
+  margin-right: auto;
+}
+
+.app-restart-button {
+  width: 28px;
+  height: 18px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 9px;
+  flex: 0 0 18px;
+  color: #64748b;
+}
+
+.app-restart-button :deep(.n-button__content) {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-restart-button :deep(.n-button__icon) {
+  margin: 0;
+}
+
+.app-restart-icon-spinning {
+  animation: app-restart-spin 0.9s linear infinite;
+}
+
+@keyframes app-restart-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

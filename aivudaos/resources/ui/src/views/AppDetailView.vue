@@ -15,8 +15,10 @@ const {
   error,
   refresh,
   busyById,
+  restartBusyById,
   toggleRunning,
   toggleAutostart,
+  restartSingleApp,
   logText,
   logBusy,
   logError,
@@ -95,9 +97,12 @@ const {
       <AppCard
         :app="app"
         :busy="Boolean(busyById[app.app_id])"
+        :restart-busy="Boolean(restartBusyById[app.app_id])"
         :clickable="false"
+        :show-restart="true"
         @toggle-running="toggleRunning"
         @toggle-autostart="toggleAutostart"
+        @restart-app="restartSingleApp"
       />
     </div>
 
