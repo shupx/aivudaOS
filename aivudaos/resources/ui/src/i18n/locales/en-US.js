@@ -34,9 +34,11 @@ export default {
   },
   status: {
     title: 'System Status',
+    detailsTitle: 'System Details',
     gateway: 'Gateway',
     online: 'Online',
     offline: 'Offline',
+    aivudaosVersion: 'AivudaOS Version',
     currentUser: 'User',
     role: 'Role',
     totalApps: 'Total Apps',

@@ -5,7 +5,7 @@ import { NCard, NGrid, NGi, NStatistic, NTag, NDescriptions, NDescriptionsItem, 
 import { Activity, Blocks, PlayCircle, Clock } from 'lucide-vue-next'
 
 const { t } = useI18n()
-const { user, role, gatewayOnline, totalApps, runningApps, autostartApps, lastSyncAt } = useSystemStatus()
+const { user, role, aivudaosVersion, gatewayOnline, totalApps, runningApps, autostartApps, lastSyncAt } = useSystemStatus()
 </script>
 
 <template>
@@ -56,8 +56,9 @@ const { user, role, gatewayOnline, totalApps, runningApps, autostartApps, lastSy
       </NGi>
     </NGrid>
 
-    <NCard title="System Details" style="margin-top: 16px;">
+    <NCard :title="t('status.detailsTitle')" style="margin-top: 16px;">
       <NDescriptions bordered column="1 s:2" responsive="screen">
+        <NDescriptionsItem :label="t('status.aivudaosVersion')">{{ aivudaosVersion || '-' }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('status.currentUser')">{{ user || '-' }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('status.role')">{{ role || '-' }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('status.lastSync')">{{ lastSyncAt || '-' }}</NDescriptionsItem>

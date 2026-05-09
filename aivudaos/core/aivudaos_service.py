@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+from aivudaos import __version__
 from aivudaos.core.paths import PACKAGE_RESOURCES_ROOT
 
 
@@ -17,6 +18,7 @@ class AivudaosServiceManager:
         installed = self._stack_unit_exists()
         return {
             "ok": True,
+            "version": __version__,
             "installed": installed,
             "running": installed and self._systemctl_user_quiet(["is-active", "aivudaos.service"]),
             "autostart_enabled": installed and self._systemctl_user_quiet(["is-enabled", "aivudaos.service"]),

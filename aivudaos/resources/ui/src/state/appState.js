@@ -10,6 +10,7 @@ export const appState = reactive({
   locale: DEFAULT_LOCALE,
   user: null,
   role: null,
+  aivudaosVersion: '',
   sidebarCollapsed: true,
   sidebarMode: 'icon',
   activeMenu: 'apps',
@@ -84,6 +85,7 @@ export function setRestartBusy(appId, busy) {
 export function clearSession() {
   setToken('')
   setUserSession(null, null)
+  appState.aivudaosVersion = ''
   appState.apps = []
   appState.appDetailsById = {}
   appState.appsError = ''

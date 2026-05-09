@@ -34,9 +34,11 @@ export default {
   },
   status: {
     title: '系统状态',
+    detailsTitle: '系统详情',
     gateway: '网关连通',
     online: '在线',
     offline: '离线',
+    aivudaosVersion: 'AivudaOS 版本',
     currentUser: '当前用户',
     role: '角色',
     totalApps: '应用总数',
