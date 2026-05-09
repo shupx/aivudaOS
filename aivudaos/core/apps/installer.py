@@ -136,24 +136,7 @@ class InstallerService:
 
             content_root = manifest_path.parent
 
-            manifest.default_config = self._load_manifest_yaml_mapping(
-                content_root,
-                manifest.default_config_path,
-                field_name="default_config_path",
-            )
-            manifest.config_schema = self._load_manifest_yaml_mapping(
-                content_root,
-                manifest.config_schema_path,
-                field_name="config_schema_path",
-            )
-            try:
-                validate_config_data(
-                    manifest.default_config,
-                    manifest.config_schema,
-                    context=f"manifest {app_id}@{version} default_config",
-                )
-            except InvalidConfigError as exc:
-                raise PackageFormatError(str(exc)) from exc
+            self._load_and_validate_manifest_config(content_root, manifest)
 
             # Prepare version directory first; this also handles overwrite case
             emit("status", phase="install", status="running", message="写入版本目录", app_id=app_id)
@@ -215,6 +198,8 @@ class InstallerService:
                         if "已取消" in str(exc):
                             raise OperationCanceledError("Installation canceled by user") from exc
                         raise PackageFormatError(f"pre_install 执行失败: {exc}") from exc
+
+                    self._load_and_validate_manifest_config(install_path, manifest)
 
                 self._ensure_entrypoint_ready(install_path, manifest)
                 try:
@@ -362,3 +347,29 @@ class InstallerService:
         if not isinstance(parsed, dict):
             raise PackageFormatError(f"{field_name} 必须解析为 YAML object")
         return parsed
+
+    def _load_and_validate_manifest_config(
+        self,
+        content_root: Path,
+        manifest: AppManifest,
+    ) -> None:
+        manifest.config_schema = self._load_manifest_yaml_mapping(
+            content_root,
+            manifest.config_schema_path,
+            field_name="config_schema_path",
+        )
+        manifest.default_config = self._load_manifest_yaml_mapping(
+            content_root,
+            manifest.default_config_path,
+            field_name="default_config_path",
+        )
+        try:
+            validate_config_data(
+                manifest.default_config,
+                manifest.config_schema,
+                context=(
+                    f"manifest {manifest.app_id}@{manifest.version} default_config"
+                ),
+            )
+        except InvalidConfigError as exc:
+            raise PackageFormatError(str(exc)) from exc
