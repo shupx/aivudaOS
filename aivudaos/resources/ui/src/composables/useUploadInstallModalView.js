@@ -1,10 +1,12 @@
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDomAppendLog } from './useDomAppendLog'
 
 export function useUploadInstallModalView(props, emit) {
   const { t } = useI18n()
   const isDragOver = ref(false)
+  const fileInputRef = ref(null)
+  const interactiveInputRef = ref(null)
 
   const outputRef = computed(() => props.output)
   const visibleRef = computed(() => props.visible)
@@ -18,6 +20,55 @@ export function useUploadInstallModalView(props, emit) {
     visibleRef,
     placeholderRef: outputPlaceholder,
   })
+
+  function resolveNativeInput(target) {
+    if (!target) return null
+    if (typeof target.focus === 'function' && target.tagName) {
+      return target
+    }
+    if (typeof target.$el?.querySelector === 'function') {
+      return target.$el.querySelector('input, textarea')
+    }
+    if (typeof target.querySelector === 'function') {
+      return target.querySelector('input, textarea')
+    }
+    return null
+  }
+
+  function focusTarget(target) {
+    const input = resolveNativeInput(target)
+    if (!input || typeof input.focus !== 'function') return false
+    input.focus()
+    if (typeof input.select === 'function' && !props.interactiveMaskInput) {
+      input.select()
+    }
+    return true
+  }
+
+  async function focusPrimaryInput() {
+    await nextTick()
+    if (props.busy) {
+      if (focusTarget(interactiveInputRef.value)) return
+    }
+    focusTarget(fileInputRef.value)
+  }
+
+  watch(
+    () => props.visible,
+    (visible) => {
+      if (!visible) return
+      focusPrimaryInput()
+    },
+  )
+
+  watch(
+    () => [props.visible, props.busy],
+    ([visible, busy], [prevVisible, prevBusy]) => {
+      if (!visible) return
+      if (!busy || (prevVisible === visible && prevBusy === busy)) return
+      focusPrimaryInput()
+    },
+  )
 
   function onFileChange(event) {
     emit('file-change', event?.target?.files || null)
@@ -73,6 +124,8 @@ export function useUploadInstallModalView(props, emit) {
 
   return {
     t,
+    fileInputRef,
+    interactiveInputRef,
     logRef,
     onLogScroll,
     shouldShowOutput,

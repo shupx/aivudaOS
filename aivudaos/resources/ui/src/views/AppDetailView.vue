@@ -37,6 +37,7 @@ const {
   actionInteractiveInput,
   actionInteractiveReady,
   actionInteractiveMaskInput,
+  actionInteractiveInputRef,
   setActionInteractiveInput,
   setActionInteractiveMaskInput,
   submitActionInteractiveInput,
@@ -234,6 +235,7 @@ const {
             <NText>{{ t('apps.interactiveInputLabel') }}</NText>
             <div style="display: flex; gap: 8px;">
               <NInput
+                ref="actionInteractiveInputRef"
                 :type="actionInteractiveMaskInput ? 'password' : 'text'"
                 :placeholder="t('apps.interactiveInputPlaceholder')"
                 :value="actionInteractiveInput"

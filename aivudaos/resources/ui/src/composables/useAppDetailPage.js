@@ -1,4 +1,4 @@
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppsPanel } from './useAppsPanel'
@@ -52,6 +52,7 @@ export function useAppDetailPage() {
   const actionInteractiveInput = ref('')
   const actionInteractiveReady = ref(false)
   const actionInteractiveMaskInput = ref(true)
+  const actionInteractiveInputRef = ref(null)
   let actionInteractiveSubmitHandler = null
 
   const versions = ref([])
@@ -76,6 +77,30 @@ export function useAppDetailPage() {
   })
 
   const canUninstall = computed(() => Boolean(app.value && !actionBusy.value))
+
+  function resolveNativeInput(target) {
+    if (!target) return null
+    if (typeof target.focus === 'function' && target.tagName) {
+      return target
+    }
+    if (typeof target.$el?.querySelector === 'function') {
+      return target.$el.querySelector('input, textarea')
+    }
+    if (typeof target.querySelector === 'function') {
+      return target.querySelector('input, textarea')
+    }
+    return null
+  }
+
+  async function focusActionInteractiveInput() {
+    await nextTick()
+    const input = resolveNativeInput(actionInteractiveInputRef.value)
+    if (!input || typeof input.focus !== 'function') return
+    input.focus()
+    if (typeof input.select === 'function' && !actionInteractiveMaskInput.value) {
+      input.select()
+    }
+  }
 
   function clearActionStatus() {
     actionError.value = ''
@@ -440,6 +465,15 @@ export function useAppDetailPage() {
     { immediate: true },
   )
 
+  watch(
+    () => [showActionOutputModal.value, actionBusy.value],
+    ([visible, busy], [prevVisible, prevBusy]) => {
+      if (!visible || !busy) return
+      if (prevVisible === visible && prevBusy === busy) return
+      focusActionInteractiveInput()
+    },
+  )
+
   onUnmounted(() => {
     stopLogPolling()
     actionInteractiveSubmitHandler = null
@@ -521,6 +555,7 @@ export function useAppDetailPage() {
     actionInteractiveInput,
     actionInteractiveReady,
     actionInteractiveMaskInput,
+    actionInteractiveInputRef,
     setActionInteractiveInput,
     setActionInteractiveMaskInput,
     submitActionInteractiveInput,

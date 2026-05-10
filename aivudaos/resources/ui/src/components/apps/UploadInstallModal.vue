@@ -34,6 +34,8 @@ const { t } = useI18n()
 
 const {
   shouldShowOutput,
+  fileInputRef,
+  interactiveInputRef,
   logRef,
   isDragOver,
   onLogScroll,
@@ -75,6 +77,7 @@ const {
             @drop="onDrop"
           >
             <input
+              ref="fileInputRef"
               type="file"
               accept=".tar.gz,.zip"
               class="upload-dropzone-input"
@@ -115,6 +118,7 @@ const {
           <NText>{{ t('apps.interactiveInputLabel') }}</NText>
           <div style="display: flex; gap: 8px;">
               <NInput
+                ref="interactiveInputRef"
                 :type="interactiveMaskInput ? 'password' : 'text'"
                 :placeholder="t('apps.interactiveInputPlaceholder')"
                 :value="interactiveInput"
