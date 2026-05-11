@@ -2,7 +2,7 @@
 
 ## 概述
 
-AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz`、`.tgz`、`.tar` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和自启动。
+AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz`、`.tgz`、`.tar`、`.tar.xz`、`.txz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和自启动。
 
 当前 UI 还支持“在线应用商店”入口：从 aivudaAppStore 的 `store` API 查看应用与版本，先下载安装包到浏览器本机，再一键上传到 AivudaOS 安装。
 

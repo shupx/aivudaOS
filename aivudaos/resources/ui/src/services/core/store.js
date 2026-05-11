@@ -6,7 +6,7 @@ function inferArchiveFilename(appId, version, info) {
   if (explicit) return explicit
   const downloadPath = String(info?.url || '').split('?')[0]
   const basename = downloadPath.split('/').filter(Boolean).pop() || ''
-  const match = basename.match(/(\.tar\.gz|\.tgz|\.tar|\.zip)$/i)
+  const match = basename.match(/(\.tar\.gz|\.tgz|\.tar\.xz|\.txz|\.tar|\.zip)$/i)
   const suffix = match ? match[1] : '.zip'
   return `${appId}-${version}${suffix}`
 }
@@ -22,7 +22,7 @@ function parseContentDispositionFilename(header) {
 function inferArchiveFilenameFromUrl(appId, version, url) {
   const cleaned = String(url || '').split('?')[0]
   const basename = cleaned.split('/').filter(Boolean).pop() || ''
-  const match = basename.match(/(\.tar\.gz|\.tgz|\.tar|\.zip)$/i)
+  const match = basename.match(/(\.tar\.gz|\.tgz|\.tar\.xz|\.txz|\.tar|\.zip)$/i)
   const suffix = match ? match[1] : ''
   if (!suffix) return ''
   return `${appId}-${version}${suffix}`
