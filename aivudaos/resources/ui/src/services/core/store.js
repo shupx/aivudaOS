@@ -1,6 +1,45 @@
 const APPSTORE_API_PREFIX = '/aivuda_app_store'
 export const MAX_IN_MEMORY_INSTALL_BYTES = 200 * 1024 * 1024 // 200MB
 
+function inferArchiveFilename(appId, version, info) {
+  const explicit = String(info?.filename || '').trim()
+  if (explicit) return explicit
+  const downloadPath = String(info?.url || '').split('?')[0]
+  const basename = downloadPath.split('/').filter(Boolean).pop() || ''
+  const match = basename.match(/(\.tar\.gz|\.tgz|\.tar|\.zip)$/i)
+  const suffix = match ? match[1] : '.zip'
+  return `${appId}-${version}${suffix}`
+}
+
+function parseContentDispositionFilename(header) {
+  if (!header) return ''
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match) return decodeURIComponent(utf8Match[1])
+  const match = header.match(/filename="?([^";]+)"?/i)
+  return match ? match[1] : ''
+}
+
+function inferArchiveFilenameFromUrl(appId, version, url) {
+  const cleaned = String(url || '').split('?')[0]
+  const basename = cleaned.split('/').filter(Boolean).pop() || ''
+  const match = basename.match(/(\.tar\.gz|\.tgz|\.tar|\.zip)$/i)
+  const suffix = match ? match[1] : ''
+  if (!suffix) return ''
+  return `${appId}-${version}${suffix}`
+}
+
+function resolveDownloadedFilename(appId, version, info, response = null) {
+  const headerFilename = parseContentDispositionFilename(
+    response?.headers?.get?.('content-disposition') || '',
+  )
+  if (headerFilename) return headerFilename
+
+  const responseFilename = inferArchiveFilenameFromUrl(appId, version, response?.url || '')
+  if (responseFilename) return responseFilename
+
+  return inferArchiveFilename(appId, version, info)
+}
+
 function normalizeBaseUrl(baseUrl) {
   return String(baseUrl || '').trim().replace(/\/+$/, '')
 }
@@ -52,10 +91,12 @@ async function requestStoreJson(baseUrl, path) {
   return payload
 }
 
-export function triggerBrowserFileDownload(fileUrl, filename) {
+export function triggerBrowserFileDownload(fileUrl, filename = '') {
   const link = document.createElement('a')
   link.href = fileUrl
-  link.download = filename
+  if (filename) {
+    link.download = filename
+  }
   link.rel = 'noopener'
   document.body.appendChild(link)
   link.click()
@@ -100,7 +141,7 @@ export async function downloadStorePackageByBrowser(baseUrl, appId, version) {
   }
 
   const fileUrl = withCacheBuster(buildStoreResourceUrl(baseUrl, downloadPath))
-  const filename = `${appId}-${version}.zip`
+  const filename = inferArchiveFilename(appId, version, info)
   triggerBrowserFileDownload(fileUrl, filename)
 
   return {
@@ -116,15 +157,15 @@ export async function downloadStorePackageForInstall(baseUrl, appId, version, { 
   }
 
   const fileUrl = withCacheBuster(buildStoreResourceUrl(baseUrl, downloadPath))
-  const filename = `${appId}-${version}.zip`
+  const fallbackFilename = inferArchiveFilename(appId, version, info)
   const size = Number(info?.size || 0)
 
   // For large files, directly trigger browser download to avoid high memory usage
   if (size > MAX_IN_MEMORY_INSTALL_BYTES) {
-    triggerBrowserFileDownload(fileUrl, filename)
+    triggerBrowserFileDownload(fileUrl)
     return {
       mode: 'manual',
-      filename,
+      filename: fallbackFilename,
       size,
     }
   }
@@ -136,6 +177,8 @@ export async function downloadStorePackageForInstall(baseUrl, appId, version, { 
   if (!resp.ok) {
     throw new Error(`Download failed: ${resp.status}`)
   }
+
+  const filename = resolveDownloadedFilename(appId, version, info, resp) || fallbackFilename
 
   if (onProgress) {
     onProgress({ receivedBytes: 0, totalBytes: size > 0 ? size : 0, percent: 0 })
@@ -166,7 +209,7 @@ export async function downloadStorePackageForInstall(baseUrl, appId, version, { 
       }
     }
 
-    blob = new Blob(chunks, { type: resp.headers.get('content-type') || 'application/zip' })
+    blob = new Blob(chunks, { type: resp.headers.get('content-type') || 'application/octet-stream' })
   } else {
     blob = await resp.blob()
   }
@@ -177,7 +220,7 @@ export async function downloadStorePackageForInstall(baseUrl, appId, version, { 
   }
 
   const file = new File([blob], filename, {
-    type: blob.type || 'application/zip',
+    type: blob.type || 'application/octet-stream',
     lastModified: Date.now(),
   })
 

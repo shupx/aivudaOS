@@ -79,7 +79,7 @@ const {
             <input
               ref="fileInputRef"
               type="file"
-              accept=".tar.gz,.zip"
+              accept=".zip,.tar,.tar.gz,.tgz,.gz"
               class="upload-dropzone-input"
               @change="onFileChange"
             >
