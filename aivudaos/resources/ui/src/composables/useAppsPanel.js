@@ -12,6 +12,7 @@ import {
   startApp,
   stopAllApps,
   stopApp,
+  waitForAppOperation,
 } from '../services/core/apps'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 
@@ -83,10 +84,14 @@ async function toggleRunning(app, nextValue) {
   setBusy(appId, true)
 
   try {
+    let operation = null
     if (nextValue) {
-      await startApp(appId)
+      operation = await startApp(appId)
     } else {
-      await stopApp(appId)
+      operation = await stopApp(appId)
+    }
+    if (operation?.operation_id) {
+      await waitForAppOperation(operation.operation_id)
     }
     await refresh()
   } catch (err) {
@@ -121,7 +126,10 @@ async function restartSingleApp(app) {
   setBusy(appId, true)
   setRestartBusy(appId, true)
   try {
-    await restartApp(appId)
+    const operation = await restartApp(appId)
+    if (operation?.operation_id) {
+      await waitForAppOperation(operation.operation_id)
+    }
     await refresh()
   } catch (err) {
     appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
@@ -392,31 +400,76 @@ export function useAppsPanel() {
   async function runBulkAction(actionName, task) {
     appState.appsError = ''
     bulkActionPending.value = actionName
+    const queuedOperations = []
     try {
-      await task()
+      const result = await task()
+      const operations = Array.isArray(result?.operations) ? result.operations : []
+      queuedOperations.push(...operations)
+      const settled = await Promise.allSettled(
+        operations
+          .map((item) => String(item?.operation_id || ''))
+          .filter(Boolean)
+          .map((operationId) => waitForAppOperation(operationId)),
+      )
       await refresh()
+      const rejected = settled.filter((item) => item.status === 'rejected')
+      if (rejected.length > 0) {
+        throw new Error(
+          rejected
+            .map((item) => String(item.reason?.message || item.reason || i18n.global.t('errors.operationFailed')))
+            .join('; '),
+        )
+      }
     } catch (err) {
       appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
     } finally {
+      for (const item of queuedOperations) {
+        const appId = String(item?.app_id || '')
+        if (!appId) continue
+        setBusy(appId, false)
+        setRestartBusy(appId, false)
+      }
       bulkActionPending.value = ''
     }
   }
 
   async function restartEnabledApps() {
     await runBulkAction('restartAutostart', async () => {
-      await restartAutostartApps()
+      const result = await restartAutostartApps()
+      const operations = Array.isArray(result?.operations) ? result.operations : []
+      for (const item of operations) {
+        const appId = String(item?.app_id || '')
+        if (!appId) continue
+        setBusy(appId, true)
+        setRestartBusy(appId, true)
+      }
+      return result
     })
   }
 
   async function startEnabledApps() {
     await runBulkAction('startAutostart', async () => {
-      await startAutostartApps()
+      const result = await startAutostartApps()
+      const operations = Array.isArray(result?.operations) ? result.operations : []
+      for (const item of operations) {
+        const appId = String(item?.app_id || '')
+        if (!appId) continue
+        setBusy(appId, true)
+      }
+      return result
     })
   }
 
   async function stopEveryApp() {
     await runBulkAction('stopAll', async () => {
-      await stopAllApps()
+      const result = await stopAllApps()
+      const operations = Array.isArray(result?.operations) ? result.operations : []
+      for (const item of operations) {
+        const appId = String(item?.app_id || '')
+        if (!appId) continue
+        setBusy(appId, true)
+      }
+      return result
     })
   }
 

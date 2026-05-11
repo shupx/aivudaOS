@@ -10,6 +10,8 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 
 前端 UI 支持 `zh-CN / en-US` 语言切换（Dashboard 左侧栏入口），并将选择持久化到本地存储。当前版本只对前端固定文案做国际化，后端返回的动态文本（如 SSE 日志、错误详情）按原文显示。
 
+App 的 `start / stop / restart` 与批量 `restart-autostart / start-autostart / stop-all` 现在会先返回 queued operation，由后台线程并行执行；同一 app 仍然保留单操作冲突保护。
+
 ## 核心模块
 
 | 模块 | 路径 | 职责 |
@@ -212,6 +214,12 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 - 自启动对应 `systemctl enable/disable`
 - 状态由 `systemctl show` 查询并同步到 `app_runtime`
 - 单元名格式：`aivuda-app-{app_id}.service`（会做安全规范化）
+
+### 生命周期调度
+
+- 单个 app 的 `start / stop / restart` 会被包装成后台 operation，接口返回后立即结束
+- 批量操作会为每个 app 创建独立 operation 并并行执行
+- 操作状态通过 `GET /api/apps/operations/{operation_id}` 和 `GET /api/apps/operations/{operation_id}/events` 查询
 
 ### popen 回退模式
 

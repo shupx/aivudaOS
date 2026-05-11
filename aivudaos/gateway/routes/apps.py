@@ -76,6 +76,53 @@ def _spawn_operation(
     thread.start()
 
 
+def _queue_app_operation(
+    operation_type: str,
+    app_id: str,
+    task: Any,
+) -> Dict[str, Any]:
+    operations = get_app_operation_manager()
+    record = operations.start_operation(operation_type, app_id=app_id)
+    _spawn_operation(record.operation_id, task)
+    return {
+        "operation_id": record.operation_id,
+        "operation_type": operation_type,
+        "app_id": app_id,
+        "status": "queued",
+    }
+
+
+def _queue_bulk_app_operations(
+    operation_type: str,
+    app_ids: List[str],
+    task_factory: Any,
+) -> Dict[str, Any]:
+    queued: List[Dict[str, Any]] = []
+    failed: List[Dict[str, str]] = []
+
+    for app_id in app_ids:
+        try:
+            queued.append(
+                _queue_app_operation(
+                    operation_type,
+                    app_id,
+                    lambda app_id=app_id: task_factory(app_id),
+                )
+            )
+        except AppOperationConflictError as exc:
+            failed.append({"app_id": app_id, "error": str(exc)})
+
+    return {
+        "ok": len(failed) == 0,
+        "status": "queued",
+        "operation_type": operation_type,
+        "requested_count": len(app_ids),
+        "queued_count": len(queued),
+        "operations": queued,
+        "failed": failed,
+    }
+
+
 # ================================================================== #
 #  Upload & Install (primary flow — local package upload)
 # ================================================================== #
@@ -245,70 +292,115 @@ async def get_logs(
 # ================================================================== #
 
 
-@router.post("/bulk/restart-autostart")
+@router.post("/bulk/restart-autostart", status_code=202)
 async def restart_autostart_apps(token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
-    try:
-        return runtime.restart_autostart_apps()
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    app_ids = [
+        str(item.get("app_id") or "")
+        for item in runtime.get_installed_list()
+        if bool(item.get("autostart"))
+    ]
+    app_ids = [app_id for app_id in app_ids if app_id]
+    return {
+        **_queue_bulk_app_operations(
+            "restart",
+            app_ids,
+            lambda app_id: runtime.restart(app_id),
+        ),
+        "message": "Autostart apps restart queued.",
+    }
 
 
-@router.post("/bulk/start-autostart")
+@router.post("/bulk/start-autostart", status_code=202)
 async def start_autostart_apps(token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
-    try:
-        return runtime.start_autostart_apps_if_needed()
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    app_ids = [
+        str(item.get("app_id") or "")
+        for item in runtime.get_installed_list()
+        if bool(item.get("autostart")) and not bool(item.get("running"))
+    ]
+    app_ids = [app_id for app_id in app_ids if app_id]
+    return {
+        **_queue_bulk_app_operations(
+            "start",
+            app_ids,
+            lambda app_id: runtime.start(app_id),
+        ),
+        "message": "Autostart apps start queued.",
+    }
 
 
-@router.post("/bulk/stop-all")
+@router.post("/bulk/stop-all", status_code=202)
 async def stop_all_apps(token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
-    try:
-        return runtime.stop_all_apps()
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    app_ids = [
+        str(item.get("app_id") or "")
+        for item in runtime.get_installed_list()
+        if bool(item.get("running"))
+    ]
+    app_ids = [app_id for app_id in app_ids if app_id]
+    return {
+        **_queue_bulk_app_operations(
+            "stop",
+            app_ids,
+            lambda app_id: runtime.stop(app_id),
+        ),
+        "message": "Stop-all apps queued.",
+    }
 
 
-@router.post("/{app_id}/start")
+@router.post("/{app_id}/start", status_code=202)
 async def start_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
+    versioning = get_versioning_service()
     runtime = get_runtime_service()
+    if not versioning.list_versions(app_id):
+        raise HTTPException(status_code=404, detail=f"{app_id} is not installed")
     try:
-        return runtime.start(app_id)
-    except AppNotInstalledError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return _queue_app_operation(
+            "start",
+            app_id,
+            lambda: runtime.start(app_id),
+        )
+    except AppOperationConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{app_id}/stop")
+@router.post("/{app_id}/stop", status_code=202)
 async def stop_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
+    versioning = get_versioning_service()
     runtime = get_runtime_service()
+    if not versioning.list_versions(app_id):
+        raise HTTPException(status_code=404, detail=f"{app_id} is not installed")
     try:
-        return runtime.stop(app_id)
-    except AppNotInstalledError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return _queue_app_operation(
+            "stop",
+            app_id,
+            lambda: runtime.stop(app_id),
+        )
+    except AppOperationConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{app_id}/restart")
+@router.post("/{app_id}/restart", status_code=202)
 async def restart_app(app_id: str, token: str) -> Dict[str, Any]:
     _require_auth(token)
+    versioning = get_versioning_service()
     runtime = get_runtime_service()
+    if not versioning.list_versions(app_id):
+        raise HTTPException(status_code=404, detail=f"{app_id} is not installed")
     try:
-        return runtime.restart(app_id)
-    except AppNotInstalledError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except AppRuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return _queue_app_operation(
+            "restart",
+            app_id,
+            lambda: runtime.restart(app_id),
+        )
+    except AppOperationConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 # ================================================================== #

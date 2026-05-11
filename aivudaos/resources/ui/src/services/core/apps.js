@@ -171,6 +171,31 @@ export async function fetchAppOperation(operationId) {
   })
 }
 
+export async function waitForAppOperation(operationId, { pollIntervalMs = 500, timeoutMs = 120000 } = {}) {
+  const startedAt = Date.now()
+
+  while (true) {
+    const operation = await fetchAppOperation(operationId)
+    const status = String(operation?.status || '')
+
+    if (operation?.done || status === 'completed') {
+      return operation
+    }
+
+    if (status === 'failed' || status === 'canceled') {
+      throw new Error(operation?.error || i18n.global.t('errors.operationFailed'))
+    }
+
+    if (timeoutMs > 0 && Date.now() - startedAt >= timeoutMs) {
+      throw new Error(i18n.global.t('errors.requestFailed', { status: 'timeout' }))
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, pollIntervalMs)
+    })
+  }
+}
+
 export function subscribeAppOperationEvents(
   operationId,
   {
