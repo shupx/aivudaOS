@@ -78,7 +78,7 @@ aivudaos/resources/scripts/_run_aivudaos_stack.sh --dev
 ```
 
 说明：`--dev` 模式下会持续监听后端与前端变更并自动重载；按 `Ctrl+C` 会统一停止后端、前端 watch 和 caddy。
-开发模式脚本会自动把源码仓库根加入 `PYTHONPATH`，因此即使当前环境还没执行 `pip install -e .`，也可以直接启动后端。
+开发模式脚本会自动把源码仓库根加入 `PYTHONPATH`，因此即使当前环境还没执行 `pip install --user -e .`，也可以直接启动后端。
 
 ### 生产模式（gunicorn + uvicorn worker）
 

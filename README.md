@@ -23,7 +23,8 @@ pip install aivudaos-1.0.0.dev2026040501-py3-none-any.whl
 ```bash
 git clone https://gitee.com/buaa_iooda/aivudaOS.git
 cd aivudaOS/
-pip install -e . # need dated npm and node (>20) installed
+pip install --user -U pip setuptools wheel
+pip install --user -e . # need dated npm and node (>20) installed
 # pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e .  # use pypi mirror for build
 ```
 
@@ -102,6 +103,12 @@ aivudaos uninstall
 ```
 
 ## Build wheel
+
+Update pip before building:
+
+```bash
+pip install --user -U pip setuptools wheel
+```
 
 Build release artifacts locally:
 
