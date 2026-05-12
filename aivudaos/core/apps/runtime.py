@@ -276,14 +276,14 @@ class RuntimeService:
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
             try:
-                self._systemd.write_unit(
+                self._write_systemd_unit(
                     app_id=app_id,
                     scope=scope,
+                    manifest=manifest,
+                    install_path=install_path,
                     command=command,
-                    working_dir=install_path,
+                    runtime_env=runtime_env,
                     log_path=log_path,
-                    description=f"AivudaOS app {manifest.name} ({app_id})",
-                    environment=runtime_env,
                 )
                 self._systemd.daemon_reload(scope)
                 self._systemd.start(app_id, scope)
@@ -373,6 +373,36 @@ class RuntimeService:
                 raise AppNotInstalledError(f"{app_id} is not installed")
             now = int(time.time())
             try:
+                active_version = self._versioning.active_version(app_id)
+                if active_version is None:
+                    raise AppNotInstalledError(f"{app_id} has no active version")
+                manifest = self._get_manifest(app_id, active_version)
+                install_path = self._versioning.active_install_path(app_id)
+                if install_path is None:
+                    raise AppNotInstalledError(f"{app_id} has no active version")
+                command = self._build_exec_command(manifest, install_path)
+                command = self._decorate_command_for_realtime_logs(command)
+                runtime_env = {
+                    **self._runtime_log_env(),
+                    **self._build_config_env(
+                        app_id,
+                        active_version,
+                        manifest,
+                        install_path=install_path,
+                    ),
+                }
+                log_path = self._app_log_path(app_id)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                self._write_systemd_unit(
+                    app_id=app_id,
+                    scope=scope,
+                    manifest=manifest,
+                    install_path=install_path,
+                    command=command,
+                    runtime_env=runtime_env,
+                    log_path=log_path,
+                )
+                self._systemd.daemon_reload(scope)
                 self._systemd.restart(app_id, scope)
                 live = self._systemd.get_state(app_id, scope)
             except (subprocess.SubprocessError, OSError):
@@ -425,14 +455,14 @@ class RuntimeService:
             log_path = self._app_log_path(app_id)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                self._systemd.write_unit(
+                self._write_systemd_unit(
                     app_id=app_id,
                     scope=scope,
+                    manifest=manifest,
+                    install_path=install_path,
                     command=command,
-                    working_dir=install_path,
+                    runtime_env=runtime_env,
                     log_path=log_path,
-                    description=f"AivudaOS app {manifest.name} ({app_id})",
-                    environment=runtime_env,
                 )
                 self._systemd.daemon_reload(scope)
                 self._systemd.set_enabled(app_id, scope, enabled)
@@ -899,14 +929,14 @@ class RuntimeService:
                 }
                 log_path = self._app_log_path(app_id)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
-                self._systemd.write_unit(
+                self._write_systemd_unit(
                     app_id=app_id,
                     scope=scope,
+                    manifest=manifest,
+                    install_path=install_path,
                     command=command,
-                    working_dir=install_path,
+                    runtime_env=runtime_env,
                     log_path=log_path,
-                    description=f"AivudaOS app {manifest.name} ({app_id})",
-                    environment=runtime_env,
                 )
                 self._systemd.set_enabled(app_id, scope, enabled)
             except (AppNotInstalledError, OSError, subprocess.SubprocessError, ValueError):
@@ -916,6 +946,26 @@ class RuntimeService:
             self._systemd.daemon_reload(scope)
         except (OSError, subprocess.SubprocessError):
             pass
+
+    def _write_systemd_unit(
+        self,
+        app_id: str,
+        scope: str,
+        manifest: AppManifest,
+        install_path: Path,
+        command: List[str],
+        runtime_env: Dict[str, str],
+        log_path: Path,
+    ) -> None:
+        self._systemd.write_unit(
+            app_id=app_id,
+            scope=scope,
+            command=command,
+            working_dir=install_path,
+            log_path=log_path,
+            description=f"AivudaOS app {manifest.name} ({app_id})",
+            environment=runtime_env,
+        )
 
     def _runtime_mode(self) -> str:
         raw = str(self._config.get_os_setting("runtime_process_manager", "auto"))
