@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import SwitchToggle from '../components/apps/SwitchToggle.vue'
 import { useSystemSettingsPage } from '../composables/useSystemSettingsPage'
+import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
 import {
   NCard, NSpace, NButton, NText, NAlert, NIcon, NGrid, NGi, NTag, NModal, NInput, NCheckbox, NSelect, NDataTable
 } from 'naive-ui'
@@ -66,6 +67,13 @@ const {
   onOsTextChange,
   load,
 } = useSystemSettingsPage()
+
+const osTextDrafts = useDeferredFieldDrafts({
+  buildKey: (row) => String(row?.path || ''),
+  getCommittedValue: (row) => displayOsValue(row),
+  commitDraftValue: (row, value) => onOsTextChange(row, value),
+  isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
+})
 </script>
 
 <template>
@@ -234,8 +242,10 @@ const {
                       <NInput
                         v-else
                         size="small"
-                        :value="displayOsValue(row)"
-                        @update:value="(val) => onOsTextChange(row, val)"
+                        :value="osTextDrafts.getDraftValue(row)"
+                        @update:value="(val) => osTextDrafts.setDraftValue(row, val)"
+                        @blur="osTextDrafts.commitDraft(row)"
+                        @keyup.enter="osTextDrafts.commitDraft(row)"
                       />
                       <p v-if="getOsCellError(row)" class="error-text" style="margin-top: 4px; font-size: 12px;">
                         {{ t('systemSettings.osInvalidValue') }}: {{ getOsCellError(row) }}
