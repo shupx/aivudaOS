@@ -2,7 +2,20 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { fetchActiveAppConfigs, updateAppConfig, updateMagnetGroup } from '../services/core/apps'
-import { fetchSysConfig, updateSysConfig } from '../services/core/config'
+import { fetchConfigExportMeta, fetchSysConfig, resolveAppStoreBaseUrl, updateSysConfig } from '../services/core/config'
+import { downloadStorePackageForInstall, fetchStoreAppDetail, fetchStoreIndex, MAX_IN_MEMORY_INSTALL_BYTES } from '../services/core/store'
+import { useAppUploadInstallModal } from './useAppUploadInstallModal'
+import {
+  buildConfigExportFilename,
+  createConfigExportDocument,
+  deepClone as cloneTransferValue,
+  flattenConfigLeaves,
+  isValueEqual as isTransferValueEqual,
+  nestedGet as transferNestedGet,
+  nestedSet as transferNestedSet,
+  parseConfigImportDocument,
+  valueToTransferText,
+} from '../services/core/configTransfer'
 
 export function useAppConfigCenterPage() {
   const { t } = useI18n()
@@ -96,6 +109,29 @@ export function useAppConfigCenterPage() {
   const showConfirmModal = ref(false)
   const pendingChanges = ref([])
   const cellErrors = ref({})
+  const exportModalVisible = ref(false)
+  const exportIncludeSystem = ref(true)
+  const exportSelectedApps = ref({})
+  const exportBusy = ref(false)
+  const importModalVisible = ref(false)
+  const importFileName = ref('')
+  const importDocument = ref(null)
+  const importRows = ref([])
+  const importCollapsedSections = ref({})
+  const importOverwriteById = ref({})
+  const importOverwriteMagnets = ref(false)
+  const importBusy = ref(false)
+  const importActionMessage = ref('')
+  const missingAppOptions = ref({})
+  const missingAppBusy = ref({})
+  const missingAppProgress = ref({})
+  const uploadModal = useAppUploadInstallModal({
+    async onInstalled() {
+      await loadAllConfigs()
+      rebuildImportPreview()
+      importActionMessage.value = t('appConfigCenter.importInstallComplete')
+    },
+  })
 
   const appOptions = computed(() => {
     return appItems.value.map((item) => ({
@@ -104,6 +140,42 @@ export function useAppConfigCenterPage() {
       version: item.app_version || '-',
     })).sort((a, b) => a.name.localeCompare(b.name))
   })
+
+  const importPreviewSections = computed(() => {
+    const sections = []
+    const grouped = new Map()
+    for (const row of importRows.value) {
+      const sectionId = row.sectionId
+      if (!grouped.has(sectionId)) {
+        grouped.set(sectionId, {
+          id: sectionId,
+          title: row.sectionTitle,
+          rows: [],
+        })
+      }
+      grouped.get(sectionId).rows.push(row)
+    }
+    for (const section of grouped.values()) {
+      sections.push(section)
+    }
+    return sections
+  })
+
+  const missingImportApps = computed(() => {
+    const doc = importDocument.value
+    if (!doc) return []
+    return doc.apps
+      .filter((item) => !appItems.value.some((app) => String(app?.app_id || '') === item.app_id))
+      .map((item) => ({
+        appId: item.app_id,
+        name: item.name || item.app_id,
+        version: item.version || '',
+      }))
+  })
+
+  const hasImportOverwriteSelection = computed(() => (
+    importRows.value.some((row) => importOverwriteById.value[row.id] === true && row.canOverwrite)
+  ))
 
   const appThemeById = computed(() => {
     const classes = ['config-row-app-0', 'config-row-app-1', 'config-row-app-2', 'config-row-app-3']
@@ -165,6 +237,7 @@ export function useAppConfigCenterPage() {
       const [data, sysData] = await Promise.all([fetchActiveAppConfigs(), fetchSysConfig()])
       const items = Array.isArray(data?.items) ? data.items : []
       appItems.value = items
+      ensureExportSelection(items)
 
       const nextDraft = {}
       const nextOriginal = {}
@@ -213,6 +286,7 @@ export function useAppConfigCenterPage() {
       }
 
       cellErrors.value = {}
+      rebuildImportPreview()
     } catch (err) {
       error.value = String(err?.message || err || t('appConfigCenter.loadFailed'))
     } finally {
@@ -890,6 +964,521 @@ export function useAppConfigCenterPage() {
     selectedAppId.value = String(value || '')
   }
 
+  function ensureExportSelection(items = appItems.value) {
+    const next = { ...exportSelectedApps.value }
+    for (const item of items) {
+      const appId = String(item?.app_id || '')
+      if (!appId) continue
+      if (!Object.prototype.hasOwnProperty.call(next, appId)) {
+        next[appId] = true
+      }
+    }
+    exportSelectedApps.value = next
+  }
+
+  function openExportModal() {
+    ensureExportSelection()
+    exportIncludeSystem.value = true
+    exportModalVisible.value = true
+    error.value = ''
+    success.value = ''
+  }
+
+  function closeExportModal() {
+    if (exportBusy.value) return
+    exportModalVisible.value = false
+  }
+
+  function setExportAppSelected(appId, selected) {
+    exportSelectedApps.value = {
+      ...exportSelectedApps.value,
+      [String(appId || '')]: Boolean(selected),
+    }
+  }
+
+  async function exportSelectedConfig() {
+    if (exportBusy.value) return
+    exportBusy.value = true
+    error.value = ''
+    success.value = ''
+    try {
+      const meta = await fetchConfigExportMeta()
+      const selectedApps = new Set(
+        Object.entries(exportSelectedApps.value)
+          .filter(([, selected]) => selected)
+          .map(([appId]) => appId),
+      )
+      const doc = createConfigExportDocument({
+        meta,
+        includeSystem: exportIncludeSystem.value,
+        selectedApps,
+        systemData: sysDraftData.value || {},
+        appItems: appItems.value,
+      })
+      const text = JSON.stringify(doc, null, 2)
+      const blob = new Blob([text], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = buildConfigExportFilename(meta?.avahi_hostname || 'aivudaos')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      success.value = t('appConfigCenter.exportSuccess')
+      exportModalVisible.value = false
+    } catch (err) {
+      error.value = String(err?.message || err || t('appConfigCenter.exportFailed'))
+    } finally {
+      exportBusy.value = false
+    }
+  }
+
+  function openImportModal() {
+    importModalVisible.value = true
+    importActionMessage.value = ''
+    error.value = ''
+    success.value = ''
+  }
+
+  function closeImportModal() {
+    if (importBusy.value) return
+    importModalVisible.value = false
+    importFileName.value = ''
+    importDocument.value = null
+    importRows.value = []
+    importCollapsedSections.value = {}
+    importOverwriteById.value = {}
+    importOverwriteMagnets.value = false
+    importActionMessage.value = ''
+    missingAppOptions.value = {}
+    missingAppBusy.value = {}
+    missingAppProgress.value = {}
+  }
+
+  async function onImportFileChange(fileList) {
+    const file = fileList?.[0] || null
+    if (!file) return
+    importFileName.value = file.name || ''
+    error.value = ''
+    success.value = ''
+    importActionMessage.value = ''
+    try {
+      const text = await file.text()
+      importDocument.value = parseConfigImportDocument(text)
+      initializeMissingAppOptions()
+      rebuildImportPreview()
+    } catch (err) {
+      importDocument.value = null
+      importRows.value = []
+      importOverwriteById.value = {}
+      error.value = String(err?.message || err || t('appConfigCenter.importInvalidFile'))
+    }
+  }
+
+  function initializeMissingAppOptions() {
+    const next = { ...missingAppOptions.value }
+    const doc = importDocument.value
+    for (const app of doc?.apps || []) {
+      if (!next[app.app_id]) {
+        next[app.app_id] = {
+          autoDownload: true,
+          forceSameAppId: true,
+          allowNameMatch: true,
+          latest: false,
+        }
+      }
+    }
+    missingAppOptions.value = next
+  }
+
+  function setMissingAppOption(appId, key, value) {
+    const id = String(appId || '')
+    missingAppOptions.value = {
+      ...missingAppOptions.value,
+      [id]: {
+        ...(missingAppOptions.value[id] || {}),
+        [key]: Boolean(value),
+      },
+    }
+  }
+
+  function rebuildImportPreview() {
+    const doc = importDocument.value
+    if (!doc) return
+
+    const rows = []
+    if (doc.systemParameters) {
+      const readonlyPaths = new Set(sysReadonlyPaths.value || [])
+      const magnetPathMap = buildMagnetPathMap()
+      for (const item of flattenConfigLeaves(doc.systemParameters)) {
+        const currentValue = transferNestedGet(sysDraftData.value || {}, item.path)
+        const exists = currentValue !== undefined
+        const magnetGroup = magnetPathMap.get(item.path)
+        const isMagnet = readonlyPaths.has(item.path) || Boolean(magnetGroup)
+        const changed = !isTransferValueEqual(currentValue, item.value)
+        const canOverwrite = exists && changed && (!isMagnet || Boolean(magnetGroup))
+        rows.push(buildImportRow({
+          scope: 'sys',
+          sectionId: 'sys',
+          sectionTitle: t('appConfigCenter.systemTitle'),
+          path: item.path,
+          importValue: item.value,
+          currentValue,
+          exists,
+          changed,
+          canOverwrite,
+          magnetGroup,
+          appId: '__system__',
+          appName: t('appConfigCenter.systemTitle'),
+          appVersion: '-',
+        }))
+      }
+    }
+
+    for (const app of doc.apps || []) {
+      const currentApp = appItems.value.find((item) => String(item?.app_id || '') === app.app_id)
+      const sectionTitle = `${app.name || app.app_id} (${app.app_id} @ ${app.version || '-'})`
+      if (!currentApp) {
+        rows.push(buildImportRow({
+          scope: 'app',
+          sectionId: `app:${app.app_id}`,
+          sectionTitle,
+          path: '-',
+          importValue: app.parameters,
+          currentValue: undefined,
+          exists: false,
+          changed: true,
+          canOverwrite: false,
+          appId: app.app_id,
+          appName: app.name || app.app_id,
+          appVersion: app.version || '',
+          status: 'missing_app',
+        }))
+        continue
+      }
+
+      const readonlyPaths = new Set(readonlyPathsByApp.value[currentApp.app_id] || [])
+      const magnetPathMap = buildMagnetPathMap(currentApp.app_id, currentApp.app_version)
+      for (const item of flattenConfigLeaves(app.parameters)) {
+        const currentValue = transferNestedGet(draftByApp.value[currentApp.app_id] || {}, item.path)
+        const exists = currentValue !== undefined
+        const magnetGroup = magnetPathMap.get(item.path)
+        const isMagnet = readonlyPaths.has(item.path) || Boolean(magnetGroup)
+        const changed = !isTransferValueEqual(currentValue, item.value)
+        const canOverwrite = exists && changed && (!isMagnet || Boolean(magnetGroup))
+        rows.push(buildImportRow({
+          scope: 'app',
+          sectionId: `app:${app.app_id}`,
+          sectionTitle,
+          path: item.path,
+          importValue: item.value,
+          currentValue,
+          exists,
+          changed,
+          canOverwrite,
+          magnetGroup,
+          appId: currentApp.app_id,
+          appName: currentApp.name || currentApp.app_id,
+          appVersion: currentApp.app_version || '',
+        }))
+      }
+    }
+
+    importRows.value = rows
+    const nextOverwrite = {}
+    for (const row of rows) {
+      nextOverwrite[row.id] = row.canOverwrite && !row.isMagnet
+    }
+    importOverwriteById.value = nextOverwrite
+  }
+
+  function buildImportRow({
+    scope,
+    sectionId,
+    sectionTitle,
+    path,
+    importValue,
+    currentValue,
+    exists,
+    changed,
+    canOverwrite,
+    magnetGroup = null,
+    appId,
+    appName,
+    appVersion,
+    status = '',
+  }) {
+    const isMagnet = Boolean(magnetGroup)
+    let rowStatus = status
+    if (!rowStatus) {
+      if (!exists) rowStatus = 'missing_param'
+      else if (!changed) rowStatus = 'same'
+      else if (isMagnet) rowStatus = 'magnet'
+      else rowStatus = 'changed'
+    }
+    return {
+      id: `${scope}:${appId}:${path}`,
+      scope,
+      sectionId,
+      sectionTitle,
+      path,
+      importValue: cloneTransferValue(importValue),
+      importText: valueToTransferText(importValue),
+      currentValue: cloneTransferValue(currentValue),
+      currentText: exists ? valueToTransferText(currentValue) : '-',
+      exists,
+      changed,
+      canOverwrite,
+      isMagnet,
+      magnetGroup,
+      appId,
+      appName,
+      appVersion,
+      status: rowStatus,
+    }
+  }
+
+  function buildMagnetPathMap(appId = '', appVersion = '') {
+    const map = new Map()
+    for (const group of magnets.value || []) {
+      for (const binding of group?.bindings || []) {
+        if (String(binding?.kind || '') === 'sys' && !appId) {
+          map.set(String(binding?.path || group.path || ''), group)
+        }
+        if (String(binding?.kind || '') === 'app' && appId) {
+          if (String(binding?.app_id || '') !== String(appId)) continue
+          if (appVersion && String(binding?.app_version || '') !== String(appVersion)) continue
+          map.set(String(binding?.path || group.path || ''), group)
+        }
+      }
+    }
+    return map
+  }
+
+  function toggleImportSection(sectionId) {
+    const id = String(sectionId || '')
+    importCollapsedSections.value = {
+      ...importCollapsedSections.value,
+      [id]: !importCollapsedSections.value[id],
+    }
+  }
+
+  function setImportRowOverwrite(rowId, selected) {
+    importOverwriteById.value = {
+      ...importOverwriteById.value,
+      [String(rowId || '')]: Boolean(selected),
+    }
+  }
+
+  function getImportRowStatusText(row) {
+    if (row.status === 'missing_app') return t('appConfigCenter.importStatusMissingApp')
+    if (row.status === 'missing_param') return t('appConfigCenter.importStatusMissingParam')
+    if (row.status === 'same') return t('appConfigCenter.importStatusSame')
+    if (row.status === 'magnet') {
+      return importOverwriteMagnets.value
+        ? t('appConfigCenter.importStatusMagnetReady')
+        : t('appConfigCenter.importStatusMagnetSkipped')
+    }
+    return t('appConfigCenter.importStatusChanged')
+  }
+
+  async function applyImportSelection() {
+    if (importBusy.value) return
+    const selectedRows = importRows.value.filter((row) => (
+      row.canOverwrite && importOverwriteById.value[row.id] === true
+    ))
+    if (!selectedRows.length) {
+      error.value = t('appConfigCenter.importNoSelection')
+      return
+    }
+
+    importBusy.value = true
+    error.value = ''
+    success.value = ''
+    importActionMessage.value = ''
+    try {
+      const magnetRows = selectedRows.filter((row) => row.isMagnet)
+      const directRows = selectedRows.filter((row) => !row.isMagnet)
+      if (magnetRows.length && !importOverwriteMagnets.value) {
+        throw new Error(t('appConfigCenter.importMagnetDisabled'))
+      }
+      await applyMagnetImportRows(magnetRows)
+      await loadAllConfigs()
+      await applyDirectImportRows(directRows)
+      await loadAllConfigs()
+      rebuildImportPreview()
+      success.value = t('appConfigCenter.importApplySuccess')
+      importActionMessage.value = success.value
+    } catch (err) {
+      error.value = String(err?.message || err || t('appConfigCenter.importApplyFailed'))
+    } finally {
+      importBusy.value = false
+    }
+  }
+
+  async function applyDirectImportRows(rowsToApply) {
+    const sysRows = rowsToApply.filter((row) => row.scope === 'sys')
+    if (sysRows.length) {
+      const nextSys = cloneTransferValue(sysDraftData.value || {})
+      for (const row of sysRows) {
+        transferNestedSet(nextSys, row.path, row.importValue)
+      }
+      const resp = await updateSysConfig(nextSys, Number(sysVersion.value || 0))
+      sysVersion.value = Number(resp?.version || sysVersion.value || 0)
+      sysDraftData.value = cloneTransferValue(nextSys)
+      sysOriginalData.value = cloneTransferValue(nextSys)
+    }
+
+    const byApp = new Map()
+    for (const row of rowsToApply.filter((item) => item.scope === 'app')) {
+      if (!byApp.has(row.appId)) byApp.set(row.appId, [])
+      byApp.get(row.appId).push(row)
+    }
+    for (const [appId, appRows] of byApp.entries()) {
+      const nextApp = cloneTransferValue(draftByApp.value[appId] || {})
+      for (const row of appRows) {
+        transferNestedSet(nextApp, row.path, row.importValue)
+      }
+      const resp = await updateAppConfig(appId, {
+        version: Number(revisionByApp.value[appId] || 0),
+        app_version: appVersionByApp.value[appId] || '',
+        data: cloneTransferValue(nextApp),
+      })
+      revisionByApp.value = {
+        ...revisionByApp.value,
+        [appId]: Number(resp?.version || revisionByApp.value[appId] || 0),
+      }
+      draftByApp.value = {
+        ...draftByApp.value,
+        [appId]: cloneTransferValue(nextApp),
+      }
+      originalByApp.value = {
+        ...originalByApp.value,
+        [appId]: cloneTransferValue(nextApp),
+      }
+    }
+  }
+
+  async function applyMagnetImportRows(rowsToApply) {
+    const byGroup = new Map()
+    for (const row of rowsToApply) {
+      const groupId = String(row?.magnetGroup?.group_id || '')
+      if (!groupId) continue
+      byGroup.set(groupId, {
+        group: row.magnetGroup,
+        value: row.importValue,
+      })
+    }
+    for (const [groupId, item] of byGroup.entries()) {
+      const resp = await updateMagnetGroup(groupId, {
+        version: Number(magnetVersion.value || 0),
+        value: cloneTransferValue(item.value),
+      })
+      magnetVersion.value = Number(resp?.version || magnetVersion.value || 0)
+    }
+  }
+
+  async function installMissingImportApp(appId) {
+    const target = missingImportApps.value.find((item) => item.appId === appId)
+    if (!target || missingAppBusy.value[appId]) return
+    missingAppBusy.value = {
+      ...missingAppBusy.value,
+      [appId]: true,
+    }
+    importActionMessage.value = ''
+    error.value = ''
+    try {
+      const options = missingAppOptions.value[appId] || {}
+      const baseUrl = resolveAppStoreBaseUrl()
+      const match = await resolveMissingAppStoreMatch(baseUrl, target, options)
+      const version = resolveMissingAppVersion(match.versions, target.version, options)
+      if (!version) {
+        throw new Error(t('appConfigCenter.importMissingAppVersionNotFound'))
+      }
+      const result = await downloadStorePackageForInstall(baseUrl, match.appId, version, {
+        onProgress(progress) {
+          missingAppProgress.value = {
+            ...missingAppProgress.value,
+            [appId]: progress.percent,
+          }
+        },
+      })
+      if (result.mode === 'auto') {
+        uploadModal.setUploadFile(result.file)
+        uploadModal.openUploadModal({
+          hint: t('store.installAutoSelected', { filename: result.filename }),
+          showFilePicker: false,
+        })
+        await Promise.resolve()
+        await uploadModal.submitUpload()
+      } else {
+        const sizeLimitMb = Math.floor(MAX_IN_MEMORY_INSTALL_BYTES / (1024 * 1024))
+        importActionMessage.value = t('store.downloadTriggered', { version })
+        const shouldInstallNow = window.confirm(
+          t('store.installNowManualConfirm', { version, sizeLimitMb }),
+        )
+        if (shouldInstallNow) {
+          uploadModal.openUploadModal({
+            hint: t('store.installSelectDownloaded', { filename: result.filename }),
+          })
+        }
+      }
+    } catch (err) {
+      error.value = String(err?.message || err || t('appConfigCenter.importInstallFailed'))
+    } finally {
+      missingAppProgress.value = {
+        ...missingAppProgress.value,
+        [appId]: 0,
+      }
+      missingAppBusy.value = {
+        ...missingAppBusy.value,
+        [appId]: false,
+      }
+    }
+  }
+
+  async function resolveMissingAppStoreMatch(baseUrl, target, options) {
+    const index = await fetchStoreIndex(baseUrl)
+    const items = Array.isArray(index?.items) ? index.items : []
+    const exact = items.find((item) => String(item?.app_id || '') === target.appId)
+    if (exact) {
+      const detail = await fetchStoreAppDetail(baseUrl, target.appId)
+      return {
+        appId: target.appId,
+        app: detail?.app || exact,
+        versions: Array.isArray(detail?.versions) ? detail.versions : [],
+      }
+    }
+    if (options.forceSameAppId || !options.allowNameMatch) {
+      throw new Error(t('appConfigCenter.importMissingAppNoStoreMatch'))
+    }
+    const targetName = String(target.name || '').trim().toLowerCase()
+    const byName = items.find((item) => String(item?.name || '').trim().toLowerCase() === targetName)
+    if (!byName) {
+      throw new Error(t('appConfigCenter.importMissingAppNoStoreMatch'))
+    }
+    const matchedId = String(byName.app_id || '')
+    const detail = await fetchStoreAppDetail(baseUrl, matchedId)
+    return {
+      appId: matchedId,
+      app: detail?.app || byName,
+      versions: Array.isArray(detail?.versions) ? detail.versions : [],
+    }
+  }
+
+  function resolveMissingAppVersion(versions, recordedVersion, options) {
+    const published = (Array.isArray(versions) ? versions : [])
+      .filter((item) => item?.status === 'published')
+    if (!published.length) return ''
+    if (options.latest) {
+      return String(published[0]?.version || '')
+    }
+    const recorded = String(recordedVersion || '')
+    const exact = published.find((item) => String(item?.version || '') === recorded)
+    return String(exact?.version || published[0]?.version || '')
+  }
+
   function toggleMagnetCollapsed() {
     magnetCollapsed.value = !magnetCollapsed.value
   }
@@ -1389,6 +1978,37 @@ export function useAppConfigCenterPage() {
     valueToInlineText,
     needRestartToastVisible,
     needRestartToastMessage,
+    exportModalVisible,
+    exportIncludeSystem,
+    exportSelectedApps,
+    exportBusy,
+    openExportModal,
+    closeExportModal,
+    setExportAppSelected,
+    exportSelectedConfig,
+    importModalVisible,
+    importFileName,
+    importPreviewSections,
+    importCollapsedSections,
+    importOverwriteById,
+    importOverwriteMagnets,
+    importBusy,
+    importActionMessage,
+    missingImportApps,
+    missingAppOptions,
+    missingAppBusy,
+    missingAppProgress,
+    hasImportOverwriteSelection,
+    openImportModal,
+    closeImportModal,
+    onImportFileChange,
+    toggleImportSection,
+    setImportRowOverwrite,
+    getImportRowStatusText,
+    applyImportSelection,
+    setMissingAppOption,
+    installMissingImportApp,
+    ...uploadModal,
   }
 }
 

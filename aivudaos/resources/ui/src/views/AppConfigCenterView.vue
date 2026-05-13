@@ -5,8 +5,9 @@ import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
+import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
-import { ArrowLeft, RefreshCw, Plus, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, Download, RefreshCw, Plus, Trash2, Upload } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const systemColumnWidths = ref([260, 320, 110, 180, 260, 120, 100])
@@ -202,6 +203,56 @@ const {
   valueToInlineText,
   needRestartToastVisible,
   needRestartToastMessage,
+  exportModalVisible,
+  exportIncludeSystem,
+  exportSelectedApps,
+  exportBusy,
+  openExportModal,
+  closeExportModal,
+  setExportAppSelected,
+  exportSelectedConfig,
+  importModalVisible,
+  importFileName,
+  importPreviewSections,
+  importCollapsedSections,
+  importOverwriteById,
+  importOverwriteMagnets,
+  importBusy,
+  importActionMessage,
+  missingImportApps,
+  missingAppOptions,
+  missingAppBusy,
+  missingAppProgress,
+  hasImportOverwriteSelection,
+  openImportModal,
+  closeImportModal,
+  onImportFileChange,
+  toggleImportSection,
+  setImportRowOverwrite,
+  getImportRowStatusText,
+  applyImportSelection,
+  setMissingAppOption,
+  installMissingImportApp,
+  showUploadModal,
+  uploadBusy,
+  uploadError,
+  uploadStatus,
+  uploadStatusDone,
+  uploadOutput,
+  uploadFileName,
+  uploadHint,
+  uploadShowFilePicker,
+  uploadInteractiveInput,
+  uploadInteractiveReady,
+  uploadInteractiveMaskInput,
+  uploadCancelBusy,
+  closeUploadModal,
+  onUploadFileChange,
+  submitUpload,
+  cancelCurrentUpload,
+  submitInteractiveInput,
+  setInteractiveInput,
+  setInteractiveMaskInput,
 } = useAppConfigCenterPage()
 
 const systemTextDrafts = useDeferredFieldDrafts({
@@ -236,10 +287,20 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           </NButton>
           <NText style="font-size: 20px; font-weight: 600;">{{ t('appConfigCenter.title') }}</NText>
         </NSpace>
-        <NButton secondary size="small" :loading="loading" @click="loadAllConfigs">
-          <template #icon><NIcon><RefreshCw /></NIcon></template>
-          {{ t('common.refresh') }}
-        </NButton>
+        <NSpace align="center">
+          <NButton secondary size="small" @click="openExportModal">
+            <template #icon><NIcon><Upload /></NIcon></template>
+            {{ t('appConfigCenter.exportButton') }}
+          </NButton>
+          <NButton secondary size="small" @click="openImportModal">
+            <template #icon><NIcon><Download /></NIcon></template>
+            {{ t('appConfigCenter.importButton') }}
+          </NButton>
+          <NButton secondary size="small" :loading="loading" @click="loadAllConfigs">
+            <template #icon><NIcon><RefreshCw /></NIcon></template>
+            {{ t('common.refresh') }}
+          </NButton>
+        </NSpace>
       </div>
 
       <NAlert v-if="error" type="error" style="margin-top: 12px;">{{ error }}</NAlert>
@@ -607,6 +668,196 @@ const systemEnumDrafts = useDeferredFieldDrafts({
     <div v-if="needRestartToastVisible" class="side-toast side-toast-info">
       {{ needRestartToastMessage }}
     </div>
+
+    <div v-if="exportModalVisible" class="modal-overlay" @click.self="closeExportModal">
+      <section class="modal-card modal-wide">
+        <header class="modal-header">
+          <h3>{{ t('appConfigCenter.exportTitle') }}</h3>
+        </header>
+        <div class="config-transfer-list">
+          <label class="check-item">
+            <input v-model="exportIncludeSystem" type="checkbox">
+            {{ t('appConfigCenter.systemTitle') }}
+          </label>
+          <label
+            v-for="item in appOptions"
+            :key="`export-app:${item.appId}`"
+            class="check-item"
+          >
+            <input
+              type="checkbox"
+              :checked="exportSelectedApps[item.appId] !== false"
+              @change="setExportAppSelected(item.appId, $event?.target?.checked)"
+            >
+            {{ item.name }} ({{ item.appId }} @ {{ item.version }})
+          </label>
+        </div>
+        <footer class="panel-actions">
+          <button class="btn" :disabled="exportBusy" @click="closeExportModal">{{ t('common.cancel') }}</button>
+          <button class="btn primary" :disabled="exportBusy" @click="exportSelectedConfig">
+            {{ exportBusy ? t('appConfigCenter.exporting') : t('appConfigCenter.exportButton') }}
+          </button>
+        </footer>
+      </section>
+    </div>
+
+    <div v-if="importModalVisible" class="modal-overlay" @click.self="closeImportModal">
+      <section class="modal-card modal-wide config-import-modal-card">
+        <header class="modal-header">
+          <h3>{{ t('appConfigCenter.importTitle') }}</h3>
+        </header>
+
+        <div class="field">
+          <label>{{ t('appConfigCenter.importFile') }}</label>
+          <input
+            class="input"
+            type="file"
+            accept="application/json,.json"
+            @change="onImportFileChange($event?.target?.files)"
+          >
+          <span v-if="importFileName" class="muted">{{ importFileName }}</span>
+        </div>
+
+        <div v-if="missingImportApps.length" class="config-transfer-missing">
+          <h4>{{ t('appConfigCenter.importMissingApps') }}</h4>
+          <div
+            v-for="app in missingImportApps"
+            :key="`missing:${app.appId}`"
+            class="config-transfer-missing-row"
+          >
+            <div>
+              <strong>{{ app.name }}</strong>
+              <span class="muted"> ({{ app.appId }} @ {{ app.version || '-' }})</span>
+            </div>
+            <label class="check-item">
+              <input
+                type="checkbox"
+                :checked="missingAppOptions[app.appId]?.autoDownload !== false"
+                @change="setMissingAppOption(app.appId, 'autoDownload', $event?.target?.checked)"
+              >
+              {{ t('appConfigCenter.importAutoDownload') }}
+            </label>
+            <label class="check-item">
+              <input
+                type="checkbox"
+                :checked="missingAppOptions[app.appId]?.forceSameAppId !== false"
+                @change="setMissingAppOption(app.appId, 'forceSameAppId', $event?.target?.checked)"
+              >
+              {{ t('appConfigCenter.importForceSameAppId') }}
+            </label>
+            <label class="check-item">
+              <input
+                type="checkbox"
+                :checked="missingAppOptions[app.appId]?.allowNameMatch !== false"
+                @change="setMissingAppOption(app.appId, 'allowNameMatch', $event?.target?.checked)"
+              >
+              {{ t('appConfigCenter.importAllowNameMatch') }}
+            </label>
+            <label class="check-item">
+              <input
+                type="checkbox"
+                :checked="missingAppOptions[app.appId]?.latest === true"
+                @change="setMissingAppOption(app.appId, 'latest', $event?.target?.checked)"
+              >
+              {{ t('appConfigCenter.importUseLatest') }}
+            </label>
+            <button
+              class="btn"
+              :disabled="missingAppBusy[app.appId] || missingAppOptions[app.appId]?.autoDownload === false"
+              @click="installMissingImportApp(app.appId)"
+            >
+              {{ missingAppBusy[app.appId] ? t('store.downloading') : t('appConfigCenter.importInstallMissingApp') }}
+            </button>
+            <div v-if="missingAppProgress[app.appId]" class="download-progress">
+              <div class="download-progress-track">
+                <div class="download-progress-bar" :style="{ width: `${missingAppProgress[app.appId]}%` }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <label class="check-item">
+          <input v-model="importOverwriteMagnets" type="checkbox">
+          {{ t('appConfigCenter.importOverwriteMagnets') }}
+        </label>
+
+        <div v-if="importActionMessage" class="success-text">{{ importActionMessage }}</div>
+
+        <div v-if="importPreviewSections.length" class="config-import-preview">
+          <section
+            v-for="section in importPreviewSections"
+            :key="section.id"
+            class="config-import-section"
+          >
+            <button class="config-import-section-header" @click="toggleImportSection(section.id)">
+              <span>{{ importCollapsedSections[section.id] ? '+' : '-' }}</span>
+              <strong>{{ section.title }}</strong>
+              <span class="muted">{{ section.rows.length }}</span>
+            </button>
+            <div v-if="!importCollapsedSections[section.id]" class="table-wrap">
+              <table class="config-table compact">
+                <thead>
+                  <tr>
+                    <th>{{ t('appConfigCenter.colPath') }}</th>
+                    <th>{{ t('appConfigCenter.importValue') }}</th>
+                    <th>{{ t('appConfigCenter.importCurrentValue') }}</th>
+                    <th>{{ t('appConfigCenter.importOverwrite') }}</th>
+                    <th>{{ t('appConfigCenter.importStatus') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in section.rows" :key="row.id">
+                    <td class="mono-cell">{{ row.path }}</td>
+                    <td class="mono-cell">{{ row.importText }}</td>
+                    <td class="mono-cell">{{ row.currentText }}</td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        :checked="importOverwriteById[row.id] === true"
+                        :disabled="!row.canOverwrite || (row.isMagnet && !importOverwriteMagnets)"
+                        @change="setImportRowOverwrite(row.id, $event?.target?.checked)"
+                      >
+                    </td>
+                    <td>{{ getImportRowStatusText(row) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div v-else class="empty-box">{{ t('appConfigCenter.importNoPreview') }}</div>
+
+        <footer class="panel-actions">
+          <button class="btn" :disabled="importBusy" @click="closeImportModal">{{ t('common.cancel') }}</button>
+          <button class="btn primary" :disabled="importBusy || !hasImportOverwriteSelection" @click="applyImportSelection">
+            {{ importBusy ? t('appConfigCenter.importApplying') : t('appConfigCenter.importApply') }}
+          </button>
+        </footer>
+      </section>
+    </div>
+
+    <UploadInstallModal
+      :visible="showUploadModal"
+      :busy="uploadBusy"
+      :error="uploadError"
+      :status="uploadStatus"
+      :status-done="uploadStatusDone"
+      :output="uploadOutput"
+      :file-name="uploadFileName"
+      :hint="uploadHint"
+      :show-file-picker="uploadShowFilePicker"
+      :cancel-busy="uploadCancelBusy"
+      :interactive-input="uploadInteractiveInput"
+      :interactive-ready="uploadInteractiveReady"
+      :interactive-mask-input="uploadInteractiveMaskInput"
+      @close="closeUploadModal"
+      @file-change="onUploadFileChange"
+      @submit="submitUpload"
+      @cancel-operation="cancelCurrentUpload"
+      @interactive-submit="submitInteractiveInput"
+      @interactive-input="setInteractiveInput"
+      @interactive-mask-change="setInteractiveMaskInput"
+    />
 
   </section>
 </template>

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from aivudaos import __version__ as aivudaos_version
 from aivudaos.core.auth.models import SessionInfo
 from aivudaos.core.auth.service import AuthService
 from aivudaos.core.config.service import ConfigService
@@ -48,6 +50,24 @@ def _build_caddy_local_ca_filename() -> str:
     if not safe_hostname:
         safe_hostname = "local"
     return f"aivudaos-{safe_hostname}-caddy-local-root.crt"
+
+
+@router.get("/export-meta")
+async def get_config_export_meta(token: str) -> Dict[str, Any]:
+    _require_auth(token)
+    config: ConfigService = get_config_service()
+    os_cfg = config.get_os_config()
+    hostname = str(os_cfg.data.get("avahi_hostname", "") or "").strip().lower()
+    os_parameters = {
+        "keys": sorted(str(key) for key in os_cfg.data.keys()),
+        "count": len(os_cfg.data),
+    }
+    return {
+        "aivudaos_version": aivudaos_version,
+        "avahi_hostname": hostname,
+        "exported_at": int(time.time()),
+        "os_parameters": os_parameters,
+    }
 
 
 @router.get("/system/sudo-nopasswd")

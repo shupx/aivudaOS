@@ -20,6 +20,10 @@ export async function fetchOsConfig() {
   return request('/api/config/os', { auth: true })
 }
 
+export async function fetchConfigExportMeta() {
+  return request('/api/config/export-meta', { auth: true })
+}
+
 export async function updateOsConfig(data, version) {
   return request('/api/config/os', {
     method: 'PUT',

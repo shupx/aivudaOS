@@ -695,6 +695,77 @@ input {
   min-width: 0;
 }
 
+.config-transfer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 52vh;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.config-transfer-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  background: var(--panel-muted-bg, #f8fafc);
+}
+
+.config-transfer-missing h4 {
+  margin: 0;
+}
+
+.config-transfer-missing-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(4, max-content) max-content;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.config-transfer-missing-row:first-of-type {
+  border-top: 0;
+}
+
+.config-import-modal-card {
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.config-import-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-import-section {
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.config-import-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  background: var(--panel-muted-bg, #f8fafc);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.success-text {
+  color: #059669;
+}
+
 .config-center-filter-select {
   min-width: min(360px, 100%);
   max-width: 100%;
