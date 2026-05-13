@@ -151,6 +151,8 @@ export function useAppConfigCenterPage() {
           id: sectionId,
           title: row.sectionTitle,
           rows: [],
+          importedVersion: row.importedVersion || '',
+          currentVersion: row.currentVersion || '',
         })
       }
       grouped.get(sectionId).rows.push(row)
@@ -162,6 +164,9 @@ export function useAppConfigCenterPage() {
         ...section,
         sameCount: hiddenSameRows.length,
         hasNonSameRows: section.rows.some((row) => row.status !== 'same'),
+        hasVersionMismatch: Boolean(section.importedVersion)
+          && Boolean(section.currentVersion)
+          && section.importedVersion !== section.currentVersion,
         visibleRows: isCondensed
           ? section.rows.filter((row) => row.status !== 'same')
           : section.rows,
@@ -170,6 +175,9 @@ export function useAppConfigCenterPage() {
     return sections.sort((left, right) => {
       if (left.id === 'sys') return -1
       if (right.id === 'sys') return 1
+      if (left.hasVersionMismatch !== right.hasVersionMismatch) {
+        return left.hasVersionMismatch ? -1 : 1
+      }
       if (left.hasNonSameRows !== right.hasNonSameRows) {
         return left.hasNonSameRows ? -1 : 1
       }
@@ -1169,6 +1177,8 @@ export function useAppConfigCenterPage() {
           appId: app.app_id,
           appName: app.name || app.app_id,
           appVersion: app.version || '',
+          importedVersion: app.version || '',
+          currentVersion: '',
           status: 'missing_app',
         }))
         continue
@@ -1197,6 +1207,8 @@ export function useAppConfigCenterPage() {
           appId: currentApp.app_id,
           appName: currentApp.name || currentApp.app_id,
           appVersion: currentApp.app_version || '',
+          importedVersion: app.version || '',
+          currentVersion: currentApp.app_version || '',
         }))
       }
     }
@@ -1242,6 +1254,8 @@ export function useAppConfigCenterPage() {
     appId,
     appName,
     appVersion,
+    importedVersion = '',
+    currentVersion = '',
     status = '',
   }) {
     const isMagnet = Boolean(magnetGroup)
@@ -1270,6 +1284,8 @@ export function useAppConfigCenterPage() {
       appId,
       appName,
       appVersion,
+      importedVersion,
+      currentVersion,
       status: rowStatus,
     }
   }

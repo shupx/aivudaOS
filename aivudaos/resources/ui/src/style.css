@@ -772,6 +772,19 @@ input {
   cursor: pointer;
 }
 
+.config-import-section-header-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.config-import-version-mismatch {
+  color: #b45309;
+}
+
 .config-import-table-wrap {
   max-width: 100%;
   max-height: min(42vh, 420px);

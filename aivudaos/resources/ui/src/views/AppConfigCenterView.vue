@@ -791,7 +791,18 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           >
             <button class="config-import-section-header" @click="toggleImportSection(section.id)">
               <span>{{ importCollapsedSections[section.id] ? '+' : '-' }}</span>
-              <strong>{{ section.title }}</strong>
+              <div class="config-import-section-header-main">
+                <strong>{{ section.title }}</strong>
+                <span
+                  v-if="section.hasVersionMismatch"
+                  class="muted config-import-version-mismatch"
+                >
+                  {{ t('appConfigCenter.importVersionMismatchHint', {
+                    currentVersion: section.currentVersion || '-',
+                    importedVersion: section.importedVersion || '-',
+                  }) }}
+                </span>
+              </div>
               <span class="muted">
                 {{ section.visibleRows.length }}/{{ section.rows.length }}
               </span>
