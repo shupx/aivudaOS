@@ -121,11 +121,28 @@ export function useAppConfigCenterPage() {
   const importOverwriteById = ref({})
   const importOverwriteMagnets = ref(false)
   const importBusy = ref(false)
+  const importErrorMessage = ref('')
+  const importSuccessMessage = ref('')
   const importActionMessage = ref('')
   const missingAppOptions = ref({})
   const missingAppBusy = ref({})
   const missingAppProgress = ref({})
+  const missingAppsCollapsed = ref(false)
   const installAllMissingAppsBusy = ref(false)
+
+  watch(importOverwriteMagnets, (enabled) => {
+    const next = { ...importOverwriteById.value }
+    let changed = false
+    for (const row of importRows.value) {
+      if (!row.isMagnet || !row.canOverwrite) continue
+      if (next[row.id] === Boolean(enabled)) continue
+      next[row.id] = Boolean(enabled)
+      changed = true
+    }
+    if (changed) {
+      importOverwriteById.value = next
+    }
+  })
   const uploadModal = useAppUploadInstallModal({
     async onInstalled() {
       await loadAllConfigs()
@@ -207,7 +224,6 @@ export function useAppConfigCenterPage() {
 
     return {
       autoDownloadAll: buildState('autoDownload', true),
-      forceSameAppIdAll: buildState('forceSameAppId', true),
       allowNameMatchAll: buildState('allowNameMatch', true),
       latestAll: buildState('latest', true),
     }
@@ -1076,6 +1092,8 @@ export function useAppConfigCenterPage() {
 
   function openImportModal() {
     importModalVisible.value = true
+    importErrorMessage.value = ''
+    importSuccessMessage.value = ''
     importActionMessage.value = ''
     error.value = ''
     success.value = ''
@@ -1090,16 +1108,21 @@ export function useAppConfigCenterPage() {
     importCollapsedSections.value = {}
     importOverwriteById.value = {}
     importOverwriteMagnets.value = false
+    importErrorMessage.value = ''
+    importSuccessMessage.value = ''
     importActionMessage.value = ''
     missingAppOptions.value = {}
     missingAppBusy.value = {}
     missingAppProgress.value = {}
+    missingAppsCollapsed.value = false
   }
 
   async function onImportFileChange(fileList) {
     const file = fileList?.[0] || null
     if (!file) return
     importFileName.value = file.name || ''
+    importErrorMessage.value = ''
+    importSuccessMessage.value = ''
     error.value = ''
     success.value = ''
     importActionMessage.value = ''
@@ -1112,7 +1135,7 @@ export function useAppConfigCenterPage() {
       importDocument.value = null
       importRows.value = []
       importOverwriteById.value = {}
-      error.value = String(err?.message || err || t('appConfigCenter.importInvalidFile'))
+      importErrorMessage.value = String(err?.message || err || t('appConfigCenter.importInvalidFile'))
     }
   }
 
@@ -1123,8 +1146,7 @@ export function useAppConfigCenterPage() {
       if (!next[app.app_id]) {
         next[app.app_id] = {
           autoDownload: true,
-          forceSameAppId: true,
-          allowNameMatch: true,
+          allowNameMatch: false,
           latest: false,
         }
       }
@@ -1146,7 +1168,6 @@ export function useAppConfigCenterPage() {
   function toggleMissingAppColumn(key) {
     const stateMap = {
       autoDownload: missingAppColumnSelectionState.value.autoDownloadAll,
-      forceSameAppId: missingAppColumnSelectionState.value.forceSameAppIdAll,
       allowNameMatch: missingAppColumnSelectionState.value.allowNameMatchAll,
       latest: missingAppColumnSelectionState.value.latestAll,
     }
@@ -1159,6 +1180,27 @@ export function useAppConfigCenterPage() {
       }
     }
     missingAppOptions.value = next
+  }
+
+  function toggleMissingAppsCollapsed() {
+    missingAppsCollapsed.value = !missingAppsCollapsed.value
+  }
+
+  function isStoreConnectivityErrorMessage(message) {
+    const text = String(message || '').trim().toLowerCase()
+    if (!text) return false
+    return text.includes('failed to fetch')
+      || text.includes('networkerror')
+      || text.includes('load failed')
+      || text.includes('network request failed')
+  }
+
+  const importStoreConnectivityHelpVisible = computed(() => (
+    importModalVisible.value && isStoreConnectivityErrorMessage(importErrorMessage.value)
+  ))
+
+  function openOnlineStoreFromImport() {
+    router.push('/dashboard/store')
   }
 
   function rebuildImportPreview() {
@@ -1265,10 +1307,6 @@ export function useAppConfigCenterPage() {
 
     const nextCollapsedSections = {}
     for (const [sectionId, items] of sectionRows.entries()) {
-      if (!sectionId.startsWith('app:')) {
-        nextCollapsedSections[sectionId] = false
-        continue
-      }
       nextCollapsedSections[sectionId] = items.some((row) => row.status === 'same')
     }
     importCollapsedSections.value = nextCollapsedSections
@@ -1356,6 +1394,33 @@ export function useAppConfigCenterPage() {
     }
   }
 
+  function isImportSectionOverwriteAllSelected(sectionId) {
+    const id = String(sectionId || '')
+    const selectableRows = importRows.value.filter((row) => (
+      row.sectionId === id
+      && row.canOverwrite
+      && (!row.isMagnet || importOverwriteMagnets.value)
+    ))
+    if (!selectableRows.length) return false
+    return selectableRows.every((row) => importOverwriteById.value[row.id] === true)
+  }
+
+  function toggleImportSectionOverwrite(sectionId) {
+    const id = String(sectionId || '')
+    const selectableRows = importRows.value.filter((row) => (
+      row.sectionId === id
+      && row.canOverwrite
+      && (!row.isMagnet || importOverwriteMagnets.value)
+    ))
+    if (!selectableRows.length) return
+    const nextSelected = !isImportSectionOverwriteAllSelected(id)
+    const next = { ...importOverwriteById.value }
+    for (const row of selectableRows) {
+      next[row.id] = nextSelected
+    }
+    importOverwriteById.value = next
+  }
+
   function getImportRowStatusText(row) {
     if (row.status === 'missing_app') return t('appConfigCenter.importStatusMissingApp')
     if (row.status === 'missing_param') return t('appConfigCenter.importStatusMissingParam')
@@ -1374,11 +1439,14 @@ export function useAppConfigCenterPage() {
       row.canOverwrite && importOverwriteById.value[row.id] === true
     ))
     if (!selectedRows.length) {
-      error.value = t('appConfigCenter.importNoSelection')
+      importErrorMessage.value = t('appConfigCenter.importNoSelection')
+      importSuccessMessage.value = ''
       return
     }
 
     importBusy.value = true
+    importErrorMessage.value = ''
+    importSuccessMessage.value = ''
     error.value = ''
     success.value = ''
     importActionMessage.value = ''
@@ -1393,10 +1461,10 @@ export function useAppConfigCenterPage() {
       await applyDirectImportRows(directRows)
       await loadAllConfigs()
       rebuildImportPreview()
-      success.value = t('appConfigCenter.importApplySuccess')
-      importActionMessage.value = success.value
+      importSuccessMessage.value = t('appConfigCenter.importApplySuccess')
+      importActionMessage.value = importSuccessMessage.value
     } catch (err) {
-      error.value = String(err?.message || err || t('appConfigCenter.importApplyFailed'))
+      importErrorMessage.value = String(err?.message || err || t('appConfigCenter.importApplyFailed'))
     } finally {
       importBusy.value = false
     }
@@ -1471,6 +1539,8 @@ export function useAppConfigCenterPage() {
       ...missingAppBusy.value,
       [appId]: true,
     }
+    importErrorMessage.value = ''
+    importSuccessMessage.value = ''
     importActionMessage.value = ''
     error.value = ''
     try {
@@ -1510,7 +1580,7 @@ export function useAppConfigCenterPage() {
         }
       }
     } catch (err) {
-      error.value = String(err?.message || err || t('appConfigCenter.importInstallFailed'))
+      importErrorMessage.value = String(err?.message || err || t('appConfigCenter.importInstallFailed'))
     } finally {
       missingAppProgress.value = {
         ...missingAppProgress.value,
@@ -1526,6 +1596,8 @@ export function useAppConfigCenterPage() {
   async function installAllMissingImportApps() {
     if (installAllMissingAppsBusy.value) return
     installAllMissingAppsBusy.value = true
+    importErrorMessage.value = ''
+    importSuccessMessage.value = ''
     importActionMessage.value = ''
     error.value = ''
     try {
@@ -1553,7 +1625,7 @@ export function useAppConfigCenterPage() {
         versions: Array.isArray(detail?.versions) ? detail.versions : [],
       }
     }
-    if (options.forceSameAppId || !options.allowNameMatch) {
+    if (!options.allowNameMatch) {
       throw new Error(t('appConfigCenter.importMissingAppNoStoreMatch'))
     }
     const targetName = String(target.name || '').trim().toLowerCase()
@@ -2096,19 +2168,27 @@ export function useAppConfigCenterPage() {
     importOverwriteById,
     importOverwriteMagnets,
     importBusy,
+    importErrorMessage,
+    importSuccessMessage,
+    importStoreConnectivityHelpVisible,
     importActionMessage,
     missingImportApps,
     missingAppOptions,
     missingAppBusy,
     missingAppProgress,
+    missingAppsCollapsed,
     missingAppColumnSelectionState,
     installAllMissingAppsBusy,
     hasImportOverwriteSelection,
     openImportModal,
     closeImportModal,
     onImportFileChange,
+    openOnlineStoreFromImport,
+    toggleMissingAppsCollapsed,
     toggleImportSection,
     setImportRowOverwrite,
+    isImportSectionOverwriteAllSelected,
+    toggleImportSectionOverwrite,
     getImportRowStatusText,
     applyImportSelection,
     setMissingAppOption,

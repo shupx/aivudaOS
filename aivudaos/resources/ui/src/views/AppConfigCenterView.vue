@@ -218,19 +218,27 @@ const {
   importOverwriteById,
   importOverwriteMagnets,
   importBusy,
+  importErrorMessage,
+  importSuccessMessage,
+  importStoreConnectivityHelpVisible,
   importActionMessage,
   missingImportApps,
   missingAppOptions,
   missingAppBusy,
   missingAppProgress,
+  missingAppsCollapsed,
   missingAppColumnSelectionState,
   installAllMissingAppsBusy,
   hasImportOverwriteSelection,
   openImportModal,
   closeImportModal,
   onImportFileChange,
+  openOnlineStoreFromImport,
+  toggleMissingAppsCollapsed,
   toggleImportSection,
   setImportRowOverwrite,
+  isImportSectionOverwriteAllSelected,
+  toggleImportSectionOverwrite,
   getImportRowStatusText,
   applyImportSelection,
   setMissingAppOption,
@@ -724,33 +732,48 @@ const systemEnumDrafts = useDeferredFieldDrafts({
 
         <div v-if="missingImportApps.length" class="config-transfer-missing">
           <div class="config-transfer-missing-header">
-            <h4>{{ t('appConfigCenter.importMissingApps') }}</h4>
-            <button
-              class="btn"
-              :disabled="installAllMissingAppsBusy"
-              @click="installAllMissingImportApps"
-            >
-              {{ installAllMissingAppsBusy ? t('store.downloading') : t('appConfigCenter.importInstallAllMissingApps') }}
+            <button class="config-transfer-missing-toggle" @click="toggleMissingAppsCollapsed">
+              <span>{{ missingAppsCollapsed ? '+' : '-' }}</span>
+              <h4>{{ t('appConfigCenter.importMissingApps') }}</h4>
+              <span class="muted">{{ missingImportApps.length }}</span>
             </button>
+            <div class="config-transfer-missing-actions">
+              <button
+                class="btn"
+                :disabled="installAllMissingAppsBusy"
+                @click="installAllMissingImportApps"
+              >
+                {{ installAllMissingAppsBusy ? t('store.downloading') : t('appConfigCenter.importInstallAllMissingApps') }}
+              </button>
+            </div>
           </div>
-          <div class="table-wrap config-transfer-missing-table-wrap">
+          <div v-if="!missingAppsCollapsed" class="table-wrap config-transfer-missing-table-wrap">
             <table class="config-table compact config-transfer-missing-table">
               <thead>
                 <tr>
-                  <th>{{ t('appConfigCenter.colApp') }}</th>
-                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('autoDownload')">
-                    {{ t('appConfigCenter.importAutoDownload') }}
+                  <th :title="t('appConfigCenter.importAppTip')">{{ t('appConfigCenter.colApp') }}</th>
+                  <th
+                    class="config-transfer-th-toggle"
+                    :title="t('appConfigCenter.importInstallTip')"
+                    @click="toggleMissingAppColumn('autoDownload')"
+                  >
+                    {{ t('appConfigCenter.importInstall') }}
                   </th>
-                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('forceSameAppId')">
-                    {{ t('appConfigCenter.importForceSameAppId') }}
-                  </th>
-                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('allowNameMatch')">
+                  <th
+                    class="config-transfer-th-toggle"
+                    :title="t('appConfigCenter.importAllowNameMatchTip')"
+                    @click="toggleMissingAppColumn('allowNameMatch')"
+                  >
                     {{ t('appConfigCenter.importAllowNameMatch') }}
                   </th>
-                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('latest')">
+                  <th
+                    class="config-transfer-th-toggle"
+                    :title="t('appConfigCenter.importUseLatestTip')"
+                    @click="toggleMissingAppColumn('latest')"
+                  >
                     {{ t('appConfigCenter.importUseLatest') }}
                   </th>
-                  <th>{{ t('appConfigCenter.colAction') }}</th>
+                  <th :title="t('appConfigCenter.importActionTip')">{{ t('appConfigCenter.colAction') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -769,14 +792,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
                   <td>
                     <input
                       type="checkbox"
-                      :checked="missingAppOptions[app.appId]?.forceSameAppId !== false"
-                      @change="setMissingAppOption(app.appId, 'forceSameAppId', $event?.target?.checked)"
-                    >
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      :checked="missingAppOptions[app.appId]?.allowNameMatch !== false"
+                      :checked="missingAppOptions[app.appId]?.allowNameMatch === true"
                       @change="setMissingAppOption(app.appId, 'allowNameMatch', $event?.target?.checked)"
                     >
                   </td>
@@ -812,6 +828,19 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           {{ t('appConfigCenter.importOverwriteMagnets') }}
         </label>
 
+        <NAlert v-if="importErrorMessage" type="error" style="margin-top: 12px;">
+          <div>{{ importErrorMessage }}</div>
+          <div v-if="importStoreConnectivityHelpVisible" class="config-import-store-help">
+            <span>{{ t('appConfigCenter.importStoreConnectivityHelp') }}</span>
+            <button class="btn linklike" @click="openOnlineStoreFromImport">
+              {{ t('common.onlineStore') }}
+            </button>
+          </div>
+        </NAlert>
+        <NAlert v-else-if="importSuccessMessage" type="success" style="margin-top: 12px;">
+          {{ importSuccessMessage }}
+        </NAlert>
+
         <div v-if="importActionMessage" class="success-text">{{ importActionMessage }}</div>
 
         <div v-if="importPreviewSections.length" class="config-import-preview">
@@ -845,7 +874,15 @@ const systemEnumDrafts = useDeferredFieldDrafts({
                     <th>{{ t('appConfigCenter.colPath') }}</th>
                     <th>{{ t('appConfigCenter.importValue') }}</th>
                     <th>{{ t('appConfigCenter.importCurrentValue') }}</th>
-                    <th>{{ t('appConfigCenter.importOverwrite') }}</th>
+                    <th
+                      class="config-transfer-th-toggle"
+                      @click="toggleImportSectionOverwrite(section.id)"
+                    >
+                      {{ t('appConfigCenter.importOverwrite') }}
+                      <span class="muted">
+                        {{ isImportSectionOverwriteAllSelected(section.id) ? ' (all)' : '' }}
+                      </span>
+                    </th>
                     <th>{{ t('appConfigCenter.importStatus') }}</th>
                   </tr>
                 </thead>
