@@ -364,6 +364,7 @@ export default {
     importStatusMagnetSkipped: '磁吸参数，默认跳过',
     importStatusMagnetReady: '磁吸参数，可覆盖',
     importStatusChanged: '有变化',
+    importOnlySameValuesHidden: '当前为收起视图，same value 的行已隐藏',
     magnetTitle: '磁吸参数区',
     magnetDesc: '磁吸参数是指具有相同参数名的参数值自动保持一致的功能。',
     magnetEmpty: '当前没有磁吸参数',

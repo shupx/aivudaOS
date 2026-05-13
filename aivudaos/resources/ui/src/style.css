@@ -732,20 +732,30 @@ input {
 }
 
 .config-import-modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(1320px, 96vw);
+  min-width: 860px;
+  min-height: 520px;
+  max-width: min(96vw, 1480px);
   max-height: 92vh;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .config-import-preview {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .config-import-section {
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: 8px;
   overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .config-import-section-header {
@@ -760,6 +770,47 @@ input {
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.config-import-table-wrap {
+  max-width: 100%;
+  max-height: min(42vh, 420px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.config-import-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  table-layout: auto;
+}
+
+.config-import-table th,
+.config-import-table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.config-import-table td:nth-child(1),
+.config-import-table td:nth-child(2),
+.config-import-table td:nth-child(3) {
+  white-space: pre-wrap;
+}
+
+.config-import-table th:nth-child(4),
+.config-import-table th:nth-child(5),
+.config-import-table td:nth-child(4),
+.config-import-table td:nth-child(5) {
+  white-space: normal;
+}
+
+.config-import-table td:nth-child(4) {
+  text-align: center;
+}
+
+.config-import-row-highlight td {
+  background: #fff7db;
 }
 
 .success-text {

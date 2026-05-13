@@ -701,8 +701,8 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       </section>
     </div>
 
-    <div v-if="importModalVisible" class="modal-overlay" @click.self="closeImportModal">
-      <section class="modal-card modal-wide config-import-modal-card">
+    <div v-if="importModalVisible" class="modal-overlay">
+      <section class="modal-card modal-wide modal-resizable config-import-modal-card">
         <header class="modal-header">
           <h3>{{ t('appConfigCenter.importTitle') }}</h3>
         </header>
@@ -792,10 +792,12 @@ const systemEnumDrafts = useDeferredFieldDrafts({
             <button class="config-import-section-header" @click="toggleImportSection(section.id)">
               <span>{{ importCollapsedSections[section.id] ? '+' : '-' }}</span>
               <strong>{{ section.title }}</strong>
-              <span class="muted">{{ section.rows.length }}</span>
+              <span class="muted">
+                {{ section.visibleRows.length }}/{{ section.rows.length }}
+              </span>
             </button>
-            <div v-if="!importCollapsedSections[section.id]" class="table-wrap">
-              <table class="config-table compact">
+            <div v-if="section.visibleRows.length" class="table-wrap config-import-table-wrap">
+              <table class="config-table compact config-import-table">
                 <thead>
                   <tr>
                     <th>{{ t('appConfigCenter.colPath') }}</th>
@@ -806,7 +808,11 @@ const systemEnumDrafts = useDeferredFieldDrafts({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="row in section.rows" :key="row.id">
+                  <tr
+                    v-for="row in section.visibleRows"
+                    :key="row.id"
+                    :class="{ 'config-import-row-highlight': row.status !== 'same' }"
+                  >
                     <td class="mono-cell">{{ row.path }}</td>
                     <td class="mono-cell">{{ row.importText }}</td>
                     <td class="mono-cell">{{ row.currentText }}</td>
@@ -823,6 +829,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
                 </tbody>
               </table>
             </div>
+            <div v-else class="empty-box">{{ t('appConfigCenter.importOnlySameValuesHidden') }}</div>
           </section>
         </div>
         <div v-else class="empty-box">{{ t('appConfigCenter.importNoPreview') }}</div>

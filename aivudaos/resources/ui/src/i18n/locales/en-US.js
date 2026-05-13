@@ -364,6 +364,7 @@ export default {
     importStatusMagnetSkipped: 'Magnet-bound, skipped by default',
     importStatusMagnetReady: 'Magnet-bound, ready to overwrite',
     importStatusChanged: 'Changed',
+    importOnlySameValuesHidden: 'All same value rows are hidden in the current condensed view',
     magnetTitle: 'Magnet Parameters',
     magnetDesc: 'Magnet parameters automatically keep values consistent for parameters with the same name.',
     magnetEmpty: 'No magnet parameters found',

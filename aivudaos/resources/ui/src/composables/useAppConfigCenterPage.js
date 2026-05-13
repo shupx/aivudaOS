@@ -156,9 +156,25 @@ export function useAppConfigCenterPage() {
       grouped.get(sectionId).rows.push(row)
     }
     for (const section of grouped.values()) {
-      sections.push(section)
+      const hiddenSameRows = section.rows.filter((row) => row.status === 'same')
+      const isCondensed = importCollapsedSections.value[section.id] === true
+      sections.push({
+        ...section,
+        sameCount: hiddenSameRows.length,
+        hasNonSameRows: section.rows.some((row) => row.status !== 'same'),
+        visibleRows: isCondensed
+          ? section.rows.filter((row) => row.status !== 'same')
+          : section.rows,
+      })
     }
-    return sections
+    return sections.sort((left, right) => {
+      if (left.id === 'sys') return -1
+      if (right.id === 'sys') return 1
+      if (left.hasNonSameRows !== right.hasNonSameRows) {
+        return left.hasNonSameRows ? -1 : 1
+      }
+      return left.title.localeCompare(right.title)
+    })
   })
 
   const missingImportApps = computed(() => {
@@ -1191,6 +1207,25 @@ export function useAppConfigCenterPage() {
       nextOverwrite[row.id] = row.canOverwrite && !row.isMagnet
     }
     importOverwriteById.value = nextOverwrite
+
+    const sectionRows = new Map()
+    for (const row of rows) {
+      const sectionId = String(row.sectionId || '')
+      if (!sectionRows.has(sectionId)) {
+        sectionRows.set(sectionId, [])
+      }
+      sectionRows.get(sectionId).push(row)
+    }
+
+    const nextCollapsedSections = {}
+    for (const [sectionId, items] of sectionRows.entries()) {
+      if (!sectionId.startsWith('app:')) {
+        nextCollapsedSections[sectionId] = false
+        continue
+      }
+      nextCollapsedSections[sectionId] = items.some((row) => row.status === 'same')
+    }
+    importCollapsedSections.value = nextCollapsedSections
   }
 
   function buildImportRow({
