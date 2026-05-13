@@ -12,6 +12,14 @@ pip install aivudaos
 # pip install aivudaos==1.0.0.dev2026040602  # for a certain version
 ```
 
+If you install with `conda`, activate the target environment first and keep using that same environment for `aivudaos install`, `aivudaos start`, and related commands:
+
+```bash
+conda create -n aivuda python=3.8 -y
+conda activate aivuda
+pip install aivudaos
+```
+
 - Install from a provided wheel:
 
 ```bash
@@ -57,6 +65,8 @@ source ~/.bashrc
 ```bash
 aivudaos install
 ```
+
+When `aivudaos install` is executed inside an activated `conda` environment, the generated `aivudaos.service` will remember that environment's Python interpreter for later restarts and boot auto-start.
 
 This will install all the dependencies and start aivudaOS and make aivudaOS autostart.
 

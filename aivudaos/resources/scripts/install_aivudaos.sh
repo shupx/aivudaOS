@@ -33,6 +33,7 @@ DOWNLOAD_CADDY_HELPER_URL="${SCRIPT_DIR}/_download_caddy.sh"
 RUNTIME_OS_CONFIG="${RUNTIME_ROOT}/config/os.yaml"
 AVAHI_HOSTNAME=""
 WORKING_DIRECTORY="${RUNTIME_ROOT}"
+AIVUDAOS_PYTHON="${AIVUDAOS_PYTHON:-}"
 
 if [[ -n "${SOURCE_ROOT}" ]]; then
   WORKING_DIRECTORY="${SOURCE_ROOT}"
@@ -43,6 +44,34 @@ log() {
 }
 
 source "${GET_AVAHI_HOSTNAME_HELPER}"
+
+resolve_python_bin() {
+  if [[ -n "${AIVUDAOS_PYTHON}" ]]; then
+    if [[ -x "${AIVUDAOS_PYTHON}" ]]; then
+      return 0
+    fi
+    echo "Configured AIVUDAOS_PYTHON is not executable: ${AIVUDAOS_PYTHON}" >&2
+    exit 1
+  fi
+
+  if [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
+    AIVUDAOS_PYTHON="${CONDA_PREFIX}/bin/python"
+    return 0
+  fi
+
+  if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    AIVUDAOS_PYTHON="${VIRTUAL_ENV}/bin/python"
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    AIVUDAOS_PYTHON="$(command -v python3)"
+    return 0
+  fi
+
+  echo "python3 not found in PATH, and no usable AIVUDAOS_PYTHON/CONDA_PREFIX/VIRTUAL_ENV was detected." >&2
+  exit 1
+}
 
 ensure_avahi_packages() {
   if ! command -v apt-get >/dev/null 2>&1; then
@@ -135,6 +164,7 @@ ensure_user_linger_enabled() {
 
 mkdir -p "${USER_SYSTEMD_DIR}"
 mkdir -p "${RUNTIME_ROOT}/config"
+resolve_python_bin
 
 ensure_avahi_packages
   # Step 2: Ensure host prerequisites.
@@ -157,6 +187,7 @@ Type=simple
 WorkingDirectory=${WORKING_DIRECTORY}
 Environment=AIVUDAOS_WS_ROOT=${RUNTIME_ROOT}
 Environment=AIVUDAOS_PACKAGE_ROOT=${PACKAGE_ROOT}
+Environment=AIVUDAOS_PYTHON=${AIVUDAOS_PYTHON}
 ExecStartPre=/usr/bin/test -x ${CADDY_BIN}
 # ExecStartPre=/usr/bin/test -f ${CADDY_CONFIG}
 ExecStartPre=/usr/bin/test -d ${FRONTEND_DIST}

@@ -79,6 +79,7 @@ aivudaos/resources/scripts/_run_aivudaos_stack.sh --dev
 
 说明：`--dev` 模式下会持续监听后端与前端变更并自动重载；按 `Ctrl+C` 会统一停止后端、前端 watch 和 caddy。
 开发模式脚本会自动把源码仓库根加入 `PYTHONPATH`，因此即使当前环境还没执行 `pip install --user -e .`，也可以直接启动后端。
+如果当前 shell 已激活 `conda` 环境，脚本会优先使用该环境的 `python`。
 
 ### 生产模式（gunicorn + uvicorn worker）
 
@@ -116,6 +117,8 @@ aivudaos/resources/scripts/install_aivudaos.sh
 - `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS 站点 `https://<value>.local:443`
 
 并在 hostname 发生变化时执行 caddy reload。
+
+如果执行安装脚本时已经激活 `conda` 环境，生成的 `aivudaos.service` 会固定使用该环境对应的 Python 解释器。
 
 卸载自启动：
 

@@ -45,6 +45,15 @@ bash aivudaos/resources/scripts/_run_aivudaos_stack.sh
 
 后端 Python 代码需要保持 Python 3.8 兼容
 
+如果你是通过 `conda` 安装 `aivudaos`，请先激活环境再执行启动脚本：
+
+```bash
+conda activate aivudaos
+bash aivudaos/resources/scripts/_run_aivudaos_stack.sh
+```
+
+脚本会优先使用 `AIVUDAOS_PYTHON`，其次自动识别 `CONDA_PREFIX/bin/python`、`VIRTUAL_ENV/bin/python`，最后才回退到当前 `PATH` 中的 `python3`。
+
 可选：先校验配置再启动。
 
 ```bash
@@ -63,6 +72,8 @@ bash aivudaos/resources/scripts/_run_aivudaos_stack.sh
 ```bash
 bash aivudaos/resources/scripts/install_aivudaos.sh
 ```
+
+如果当前 shell 已激活 `conda` 环境，安装脚本会把该环境对应的 Python 解释器写入 `aivudaos.service` 的 `AIVUDAOS_PYTHON`，这样 `systemd --user` 在重启或开机自启动时也不会丢失到系统 Python。
 
 脚本会自动：
 

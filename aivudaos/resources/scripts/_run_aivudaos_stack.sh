@@ -19,6 +19,35 @@ fi
 PYTHONPATH_PREFIX="${PYTHONPATH:-}"
 RUNTIME_ROOT="${AIVUDAOS_WS_ROOT:-${HOME}/aivudaOS_ws}"
 DEV_MODE=0
+PYTHON_BIN="${AIVUDAOS_PYTHON:-}"
+
+resolve_python_bin() {
+  if [[ -n "${PYTHON_BIN}" ]]; then
+    if [[ -x "${PYTHON_BIN}" ]]; then
+      return 0
+    fi
+    echo "Configured AIVUDAOS_PYTHON is not executable: ${PYTHON_BIN}" >&2
+    exit 1
+  fi
+
+  if [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
+    PYTHON_BIN="${CONDA_PREFIX}/bin/python"
+    return 0
+  fi
+
+  if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    PYTHON_BIN="${VIRTUAL_ENV}/bin/python"
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+    return 0
+  fi
+
+  echo "python3 not found in PATH, and no usable AIVUDAOS_PYTHON/CONDA_PREFIX/VIRTUAL_ENV was detected." >&2
+  exit 1
+}
 
 usage() {
   cat <<EOF
@@ -46,6 +75,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+resolve_python_bin
 
 CADDY_BIN="${RUNTIME_ROOT}/.tools/caddy/caddy"
 CADDY_TEMPLATE="${PACKAGE_ROOT}/caddy/Caddyfile_template"
@@ -97,9 +128,9 @@ cd "${RUNTIME_ROOT}"
 
 # Backend process: uvicorn reload in dev, gunicorn in production-like mode.
 if [[ "${DEV_MODE}" -eq 1 ]]; then
-  env PYTHONPATH="${PYTHONPATH_PREFIX}" /usr/bin/env python3 -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "${SOURCE_ROOT}/aivudaos/gateway" --reload-dir "${SOURCE_ROOT}/aivudaos/core" &
+  env PYTHONPATH="${PYTHONPATH_PREFIX}" "${PYTHON_BIN}" -m uvicorn aivudaos.gateway.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "${SOURCE_ROOT}/aivudaos/gateway" --reload-dir "${SOURCE_ROOT}/aivudaos/core" &
 else
-  env PYTHONPATH="${PYTHONPATH_PREFIX}" /usr/bin/env python3 -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000 &
+  env PYTHONPATH="${PYTHONPATH_PREFIX}" "${PYTHON_BIN}" -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker aivudaos.gateway.main:app -b 127.0.0.1:8000 &
 fi
 backend_pid=$!
 
