@@ -118,6 +118,8 @@ export function createConfigExportDocument({
       app_id: String(item.app_id || ''),
       name: String(item.name || item.app_id || ''),
       version: String(item.app_version || ''),
+      autostart: Boolean(item.autostart),
+      running: Boolean(item.running),
       parameters: deepClone(item.data || {}),
     }))
 
@@ -171,6 +173,8 @@ export function parseConfigImportDocument(text) {
         app_id: String(item.app_id || ''),
         name: String(item.name || item.app_id || ''),
         version: String(item.version || ''),
+        autostart: item.autostart === undefined ? null : Boolean(item.autostart),
+        running: item.running === undefined ? null : Boolean(item.running),
         parameters: isPlainRecord(item.parameters) ? item.parameters : {},
       }))
       .filter((item) => item.app_id)

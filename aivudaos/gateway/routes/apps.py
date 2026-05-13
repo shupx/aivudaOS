@@ -230,6 +230,8 @@ async def get_active_configs(token: str) -> Dict[str, Any]:
                 "app_id": app_id,
                 "name": str(app.get("name") or app_id),
                 "app_version": app_version,
+                "running": bool(app.get("running")),
+                "autostart": bool(app.get("autostart")),
                 "data": data,
                 "default_data": dict(default_config or {}),
                 "version": cfg.version,

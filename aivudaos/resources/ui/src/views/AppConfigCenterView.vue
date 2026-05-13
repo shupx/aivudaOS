@@ -7,7 +7,7 @@ import MagnetConfigSection from '../components/app-config-center/MagnetConfigSec
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
-import { ArrowLeft, Download, RefreshCw, Plus, Trash2, Upload } from 'lucide-vue-next'
+import { ArrowLeft, Check, Download, RefreshCw, Plus, Trash2, Upload, X } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const systemColumnWidths = ref([260, 320, 110, 180, 260, 120, 100])
@@ -206,10 +206,12 @@ const {
   exportModalVisible,
   exportIncludeSystem,
   exportSelectedApps,
+  isAllExportSelected,
   exportBusy,
   openExportModal,
   closeExportModal,
   setExportAppSelected,
+  toggleExportSelectAll,
   exportSelectedConfig,
   importModalVisible,
   importFileName,
@@ -222,6 +224,13 @@ const {
   importSuccessMessage,
   importStoreConnectivityHelpVisible,
   importActionMessage,
+  importAutostartRowsSorted,
+  importAutostartVisibleRows,
+  importAutostartSameCount,
+  importAutostartOverwriteById,
+  importAutostartCollapsed,
+  importAutostartCondensed,
+  isAllImportAutostartSelected,
   missingImportApps,
   missingAppOptions,
   missingAppBusy,
@@ -237,9 +246,14 @@ const {
   toggleMissingAppsCollapsed,
   toggleImportSection,
   setImportRowOverwrite,
+  setImportAutostartOverwrite,
+  toggleImportAutostartOverwriteAll,
+  toggleImportAutostartCollapsed,
+  toggleImportAutostartCondensed,
   isImportSectionOverwriteAllSelected,
   toggleImportSectionOverwrite,
   getImportRowStatusText,
+  getImportAutostartStatusText,
   applyImportSelection,
   setMissingAppOption,
   toggleMissingAppColumn,
@@ -688,6 +702,14 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         </header>
         <div class="config-transfer-list">
           <label class="check-item">
+            <input
+              type="checkbox"
+              :checked="isAllExportSelected"
+              @change="toggleExportSelectAll($event?.target?.checked)"
+            >
+            {{ t('appConfigCenter.exportSelectAll') }}
+          </label>
+          <label class="check-item">
             <input v-model="exportIncludeSystem" type="checkbox">
             {{ t('appConfigCenter.systemTitle') }}
           </label>
@@ -823,11 +845,6 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           </div>
         </div>
 
-        <label class="check-item">
-          <input v-model="importOverwriteMagnets" type="checkbox">
-          {{ t('appConfigCenter.importOverwriteMagnets') }}
-        </label>
-
         <NAlert v-if="importErrorMessage" type="error" style="margin-top: 12px;">
           <div>{{ importErrorMessage }}</div>
           <div v-if="importStoreConnectivityHelpVisible" class="config-import-store-help">
@@ -842,6 +859,102 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         </NAlert>
 
         <div v-if="importActionMessage" class="success-text">{{ importActionMessage }}</div>
+
+        <div v-if="importAutostartRowsSorted.length" class="config-transfer-missing config-import-autostart-panel">
+          <div class="config-transfer-missing-header">
+            <button class="config-transfer-missing-toggle" @click="toggleImportAutostartCollapsed">
+              <span>{{ importAutostartCollapsed ? '+' : '-' }}</span>
+              <h4>{{ t('appConfigCenter.importAutostartTitle') }}</h4>
+              <span class="muted">{{ importAutostartVisibleRows.length }}/{{ importAutostartRowsSorted.length }}</span>
+            </button>
+            <div class="config-transfer-missing-actions">
+              <button class="btn" @click="toggleImportAutostartCondensed">
+                {{ importAutostartCondensed ? t('appConfigCenter.expand') : t('appConfigCenter.collapse') }}
+              </button>
+            </div>
+          </div>
+          <div
+            v-if="!importAutostartCollapsed && importAutostartVisibleRows.length"
+            class="table-wrap config-transfer-missing-table-wrap config-import-autostart-table-wrap"
+          >
+            <table class="config-table compact config-transfer-missing-table config-import-autostart-table">
+              <thead>
+                <tr>
+                  <th>{{ t('appConfigCenter.colApp') }}</th>
+                  <th>{{ t('appConfigCenter.importedAutostart') }}</th>
+                  <th>{{ t('appConfigCenter.currentAutostart') }}</th>
+                  <th
+                    class="config-transfer-th-toggle"
+                    @click="toggleImportAutostartOverwriteAll"
+                  >
+                    {{ t('appConfigCenter.importOverwrite') }}
+                    <span class="muted">
+                      {{ isAllImportAutostartSelected ? ' (all)' : '' }}
+                    </span>
+                  </th>
+                  <th>{{ t('appConfigCenter.importStatus') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in importAutostartVisibleRows"
+                  :key="row.id"
+                  :class="{ 'config-import-row-highlight': row.status !== 'same' }"
+                >
+                  <td>
+                    <strong>{{ row.appName }}</strong>
+                    <span class="muted"> ({{ row.appId }} @ {{ row.importedVersion || '-' }})</span>
+                  </td>
+                  <td>
+                    <span
+                      class="config-import-state-icon"
+                      :class="row.importedAutostart ? 'config-import-state-icon-on' : 'config-import-state-icon-off'"
+                    >
+                      <NIcon size="16">
+                        <Check v-if="row.importedAutostart" />
+                        <X v-else />
+                      </NIcon>
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      v-if="row.exists"
+                      class="config-import-state-icon"
+                      :class="row.currentAutostart ? 'config-import-state-icon-on' : 'config-import-state-icon-off'"
+                    >
+                      <NIcon size="16">
+                        <Check v-if="row.currentAutostart" />
+                        <X v-else />
+                      </NIcon>
+                    </span>
+                    <span v-else>-</span>
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="importAutostartOverwriteById[row.id] === true"
+                      :disabled="!row.canOverwrite"
+                      @change="setImportAutostartOverwrite(row.id, $event?.target?.checked)"
+                    >
+                  </td>
+                  <td>{{ getImportAutostartStatusText(row) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div
+            v-else-if="!importAutostartCollapsed"
+            class="empty-box"
+          >
+            {{ t('appConfigCenter.importOnlySameValuesHidden') }}
+            <span v-if="importAutostartSameCount" class="muted"> ({{ importAutostartSameCount }})</span>
+          </div>
+        </div>
+
+        <label class="check-item config-import-magnet-toggle">
+          <input v-model="importOverwriteMagnets" type="checkbox">
+          {{ t('appConfigCenter.importOverwriteMagnets') }}
+        </label>
 
         <div v-if="importPreviewSections.length" class="config-import-preview">
           <section

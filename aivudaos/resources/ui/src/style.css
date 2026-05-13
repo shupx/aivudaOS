@@ -722,14 +722,15 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
+  min-height: 28px;
 }
 
 .config-transfer-missing-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   border: none;
   background: transparent;
   padding: 0;
@@ -737,16 +738,25 @@ input {
   color: inherit;
   cursor: pointer;
   text-align: left;
+  line-height: 1.2;
 }
 
 .config-transfer-missing-toggle h4 {
   margin: 0;
+  font-size: 14px;
+  line-height: 1.2;
 }
 
 .config-transfer-missing-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.config-transfer-missing-actions .btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .config-import-store-help {
@@ -792,6 +802,46 @@ input {
 .config-transfer-missing-table td:nth-child(6),
 .config-transfer-missing-table th:nth-child(6) {
   width: 18%;
+}
+
+.config-import-autostart-table th:nth-child(2),
+.config-import-autostart-table th:nth-child(3),
+.config-import-autostart-table td:nth-child(2),
+.config-import-autostart-table td:nth-child(3),
+.config-import-autostart-table th:nth-child(4),
+.config-import-autostart-table td:nth-child(4),
+.config-import-autostart-table th:nth-child(5),
+.config-import-autostart-table td:nth-child(5) {
+  text-align: center;
+}
+
+.config-import-autostart-panel {
+  flex: 0 0 auto;
+}
+
+.config-import-magnet-toggle {
+  margin-top: 2px;
+}
+
+.config-import-autostart-table-wrap {
+  max-height: min(20vh, 180px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.config-import-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+.config-import-state-icon-on {
+  color: #16a34a;
+}
+
+.config-import-state-icon-off {
+  color: #dc2626;
 }
 
 .config-transfer-th-toggle {

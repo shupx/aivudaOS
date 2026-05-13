@@ -1,7 +1,15 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { fetchActiveAppConfigs, updateAppConfig, updateMagnetGroup } from '../services/core/apps'
+import {
+  fetchActiveAppConfigs,
+  setAutostart,
+  startApp,
+  stopApp,
+  updateAppConfig,
+  updateMagnetGroup,
+  waitForAppOperation,
+} from '../services/core/apps'
 import { fetchConfigExportMeta, fetchSysConfig, resolveAppStoreBaseUrl, updateSysConfig } from '../services/core/config'
 import { downloadStorePackageForInstall, fetchStoreAppDetail, fetchStoreIndex, MAX_IN_MEMORY_INSTALL_BYTES } from '../services/core/store'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
@@ -124,6 +132,10 @@ export function useAppConfigCenterPage() {
   const importErrorMessage = ref('')
   const importSuccessMessage = ref('')
   const importActionMessage = ref('')
+  const importAutostartRows = ref([])
+  const importAutostartOverwriteById = ref({})
+  const importAutostartCollapsed = ref(false)
+  const importAutostartCondensed = ref(true)
   const missingAppOptions = ref({})
   const missingAppBusy = ref({})
   const missingAppProgress = ref({})
@@ -157,6 +169,12 @@ export function useAppConfigCenterPage() {
       name: item.name || item.app_id,
       version: item.app_version || '-',
     })).sort((a, b) => a.name.localeCompare(b.name))
+  })
+
+  const isAllExportSelected = computed(() => {
+    if (!exportIncludeSystem.value) return false
+    if (!appOptions.value.length) return true
+    return appOptions.value.every((item) => exportSelectedApps.value[item.appId] !== false)
   })
 
   const importPreviewSections = computed(() => {
@@ -231,7 +249,33 @@ export function useAppConfigCenterPage() {
 
   const hasImportOverwriteSelection = computed(() => (
     importRows.value.some((row) => importOverwriteById.value[row.id] === true && row.canOverwrite)
+    || importAutostartRows.value.some((row) => importAutostartOverwriteById.value[row.id] === true && row.canOverwrite)
   ))
+
+  const importAutostartRowsSorted = computed(() => {
+    return [...importAutostartRows.value].sort((left, right) => {
+      if (left.status !== right.status) {
+        return left.status === 'changed' ? -1 : 1
+      }
+      return left.appName.localeCompare(right.appName)
+    })
+  })
+
+  const importAutostartVisibleRows = computed(() => (
+    importAutostartCondensed.value
+      ? importAutostartRowsSorted.value.filter((row) => row.status !== 'same')
+      : importAutostartRowsSorted.value
+  ))
+
+  const importAutostartSameCount = computed(() => (
+    importAutostartRowsSorted.value.filter((row) => row.status === 'same').length
+  ))
+
+  const isAllImportAutostartSelected = computed(() => {
+    const selectableRows = importAutostartRows.value.filter((row) => row.canOverwrite)
+    if (!selectableRows.length) return false
+    return selectableRows.every((row) => importAutostartOverwriteById.value[row.id] === true)
+  })
 
   const appThemeById = computed(() => {
     const classes = ['config-row-app-0', 'config-row-app-1', 'config-row-app-2', 'config-row-app-3']
@@ -1052,6 +1096,16 @@ export function useAppConfigCenterPage() {
     }
   }
 
+  function toggleExportSelectAll(selected) {
+    const nextSelected = Boolean(selected)
+    exportIncludeSystem.value = nextSelected
+    const next = { ...exportSelectedApps.value }
+    for (const item of appOptions.value) {
+      next[String(item.appId || '')] = nextSelected
+    }
+    exportSelectedApps.value = next
+  }
+
   async function exportSelectedConfig() {
     if (exportBusy.value) return
     exportBusy.value = true
@@ -1108,6 +1162,10 @@ export function useAppConfigCenterPage() {
     importCollapsedSections.value = {}
     importOverwriteById.value = {}
     importOverwriteMagnets.value = false
+    importAutostartRows.value = []
+    importAutostartOverwriteById.value = {}
+    importAutostartCollapsed.value = false
+    importAutostartCondensed.value = true
     importErrorMessage.value = ''
     importSuccessMessage.value = ''
     importActionMessage.value = ''
@@ -1135,6 +1193,10 @@ export function useAppConfigCenterPage() {
       importDocument.value = null
       importRows.value = []
       importOverwriteById.value = {}
+      importAutostartRows.value = []
+      importAutostartOverwriteById.value = {}
+      importAutostartCollapsed.value = false
+      importAutostartCondensed.value = true
       importErrorMessage.value = String(err?.message || err || t('appConfigCenter.importInvalidFile'))
     }
   }
@@ -1208,6 +1270,7 @@ export function useAppConfigCenterPage() {
     if (!doc) return
 
     const rows = []
+    const autostartRows = []
     if (doc.systemParameters) {
       const readonlyPaths = new Set(sysReadonlyPaths.value || [])
       const magnetPathMap = buildMagnetPathMap()
@@ -1239,6 +1302,19 @@ export function useAppConfigCenterPage() {
     for (const app of doc.apps || []) {
       const currentApp = appItems.value.find((item) => String(item?.app_id || '') === app.app_id)
       const sectionTitle = `${app.name || app.app_id} (${app.app_id} @ ${app.version || '-'})`
+      const currentAutostart = currentApp ? Boolean(currentApp.autostart) : null
+      const importedAutostart = app.autostart === null ? null : Boolean(app.autostart)
+      if (importedAutostart !== null) {
+        autostartRows.push(buildImportAutostartRow({
+          appId: app.app_id,
+          appName: app.name || app.app_id,
+          importedVersion: app.version || '',
+          currentVersion: currentApp?.app_version || '',
+          importedAutostart,
+          currentAutostart,
+          exists: Boolean(currentApp),
+        }))
+      }
       if (!currentApp) {
         rows.push(buildImportRow({
           scope: 'app',
@@ -1295,6 +1371,14 @@ export function useAppConfigCenterPage() {
       nextOverwrite[row.id] = row.canOverwrite && !row.isMagnet
     }
     importOverwriteById.value = nextOverwrite
+    importAutostartRows.value = autostartRows
+    const nextAutostartOverwrite = {}
+    for (const row of autostartRows) {
+      nextAutostartOverwrite[row.id] = row.canOverwrite && row.status === 'changed'
+    }
+    importAutostartOverwriteById.value = nextAutostartOverwrite
+    importAutostartCondensed.value = autostartRows.some((row) => row.status === 'same')
+    importAutostartCollapsed.value = false
 
     const sectionRows = new Map()
     for (const row of rows) {
@@ -1310,6 +1394,35 @@ export function useAppConfigCenterPage() {
       nextCollapsedSections[sectionId] = items.some((row) => row.status === 'same')
     }
     importCollapsedSections.value = nextCollapsedSections
+  }
+
+  function buildImportAutostartRow({
+    appId,
+    appName,
+    importedVersion = '',
+    currentVersion = '',
+    importedAutostart,
+    currentAutostart,
+    exists,
+  }) {
+    const canOverwrite = exists
+    const same = exists && importedAutostart === currentAutostart
+    return {
+      id: `autostart:${appId}`,
+      appId,
+      appName,
+      importedVersion,
+      currentVersion,
+      importedAutostart,
+      currentAutostart,
+      importedAutostartText: importedAutostart ? t('common.enabled') : t('common.disabled'),
+      currentAutostartText: exists
+        ? (currentAutostart ? t('common.enabled') : t('common.disabled'))
+        : '-',
+      exists,
+      canOverwrite,
+      status: same ? 'same' : 'changed',
+    }
   }
 
   function buildImportRow({
@@ -1394,6 +1507,38 @@ export function useAppConfigCenterPage() {
     }
   }
 
+  function setImportAutostartOverwrite(rowId, selected) {
+    importAutostartOverwriteById.value = {
+      ...importAutostartOverwriteById.value,
+      [String(rowId || '')]: Boolean(selected),
+    }
+  }
+
+  function toggleImportAutostartOverwriteAll() {
+    const selectableRows = importAutostartRows.value.filter((row) => row.canOverwrite)
+    if (!selectableRows.length) return
+    const nextSelected = !isAllImportAutostartSelected.value
+    const next = { ...importAutostartOverwriteById.value }
+    for (const row of selectableRows) {
+      next[row.id] = nextSelected
+    }
+    importAutostartOverwriteById.value = next
+  }
+
+  function toggleImportAutostartCollapsed() {
+    importAutostartCollapsed.value = !importAutostartCollapsed.value
+  }
+
+  function toggleImportAutostartCondensed() {
+    importAutostartCondensed.value = !importAutostartCondensed.value
+  }
+
+  function getImportAutostartStatusText(row) {
+    return row.status === 'same'
+      ? t('appConfigCenter.importStatusSame')
+      : t('appConfigCenter.importStatusChanged')
+  }
+
   function isImportSectionOverwriteAllSelected(sectionId) {
     const id = String(sectionId || '')
     const selectableRows = importRows.value.filter((row) => (
@@ -1438,7 +1583,10 @@ export function useAppConfigCenterPage() {
     const selectedRows = importRows.value.filter((row) => (
       row.canOverwrite && importOverwriteById.value[row.id] === true
     ))
-    if (!selectedRows.length) {
+    const selectedAutostartRows = importAutostartRows.value.filter((row) => (
+      row.canOverwrite && importAutostartOverwriteById.value[row.id] === true
+    ))
+    if (!selectedRows.length && !selectedAutostartRows.length) {
       importErrorMessage.value = t('appConfigCenter.importNoSelection')
       importSuccessMessage.value = ''
       return
@@ -1459,6 +1607,7 @@ export function useAppConfigCenterPage() {
       await applyMagnetImportRows(magnetRows)
       await loadAllConfigs()
       await applyDirectImportRows(directRows)
+      await applyImportAutostartRows(selectedAutostartRows)
       await loadAllConfigs()
       rebuildImportPreview()
       importSuccessMessage.value = t('appConfigCenter.importApplySuccess')
@@ -1529,6 +1678,23 @@ export function useAppConfigCenterPage() {
         value: cloneTransferValue(item.value),
       })
       magnetVersion.value = Number(resp?.version || magnetVersion.value || 0)
+    }
+  }
+
+  async function applyImportAutostartRows(rowsToApply) {
+    for (const row of rowsToApply) {
+      await setAutostart(row.appId, row.importedAutostart)
+
+      const currentApp = appItems.value.find((item) => String(item?.app_id || '') === row.appId)
+      const currentRunning = Boolean(currentApp?.running)
+      const importedRunning = importDocument.value?.apps?.find((item) => item.app_id === row.appId)?.running
+
+      if (typeof importedRunning === 'boolean' && importedRunning !== currentRunning) {
+        const operation = importedRunning ? await startApp(row.appId) : await stopApp(row.appId)
+        if (operation?.operation_id) {
+          await waitForAppOperation(operation.operation_id)
+        }
+      }
     }
   }
 
@@ -2156,10 +2322,12 @@ export function useAppConfigCenterPage() {
     exportModalVisible,
     exportIncludeSystem,
     exportSelectedApps,
+    isAllExportSelected,
     exportBusy,
     openExportModal,
     closeExportModal,
     setExportAppSelected,
+    toggleExportSelectAll,
     exportSelectedConfig,
     importModalVisible,
     importFileName,
@@ -2172,6 +2340,13 @@ export function useAppConfigCenterPage() {
     importSuccessMessage,
     importStoreConnectivityHelpVisible,
     importActionMessage,
+    importAutostartRowsSorted,
+    importAutostartVisibleRows,
+    importAutostartSameCount,
+    importAutostartOverwriteById,
+    importAutostartCollapsed,
+    importAutostartCondensed,
+    isAllImportAutostartSelected,
     missingImportApps,
     missingAppOptions,
     missingAppBusy,
@@ -2187,9 +2362,14 @@ export function useAppConfigCenterPage() {
     toggleMissingAppsCollapsed,
     toggleImportSection,
     setImportRowOverwrite,
+    setImportAutostartOverwrite,
+    toggleImportAutostartOverwriteAll,
+    toggleImportAutostartCollapsed,
+    toggleImportAutostartCondensed,
     isImportSectionOverwriteAllSelected,
     toggleImportSectionOverwrite,
     getImportRowStatusText,
+    getImportAutostartStatusText,
     applyImportSelection,
     setMissingAppOption,
     toggleMissingAppColumn,
