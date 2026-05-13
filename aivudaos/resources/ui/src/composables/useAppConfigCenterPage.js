@@ -125,6 +125,7 @@ export function useAppConfigCenterPage() {
   const missingAppOptions = ref({})
   const missingAppBusy = ref({})
   const missingAppProgress = ref({})
+  const installAllMissingAppsBusy = ref(false)
   const uploadModal = useAppUploadInstallModal({
     async onInstalled() {
       await loadAllConfigs()
@@ -195,6 +196,21 @@ export function useAppConfigCenterPage() {
         name: item.name || item.app_id,
         version: item.version || '',
       }))
+  })
+
+  const missingAppColumnSelectionState = computed(() => {
+    const apps = missingImportApps.value
+    const buildState = (key, expected = true) => apps.length > 0 && apps.every((app) => {
+      const options = missingAppOptions.value[app.appId] || {}
+      return Boolean(options[key]) === expected
+    })
+
+    return {
+      autoDownloadAll: buildState('autoDownload', true),
+      forceSameAppIdAll: buildState('forceSameAppId', true),
+      allowNameMatchAll: buildState('allowNameMatch', true),
+      latestAll: buildState('latest', true),
+    }
   })
 
   const hasImportOverwriteSelection = computed(() => (
@@ -1127,6 +1143,24 @@ export function useAppConfigCenterPage() {
     }
   }
 
+  function toggleMissingAppColumn(key) {
+    const stateMap = {
+      autoDownload: missingAppColumnSelectionState.value.autoDownloadAll,
+      forceSameAppId: missingAppColumnSelectionState.value.forceSameAppIdAll,
+      allowNameMatch: missingAppColumnSelectionState.value.allowNameMatchAll,
+      latest: missingAppColumnSelectionState.value.latestAll,
+    }
+    const nextValue = !Boolean(stateMap[key])
+    const next = { ...missingAppOptions.value }
+    for (const app of missingImportApps.value) {
+      next[app.appId] = {
+        ...(next[app.appId] || {}),
+        [key]: nextValue,
+      }
+    }
+    missingAppOptions.value = next
+  }
+
   function rebuildImportPreview() {
     const doc = importDocument.value
     if (!doc) return
@@ -1486,6 +1520,24 @@ export function useAppConfigCenterPage() {
         ...missingAppBusy.value,
         [appId]: false,
       }
+    }
+  }
+
+  async function installAllMissingImportApps() {
+    if (installAllMissingAppsBusy.value) return
+    installAllMissingAppsBusy.value = true
+    importActionMessage.value = ''
+    error.value = ''
+    try {
+      const installTargets = missingImportApps.value.filter((app) => (
+        missingAppOptions.value[app.appId]?.autoDownload !== false
+      ))
+      for (const app of installTargets) {
+        await installMissingImportApp(app.appId)
+      }
+      importActionMessage.value = t('appConfigCenter.importInstallAllComplete')
+    } finally {
+      installAllMissingAppsBusy.value = false
     }
   }
 
@@ -2049,6 +2101,8 @@ export function useAppConfigCenterPage() {
     missingAppOptions,
     missingAppBusy,
     missingAppProgress,
+    missingAppColumnSelectionState,
+    installAllMissingAppsBusy,
     hasImportOverwriteSelection,
     openImportModal,
     closeImportModal,
@@ -2058,7 +2112,9 @@ export function useAppConfigCenterPage() {
     getImportRowStatusText,
     applyImportSelection,
     setMissingAppOption,
+    toggleMissingAppColumn,
     installMissingImportApp,
+    installAllMissingImportApps,
     ...uploadModal,
   }
 }

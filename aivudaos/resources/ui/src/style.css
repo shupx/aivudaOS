@@ -718,17 +718,54 @@ input {
   margin: 0;
 }
 
-.config-transfer-missing-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(4, max-content) max-content;
+.config-transfer-missing-header {
+  display: flex;
   align-items: center;
-  gap: 8px 12px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border-color, #e5e7eb);
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.config-transfer-missing-row:first-of-type {
-  border-top: 0;
+.config-transfer-missing-table-wrap {
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.config-transfer-missing-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  table-layout: auto;
+}
+
+.config-transfer-missing-table th,
+.config-transfer-missing-table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.config-transfer-missing-table th:nth-child(1),
+.config-transfer-missing-table td:nth-child(1) {
+  width: 32%;
+}
+
+.config-transfer-missing-table td:nth-child(n + 2):nth-child(-n + 5),
+.config-transfer-missing-table th:nth-child(n + 2):nth-child(-n + 5),
+.config-transfer-missing-table td:nth-child(6),
+.config-transfer-missing-table th:nth-child(6) {
+  text-align: center;
+}
+
+.config-transfer-missing-table td:nth-child(6),
+.config-transfer-missing-table th:nth-child(6) {
+  width: 18%;
+}
+
+.config-transfer-th-toggle {
+  cursor: pointer;
+  user-select: none;
 }
 
 .config-import-modal-card {

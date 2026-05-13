@@ -223,6 +223,8 @@ const {
   missingAppOptions,
   missingAppBusy,
   missingAppProgress,
+  missingAppColumnSelectionState,
+  installAllMissingAppsBusy,
   hasImportOverwriteSelection,
   openImportModal,
   closeImportModal,
@@ -232,7 +234,9 @@ const {
   getImportRowStatusText,
   applyImportSelection,
   setMissingAppOption,
+  toggleMissingAppColumn,
   installMissingImportApp,
+  installAllMissingImportApps,
   showUploadModal,
   uploadBusy,
   uploadError,
@@ -719,60 +723,87 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         </div>
 
         <div v-if="missingImportApps.length" class="config-transfer-missing">
-          <h4>{{ t('appConfigCenter.importMissingApps') }}</h4>
-          <div
-            v-for="app in missingImportApps"
-            :key="`missing:${app.appId}`"
-            class="config-transfer-missing-row"
-          >
-            <div>
-              <strong>{{ app.name }}</strong>
-              <span class="muted"> ({{ app.appId }} @ {{ app.version || '-' }})</span>
-            </div>
-            <label class="check-item">
-              <input
-                type="checkbox"
-                :checked="missingAppOptions[app.appId]?.autoDownload !== false"
-                @change="setMissingAppOption(app.appId, 'autoDownload', $event?.target?.checked)"
-              >
-              {{ t('appConfigCenter.importAutoDownload') }}
-            </label>
-            <label class="check-item">
-              <input
-                type="checkbox"
-                :checked="missingAppOptions[app.appId]?.forceSameAppId !== false"
-                @change="setMissingAppOption(app.appId, 'forceSameAppId', $event?.target?.checked)"
-              >
-              {{ t('appConfigCenter.importForceSameAppId') }}
-            </label>
-            <label class="check-item">
-              <input
-                type="checkbox"
-                :checked="missingAppOptions[app.appId]?.allowNameMatch !== false"
-                @change="setMissingAppOption(app.appId, 'allowNameMatch', $event?.target?.checked)"
-              >
-              {{ t('appConfigCenter.importAllowNameMatch') }}
-            </label>
-            <label class="check-item">
-              <input
-                type="checkbox"
-                :checked="missingAppOptions[app.appId]?.latest === true"
-                @change="setMissingAppOption(app.appId, 'latest', $event?.target?.checked)"
-              >
-              {{ t('appConfigCenter.importUseLatest') }}
-            </label>
+          <div class="config-transfer-missing-header">
+            <h4>{{ t('appConfigCenter.importMissingApps') }}</h4>
             <button
               class="btn"
-              :disabled="missingAppBusy[app.appId] || missingAppOptions[app.appId]?.autoDownload === false"
-              @click="installMissingImportApp(app.appId)"
+              :disabled="installAllMissingAppsBusy"
+              @click="installAllMissingImportApps"
             >
-              {{ missingAppBusy[app.appId] ? t('store.downloading') : t('appConfigCenter.importInstallMissingApp') }}
+              {{ installAllMissingAppsBusy ? t('store.downloading') : t('appConfigCenter.importInstallAllMissingApps') }}
             </button>
-            <div v-if="missingAppProgress[app.appId]" class="download-progress">
-              <div class="download-progress-track">
-                <div class="download-progress-bar" :style="{ width: `${missingAppProgress[app.appId]}%` }"></div>
-              </div>
-            </div>
+          </div>
+          <div class="table-wrap config-transfer-missing-table-wrap">
+            <table class="config-table compact config-transfer-missing-table">
+              <thead>
+                <tr>
+                  <th>{{ t('appConfigCenter.colApp') }}</th>
+                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('autoDownload')">
+                    {{ t('appConfigCenter.importAutoDownload') }}
+                  </th>
+                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('forceSameAppId')">
+                    {{ t('appConfigCenter.importForceSameAppId') }}
+                  </th>
+                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('allowNameMatch')">
+                    {{ t('appConfigCenter.importAllowNameMatch') }}
+                  </th>
+                  <th class="config-transfer-th-toggle" @click="toggleMissingAppColumn('latest')">
+                    {{ t('appConfigCenter.importUseLatest') }}
+                  </th>
+                  <th>{{ t('appConfigCenter.colAction') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="app in missingImportApps" :key="`missing:${app.appId}`">
+                  <td>
+                    <strong>{{ app.name }}</strong>
+                    <span class="muted"> ({{ app.appId }} @ {{ app.version || '-' }})</span>
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="missingAppOptions[app.appId]?.autoDownload !== false"
+                      @change="setMissingAppOption(app.appId, 'autoDownload', $event?.target?.checked)"
+                    >
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="missingAppOptions[app.appId]?.forceSameAppId !== false"
+                      @change="setMissingAppOption(app.appId, 'forceSameAppId', $event?.target?.checked)"
+                    >
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="missingAppOptions[app.appId]?.allowNameMatch !== false"
+                      @change="setMissingAppOption(app.appId, 'allowNameMatch', $event?.target?.checked)"
+                    >
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="missingAppOptions[app.appId]?.latest === true"
+                      @change="setMissingAppOption(app.appId, 'latest', $event?.target?.checked)"
+                    >
+                  </td>
+                  <td>
+                    <button
+                      class="btn"
+                      :disabled="missingAppBusy[app.appId] || missingAppOptions[app.appId]?.autoDownload === false"
+                      @click="installMissingImportApp(app.appId)"
+                    >
+                      {{ missingAppBusy[app.appId] ? t('store.downloading') : t('appConfigCenter.importInstallMissingApp') }}
+                    </button>
+                    <div v-if="missingAppProgress[app.appId]" class="download-progress">
+                      <div class="download-progress-track">
+                        <div class="download-progress-bar" :style="{ width: `${missingAppProgress[app.appId]}%` }"></div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
