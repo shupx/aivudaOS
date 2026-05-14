@@ -4,7 +4,9 @@ aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a grap
 
 ## Install 
 
-- Install from PyPI:
+Choose one method to install:
+
+#### 1. Install from PyPI (Recommended):
 
 ```bash
 pip install aivudaos
@@ -20,13 +22,13 @@ conda activate aivuda
 pip install aivudaos
 ```
 
-- Install from a provided wheel:
+#### 2. Install from a provided wheel:
 
 ```bash
 pip install aivudaos-1.0.0.dev2026040501-py3-none-any.whl
 ```
 
-- Install from source:
+#### 3. Install from source (for developing):
 
 ```bash
 git clone https://gitee.com/buaa_iooda/aivudaOS.git
@@ -36,14 +38,14 @@ pip install --user -e . # need dated npm and node (>20) installed
 # pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e .  # use pypi mirror for build
 ```
 
-To upgrade:
+### To upgrade:
 
 ```bash
 # pip index versions aivudaos --pre  # inspect available versions on PyPI
 pip install --upgrade aivudaos
 ```
 
-To uninstall:
+### To uninstall:
 
 ```bash
 # stop and remove the systemd service by 'aivudaos uninstall' first:
@@ -112,7 +114,7 @@ aivudaos download-caddy
 aivudaos uninstall
 ```
 
-## Build wheel
+## Build wheel (for developing)
 
 Update pip before building:
 
