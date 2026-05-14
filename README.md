@@ -40,7 +40,7 @@ To upgrade:
 
 ```bash
 # pip index versions aivudaos --pre  # inspect available versions on PyPI
-pip install aivudaos --upgrade
+pip install --upgrade aivudaos
 ```
 
 To uninstall:
