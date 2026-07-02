@@ -101,9 +101,9 @@ if [[ ! -f "${CADDY_CONFIG}" ]]; then
   echo "Caddy config not found: ${CADDY_CONFIG}" >&2
   exit 1
 fi
-if grep -Eq 'https://(\{\$AVAHI_HOSTNAME\}|__AVAHI_HOSTNAME__)\.local(:[0-9]+)?' "${CADDY_CONFIG}"; then
-  echo "Caddy config has unresolved AVAHI_HOSTNAME placeholder: ${CADDY_CONFIG}" >&2
-  echo "Run: aivudaos install to sync Avahi hostname into Caddy config." >&2
+if grep -Eq 'https://(\{\$AVAHI_HOSTNAME\}|__AVAHI_HOSTNAME__|avahihostname-placeholder)\.local(:[0-9]+)?' "${CADDY_CONFIG}"; then
+  echo -e "\e[33mWarning: Caddy config has unresolved AVAHI_HOSTNAME placeholder: ${CADDY_CONFIG}\e[0m" >&2
+  echo -e "\e[33mRun: The Avahi hostname should be set automatically after the first run of aivudaos.gateway.main:app.\e[0m" >&2
   # exit 1
 fi
 if [[ "${DEV_MODE}" -eq 0 && ! -d "${FRONTEND_DIST}" ]]; then

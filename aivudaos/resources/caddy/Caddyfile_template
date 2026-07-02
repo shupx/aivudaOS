@@ -23,7 +23,7 @@
   import aivudaos_common_route
 }
 
-https://__AVAHI_HOSTNAME__.local:443 {
+https://avahihostname-placeholder.local:443 {
   tls internal
   import aivudaos_common_route
 }
