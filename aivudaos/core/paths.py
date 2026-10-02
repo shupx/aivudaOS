@@ -11,6 +11,10 @@ from aivudaos.core.config.avahi import AvahiService
 import aivudaos
 
 
+def embedded_mode() -> bool:
+    return os.environ.get("AIVUDAOS_EMBEDDED_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _source_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -127,7 +131,7 @@ def ensure_dirs() -> None:
 
 
 def _ensure_default_runtime_files() -> None:
-    avahi = AvahiService()
+    avahi = None if embedded_mode() else AvahiService()
     os_raw = {}
     if OS_CONFIG_PATH.exists():
         loaded = yaml.safe_load(OS_CONFIG_PATH.read_text("utf-8")) or {}
@@ -152,11 +156,11 @@ def _ensure_default_runtime_files() -> None:
 
     for key, default_value in DEFAULT_OS_CONFIG.items():
         if key not in os_raw:
-            os_raw[key] = default_value
+            os_raw[key] = "popen" if embedded_mode() and key == "runtime_process_manager" else default_value
             changed = True
 
     if "avahi_hostname" not in os_raw:
-        generated = avahi.generate_hostname(existing={str(os_raw.get("avahi_hostname") or "").strip().lower()})
+        generated = "aceswarm" if embedded_mode() else avahi.generate_hostname(existing={str(os_raw.get("avahi_hostname") or "").strip().lower()})
         os_raw["avahi_hostname"] = generated
         created_avahi = True
         changed = True
@@ -167,7 +171,7 @@ def _ensure_default_runtime_files() -> None:
             encoding="utf-8",
         )
 
-    if created_avahi:
+    if created_avahi and not embedded_mode():
         try:
             avahi.write_and_restart(str(os_raw.get("avahi_hostname") or ""))
         except Exception:
@@ -203,7 +207,8 @@ def _ensure_default_runtime_files() -> None:
     if not CADDYFILE_PATH.exists() and CADDYFILE_TEMPLATE_PATH.exists():
         shutil.copy2(CADDYFILE_TEMPLATE_PATH, CADDYFILE_PATH)
     
-    import aivudaos.core.config.caddy_runtime as caddy_runtime
-    caddy_service = caddy_runtime.CaddyRuntimeService()
-    caddy_service.sync_https_hostname(str(os_raw.get("avahi_hostname") or ""))
-    caddy_service.reload_if_running()
+    if not embedded_mode():
+        import aivudaos.core.config.caddy_runtime as caddy_runtime
+        caddy_service = caddy_runtime.CaddyRuntimeService()
+        caddy_service.sync_https_hostname(str(os_raw.get("avahi_hostname") or ""))
+        caddy_service.reload_if_running()

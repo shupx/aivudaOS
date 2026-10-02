@@ -13,6 +13,7 @@ from aivudaos.core.config.filelock import atomic_write_text, get_lock
 from aivudaos.core.config.models import UserRecord, UsersConfig, VersionedConfig
 from aivudaos.core.errors import ConfigVersionConflictError
 from aivudaos.core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
+from aivudaos.core.paths import embedded_mode
 
 
 class ConfigService:
@@ -46,7 +47,7 @@ class ConfigService:
         updated = self._write_versioned(OS_CONFIG_PATH, normalized_data, expected_version, username)
 
         new_hostname = str(updated.data.get("avahi_hostname") or "").strip().lower()
-        if new_hostname and new_hostname != previous_hostname:
+        if not embedded_mode() and new_hostname and new_hostname != previous_hostname:
             try:
                 self._avahi.write_and_restart(new_hostname)
                 caddy_changed = self._caddy.sync_https_hostname(new_hostname)

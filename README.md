@@ -161,3 +161,11 @@ The automated workflow is activated at https://github.com/shupx/aivudaOS/actions
 ## Develop
 
 Refer to [README_dev.md](README_dev.md) 
+# Embedded ground-station mode
+
+Set `AIVUDAOS_EMBEDDED_MODE=1` when launching the ASGI app under a desktop
+manager. This keeps the configured hostname editable but does not touch Avahi
+or synchronize/reload HTTPS hostname sites. Application Caddy route generation
+and reload are unaffected. Set `AIVUDAOS_WS_ROOT` to a private workspace and
+provide a loopback Caddyfile there before startup. Standalone behavior is
+unchanged when the variable is absent.

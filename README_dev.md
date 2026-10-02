@@ -261,3 +261,8 @@ App 启动时会注入配置路径相关环境变量：
 - 商店地址由前端页面输入并保存在当前浏览器本地存储（localStorage，key: `aivuda_ui_appstore_base_url`）。
 - 前端按“商店地址 + /aivuda_app_store/store/...”拼接调用 store API（列表、详情、下载链接、下载文件）。
 - 下载流程：先下载应用包到用户浏览器本机；安装流程：再将该包按本地上传接口 `POST /aivuda_os/api/apps/upload` 传给 AivudaOS 安装。
+# Embedded-mode tests
+
+Run `python3 -m unittest discover -s tests -p 'test_embedded_mode.py'` to
+verify that desktop embedding skips Avahi and HTTPS hostname coupling while
+standalone hostname updates retain their existing behavior.
