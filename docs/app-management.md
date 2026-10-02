@@ -384,3 +384,17 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 2. 读取该版本 manifest 的 `update_version` 字段（逻辑名称：`update_this_version`）
 3. 若有脚本则执行；若无脚本则返回 `skipped=true`
 4. 运行过程通过 SSE 事件流实时返回脚本输出
+
+## Config-export import for bootstrap
+
+Use the authenticated `POST /aivuda_os/api/config/import?token=<token>` with a
+JSON body `{"document": <format_version 1 AivudaOS config export>,
+"app_store_base_url": "http://127.0.0.1:<local-store-port>/"}`.
+The local AppStore must serve both `/aivuda_app_store/store/.../download-url`
+and the returned `/aivuda_app_store/files/...` URL. Poll
+`GET /aivuda_os/api/apps/operations/{operation_id}?token=<token>` for phases,
+result and failures. Missing app versions are installed through InstallerService;
+existing versions are not overwritten. System/app parameters are merged and
+validated through the existing config routes, then autostart is applied.
+`human_header.avahi_hostname`, `payload.system_parameters.avahi_hostname` and
+exported `running` state are ignored. No direct database import occurs.

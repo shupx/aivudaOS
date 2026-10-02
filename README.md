@@ -161,11 +161,35 @@ The automated workflow is activated at https://github.com/shupx/aivudaOS/actions
 ## Develop
 
 Refer to [README_dev.md](README_dev.md) 
+
+## Config export bootstrap API
+
+The authenticated `POST /aivuda_os/api/config/import?token=<OS-session-token>` accepts
+`{"document": <AivudaOS format_version 1 config export>, "app_store_base_url": "http://127.0.0.1:<port>/"}`.
+The URL must be loopback HTTP; the document uses the existing frontend export shape:
+`payload.system_parameters` (object or null) and `payload.apps` (array of
+`app_id`, `version`, `parameters`, `autostart`, plus optional display fields).
+Invalid format, IDs, versions, or types return HTTP 400; invalid tokens return 401;
+concurrent imports return 409. The endpoint returns HTTP 202 with an `operation_id`;
+poll the authenticated `GET /aivuda_os/api/apps/operations/{operation_id}` for
+`status`, `error`, and `result` (`installed`, `configured`, `autostart`,
+`system_configured`). Progress phases include download, install, system,
+configure, and autostart. A failed operation may have partially applied changes;
+retrying is safe for already-installed packages and unchanged parameters.
+Only missing versions are downloaded via the AppStore public download-url/file
+flow and installed through the existing installer. Already installed but inactive
+requested versions are activated without starting or restarting the app. Parameters are merged by
+leaf into the current configuration and validated by the existing config
+routes, including schema, magnet and equality constraints. The export header
+is informational; `avahi_hostname` is never restored. `running` is ignored:
+no start/stop is performed by import. The same API works in standalone and
+embedded mode; no database import is required.
 # Embedded ground-station mode
 
 Set `AIVUDAOS_EMBEDDED_MODE=1` when launching the ASGI app under a desktop
-manager. This keeps the configured hostname editable but does not touch Avahi
-or synchronize/reload HTTPS hostname sites. Application Caddy route generation
-and reload are unaffected. Set `AIVUDAOS_WS_ROOT` to a private workspace and
-provide a loopback Caddyfile there before startup. Standalone behavior is
-unchanged when the variable is absent.
+manager. This keeps the configured hostname editable, uses `aceswarm` when the
+field is first initialized, and does not touch Avahi or synchronize/reload HTTPS
+hostname sites. Application Caddy route generation and reload are unaffected.
+Set `AIVUDAOS_WS_ROOT` to a private workspace and provide a loopback Caddyfile
+there before startup. Standalone behavior is unchanged when the variable is
+absent.

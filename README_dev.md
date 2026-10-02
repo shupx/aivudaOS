@@ -212,7 +212,18 @@ App 启动时会注入配置路径相关环境变量：
 - `PUT  /aivuda_os/api/config/system/apt-sources-list`（写入 APT 源，写入前自动创建时间戳备份，并自动执行 `apt update`）
 - `POST /aivuda_os/api/config/system/apt-sources-list/restore`（按备份版本恢复 APT 源，并自动执行 `apt update`）
 
-说明：当 `avahi_hostname` 通过 OS 参数更新后，后端会立即同步修改运行时 `Caddyfile` 的 HTTPS 域名为 `https://<avahi_hostname>.local:443`，若 Caddy 正在运行会尝试自动 reload。
+说明：standalone 模式下，当 `avahi_hostname` 通过 OS 参数更新后，后端会立即同步修改运行时 `Caddyfile` 的 HTTPS 域名为 `https://<avahi_hostname>.local:443`，若 Caddy 正在运行会尝试自动 reload。设置 `AIVUDAOS_EMBEDDED_MODE=1` 后，hostname 仍会写入 `os.yaml`，但不会写入/重启 Avahi，也不会同步或 reload HTTPS hostname 站点；App UI 和自定义路由仍会照常生成并 reload。
+
+### 嵌入式模式
+
+桌面管理器托管 AivudaOS 时，可设置：
+
+```bash
+export AIVUDAOS_EMBEDDED_MODE=1
+export AIVUDAOS_WS_ROOT=/path/to/private/aivudaos-workspace
+```
+
+嵌入式模式默认使用 `aceswarm` 作为 `avahi_hostname`，不会依赖本机 Avahi 或修改 HTTPS hostname。管理器应在 `AIVUDAOS_WS_ROOT/config/Caddyfile` 中提供自己的 loopback Caddy 站点；应用安装、卸载和版本切换仍由 AivudaOS 生成应用路由并 reload Caddy。
 
 ### APT 源配置说明
 

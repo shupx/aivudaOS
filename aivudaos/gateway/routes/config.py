@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 
 from aivudaos import __version__ as aivudaos_version
@@ -32,6 +34,43 @@ from aivudaos.gateway.schemas import (
 )
 
 router = APIRouter(prefix="/api/config", tags=["config"])
+
+
+class ConfigImportRequest(BaseModel):
+    document: Dict[str, Any]
+    app_store_base_url: str
+
+
+@router.post("/import", status_code=202)
+async def import_config(payload: ConfigImportRequest, token: str) -> Dict[str, Any]:
+    _require_auth(token)
+    from aivudaos.core.config.import_service import apply_import, validate_import
+    from aivudaos.gateway.deps import get_app_operation_manager
+
+    try:
+        imported = validate_import(payload.document, payload.app_store_base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    operations = get_app_operation_manager()
+    from aivudaos.core.errors import AppOperationConflictError
+    try:
+        record = operations.start_operation("config-import", app_id="__config_import__")
+    except AppOperationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    def progress(phase: str, app_id: str) -> None:
+        operations.publish(record.operation_id, "status", status="running", phase=phase, app_id=app_id)
+
+    def run() -> None:
+        operations.mark_running(record.operation_id)
+        try:
+            result = apply_import(imported, payload.app_store_base_url, token, progress)
+            operations.mark_completed(record.operation_id, result)
+        except Exception as exc:
+            operations.mark_failed(record.operation_id, str(exc))
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"operation_id": record.operation_id, "status": "queued"}
 _CADDY_LOCAL_CA_ROOT_PATH = Path.home() / ".local/share/caddy/pki/authorities/local/root.crt"
 
 

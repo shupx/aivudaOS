@@ -60,10 +60,17 @@ bash aivudaos/resources/scripts/_run_aivudaos_stack.sh
 ./aivudaOS_ws/.tools/caddy/caddy validate --config "${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile" --adapter caddyfile
 ```
 
-默认监听：
+默认监听（standalone 模式）：
 
 - HTTP: `http://127.0.0.1:80`（仅本机）
 - HTTPS: `https://<avahi_hostname>.local:443`（当前 `tls internal`，浏览器可能提示证书不受信任）
+
+### 嵌入式模式
+
+桌面管理器启动后端时设置 `AIVUDAOS_EMBEDDED_MODE=1`，并通过
+`AIVUDAOS_WS_ROOT` 提供私有工作区和 loopback Caddyfile。此模式不会在启动或
+更新 `avahi_hostname` 时写入/重启 Avahi，也不会同步或 reload HTTPS hostname
+站点；但应用 UI 和自定义路由的 Caddy 配置生成及 reload 保持启用。
 
 ## 4. 用户自启动（backend + caddy 一起）
 
@@ -120,7 +127,7 @@ journalctl --user -u aivudaos.service -f
 - `/aivuda_os/api/apps/operations/{operation_id}/events`（SSE）与
   `/aivuda_os/api/apps/operations/{operation_id}/interactive/ws`（WebSocket）
   均通过 Caddy 转发到后端。
-- 运行中若通过 `PUT /aivuda_os/api/config/os` 修改 `avahi_hostname`，后端会立即把 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS host 同步为新的 `<avahi_hostname>.local`，并在 Caddy 正在运行时尝试 reload。
+- standalone 模式下，运行中若通过 `PUT /aivuda_os/api/config/os` 修改 `avahi_hostname`，后端会立即把 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/Caddyfile` 的 HTTPS host 同步为新的 `<avahi_hostname>.local`，并在 Caddy 正在运行时尝试 reload。嵌入式模式跳过这项 HTTPS hostname 同步，但不跳过应用路由 reload。
 
 ## 6. 重要注意事项
 
