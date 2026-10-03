@@ -1,4 +1,4 @@
-每次对文件有大的更新后，对应更新README.md和docs/目录下的md,，以及所有子文件夹里的README.md。
+每次对文件有大的更新后，对应更新README_dev.md和docs/目录下的md,，以及所有子文件夹里的README.md。主目录下的README.md保持简洁，非必要不更新。
 
 不要在vue里写业务逻辑，要拆分出来到专门的目录。
 
