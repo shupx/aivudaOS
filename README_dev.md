@@ -233,6 +233,22 @@ export AIVUDAOS_WS_ROOT=/path/to/private/aivudaos-workspace
 - 写入和恢复后会自动执行 `apt update`，输出会在前端弹窗里显示。
 - 前端会收集 sudo 密码并仅用于当前请求，不会持久化到浏览器存储。
 
+## 独立 MCP 服务
+
+AivudaOS 提供不依赖 ACEswarm 的 stdlib JSON-RPC MCP stdio 服务：
+
+```bash
+python3 -m aivudaos.mcp_server
+# 或安装后：aivudaos-mcp
+```
+
+每行输入/输出一个 JSON-RPC 2.0 消息。设置 `AIVUDAOS_MCP_BASE_URL`（默认
+`http://127.0.0.1:8000/aivuda_os`）和 `AIVUDAOS_MCP_TOKEN` 后，服务通过
+AivudaOS 公共 HTTP API 提供 `aivudaos_status`、`list_installed_apps`、
+`get_app_status`、`get_config` 和 `queue_config_import` 工具。所有工具都需
+使用有效 token；MCP 不访问数据库，也不执行 ACEswarm 内部调用。配置导入仍由
+AivudaOS 校验并排队执行。
+
 ### 应用管理
 - `POST /aivuda_os/api/apps/repo/sync` — 从仓库同步应用目录
 - `GET  /aivuda_os/api/apps/catalog` — 可安装应用列表

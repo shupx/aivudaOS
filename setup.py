@@ -152,7 +152,7 @@ setup(
     packages=find_packages(where=".", include=["aivudaos", "aivudaos.*"]),
     include_package_data=True,
     install_requires=read_requirements(),
-    entry_points={"console_scripts": ["aivudaos=aivudaos.cli:main"]},
+    entry_points={"console_scripts": ["aivudaos=aivudaos.cli:main", "aivudaos-mcp=aivudaos.mcp_server:main"]},
     cmdclass={"build_py": build_py, "sdist": sdist},
     package_data={"aivudaos": ["resources/*", "resources/**/*"]},
 )
