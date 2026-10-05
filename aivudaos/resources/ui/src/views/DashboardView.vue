@@ -3,6 +3,7 @@ import { h, computed, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useDashboard } from '../composables/useDashboard'
+import { localeMode } from '../i18n'
 import { isDarkMode, themeMode, setThemeMode } from '../state/themeState'
 import {
   NLayout,
@@ -106,6 +107,14 @@ const handleUpdateValue = (key) => {
   else if (key === 'system-settings') goSystemSettings()
 }
 
+const preferenceLabel = (text, selected) => () => h('span', {
+  style: 'display:flex;align-items:center;justify-content:space-between;gap:24px;width:100%',
+}, [text, h('span', {
+  'aria-hidden': 'true',
+  'data-preference-selected': String(selected),
+  style: `width:6px;height:6px;border-radius:50%;background:currentColor;opacity:${selected ? 1 : 0};flex-shrink:0`,
+})])
+
 const userOptions = computed(() => [
   {
     label: t('dashboard.language'),
@@ -113,11 +122,15 @@ const userOptions = computed(() => [
     icon: renderIcon(Languages),
     children: [
       {
-        label: t('dashboard.languageOptionZh'),
+        label: preferenceLabel(t('common.followSystem'), localeMode.value === 'system'),
+        key: 'lang-system',
+      },
+      {
+        label: preferenceLabel(t('dashboard.languageOptionZh'), localeMode.value === 'zh-CN'),
         key: 'lang-zh-CN',
       },
       {
-        label: t('dashboard.languageOptionEn'),
+        label: preferenceLabel(t('dashboard.languageOptionEn'), localeMode.value === 'en-US'),
         key: 'lang-en-US',
       }
     ]
@@ -130,15 +143,15 @@ const userOptions = computed(() => [
       : (isDarkMode.value ? renderIcon(Moon) : renderIcon(Sun)),
     children: [
       {
-        label: t('common.lightMode'),
+        label: preferenceLabel(t('common.lightMode'), themeMode.value === 'light'),
         key: 'theme-light',
       },
       {
-        label: t('common.darkMode'),
+        label: preferenceLabel(t('common.darkMode'), themeMode.value === 'dark'),
         key: 'theme-dark',
       },
       {
-        label: t('common.followSystem'),
+        label: preferenceLabel(t('common.followSystem'), themeMode.value === 'system'),
         key: 'theme-system',
       }
     ]

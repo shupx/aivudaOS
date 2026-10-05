@@ -1,13 +1,11 @@
 import { reactive } from 'vue'
-import i18n, { normalizeLocale } from '../i18n'
+import i18n, { setLocaleMode } from '../i18n'
 
 const TOKEN_KEY = 'aivuda_ui_token'
-const LOCALE_KEY = 'aivuda_ui_locale'
-const DEFAULT_LOCALE = normalizeLocale(localStorage.getItem(LOCALE_KEY) || 'en-US')
 
 export const appState = reactive({
   token: localStorage.getItem(TOKEN_KEY) || '',
-  locale: DEFAULT_LOCALE,
+  get locale() { return i18n.global.locale.value },
   user: null,
   role: null,
   aivudaosVersion: '',
@@ -39,10 +37,7 @@ export function setUserSession(user, role) {
 }
 
 export function setLocale(locale) {
-  const normalized = normalizeLocale(locale)
-  appState.locale = normalized
-  localStorage.setItem(LOCALE_KEY, normalized)
-  i18n.global.locale.value = normalized
+  setLocaleMode(locale)
 }
 
 export function markGatewayOnline(online) {

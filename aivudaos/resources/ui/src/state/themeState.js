@@ -1,18 +1,16 @@
 import { computed, ref } from 'vue'
+import { readSetting, saveSetting, resolveTheme, subscribeAppearance } from '../appearance'
 
 const STORAGE_KEY = 'aivuda_theme'
 const VALID_THEME_MODES = new Set(['light', 'dark', 'system'])
 
 function getStoredThemeMode() {
-  const storedTheme = localStorage.getItem(STORAGE_KEY) || 'light'
+  const storedTheme = readSetting(STORAGE_KEY)
   return VALID_THEME_MODES.has(storedTheme) ? storedTheme : 'light'
 }
 
 function getSystemDarkPreference() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false
-  }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  return resolveTheme('system') === 'dark'
 }
 
 export const themeMode = ref(getStoredThemeMode())
@@ -41,8 +39,8 @@ function bindSystemThemeListener() {
   }
 
   mediaQueryList = window.matchMedia('(prefers-color-scheme: dark)')
-  mediaQueryListener = (event) => {
-    systemPrefersDark.value = event.matches
+  mediaQueryListener = () => {
+    systemPrefersDark.value = getSystemDarkPreference()
     if (themeMode.value === 'system') {
       applyThemeClass()
     }
@@ -60,11 +58,16 @@ function bindSystemThemeListener() {
 
 bindSystemThemeListener()
 applyThemeClass()
+subscribeAppearance(() => {
+  themeMode.value = getStoredThemeMode()
+  systemPrefersDark.value = getSystemDarkPreference()
+  applyThemeClass()
+})
 
 export function setThemeMode(nextMode) {
   const normalizedMode = VALID_THEME_MODES.has(nextMode) ? nextMode : 'light'
   themeMode.value = normalizedMode
-  localStorage.setItem(STORAGE_KEY, normalizedMode)
+  saveSetting(STORAGE_KEY, normalizedMode)
   systemPrefersDark.value = getSystemDarkPreference()
   applyThemeClass()
 }

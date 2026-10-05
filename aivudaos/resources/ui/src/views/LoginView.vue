@@ -1,6 +1,7 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import { useLogin } from '../composables/useLogin'
+import { isDarkMode } from '../state/themeState'
 import { NCard, NForm, NFormItem, NInput, NButton, NSpace, NText, NAlert } from 'naive-ui'
 
 const { t } = useI18n()
@@ -8,7 +9,7 @@ const { form, busy, error, submit } = useLogin()
 </script>
 
 <template>
-  <main style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f4f7f9; padding: 20px;">
+  <main :style="{ backgroundColor: isDarkMode ? '#181b20' : '#f4f7f9' }" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
     <NCard style="width: 100%; max-width: 420px;">
       <div style="text-align: center; margin-bottom: 24px;">
         <NText style="font-size: 28px; font-weight: 700;">AivudaOS</NText>
