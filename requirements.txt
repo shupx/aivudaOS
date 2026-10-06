@@ -4,3 +4,5 @@ gunicorn>=22.0
 pyyaml>=6.0
 bcrypt>=4.0
 python-multipart>=0.0.9
+jsonschema>=4.18,<4.24
+websocket-client>=1.6,<1.9
