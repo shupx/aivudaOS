@@ -247,8 +247,9 @@ python3 -m aivudaos.mcp_server --host 127.0.0.1 --port 28794
 交互 WebSocket 操作。原有 5 个工具名保留，新增工具名采用路由函数名。
 完成 `aivudaos install` 后可直接运行 `aivudaos-mcp` 或上述 Python 命令。
 `AIVUDAOS_MCP_BASE_URL` 默认 `http://127.0.0.1/aivuda_os`，通过 Caddy HTTP 入口调用 API。
-`AIVUDAOS_MCP_TOKEN` 为后端 API token，也可在每次工具调用中传入 `token`。
-可先调用 `login` 获取 token。MCP 入站认证使用独立的
+受保护工具默认用 `admin / admin123` 自动登录并缓存临时 token，失效后重登重试一次。
+默认登录失败才需提供当前账号密码；可设置 `AIVUDAOS_MCP_USERNAME`/`AIVUDAOS_MCP_PASSWORD`，
+或调用 `login` 后逐次传入 `token`。`AIVUDAOS_MCP_TOKEN` 是可选的显式覆盖。MCP 入站认证使用独立的
 `AIVUDAOS_MCP_ACCESS_TOKEN`，不会将其转发给后端。
 配置导入仍由 AivudaOS 校验并排队执行。详细配置、上传、下载及事件调用见
 [docs/mcp.md](docs/mcp.md)。

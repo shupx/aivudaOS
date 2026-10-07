@@ -13,6 +13,7 @@ import os
 import secrets
 import socket
 import time
+import threading
 import uuid
 from email.message import Message
 from urllib.error import HTTPError
@@ -87,23 +88,74 @@ def multipart(payload):
     return b"".join(chunks), "multipart/form-data; boundary=" + boundary
 
 
+class APIHTTPError(ValueError):
+    def __init__(self, status, detail):
+        self.status = status
+        super().__init__("API HTTP {0}: {1}".format(status, detail))
+
+
 class APIClient:
     def __init__(self, prefix, default_url, auth_mode, base_url=None, token=None, opener=None):
         self.base_url = (base_url or os.environ.get(prefix + "_MCP_BASE_URL", default_url)).rstrip("/")
         self.token = token if token is not None else os.environ.get(prefix + "_MCP_TOKEN", "")
         self.auth_mode = auth_mode
+        self._managed_token = False
+        self._login_lock = threading.Lock()
+        self.username = os.environ.get(prefix + "_MCP_USERNAME", "admin")
+        self.password = os.environ.get(prefix + "_MCP_PASSWORD", "admin123")
         self.opener = opener or urlopen
         self.max_bytes = int(os.environ.get(prefix + "_MCP_MAX_BYTES", str(64 * 1024 * 1024)))
 
     def url(self, path, query=None):
         return self.base_url + path + (("?" + urlencode(query, doseq=True)) if query else "")
 
+    def ensure_token(self, expired_token=None):
+        with self._login_lock:
+            if self.token and (expired_token is None or self.token != expired_token):
+                return self.token
+            path = "/api/auth/login" if self.auth_mode == "query" else "/dev/auth/login"
+            content_type = "application/json" if self.auth_mode == "query" else "application/x-www-form-urlencoded"
+            try:
+                result = self._request(path, "POST", {"username": self.username, "password": self.password},
+                                       content_type=content_type)
+            except APIHTTPError as exc:
+                if exc.status == 401:
+                    raise ValueError("Backend login failed with the configured/default account. Ask the user for the current username and password, then use the login tool and pass its token to subsequent calls.") from None
+                raise
+            token = result.get("access_token")
+            if not isinstance(token, str) or not token:
+                raise ValueError("Backend login did not return an access token")
+            self.token = token
+            self._managed_token = True
+            return token
+
     def request(self, path, method="GET", payload=None, query=None, headers=None, content_type="application/json", stream=None):
+        query, headers = dict(query or {}), {key.lower(): value for key, value in (headers or {}).items()}
+        login_route = path in ("/api/auth/login", "/dev/auth/login", "/dev/auth/register")
+        protected = not login_route and (path.startswith("/api/") if self.auth_mode == "query" else path.startswith("/dev/"))
+        explicit = "token" in query if self.auth_mode == "query" else "authorization" in headers
+        token = self.token
+        if protected and not explicit:
+            token = self.ensure_token()
+        if token and not explicit and not login_route:
+            if self.auth_mode == "query":
+                query["token"] = token
+            else:
+                headers["authorization"] = "Bearer " + token
+        try:
+            return self._request(path, method, payload, query, headers, content_type, stream)
+        except APIHTTPError as exc:
+            if exc.status != 401 or not protected or explicit or not self._managed_token:
+                raise
+            token = self.ensure_token(expired_token=token)
+            if self.auth_mode == "query":
+                query["token"] = token
+            else:
+                headers["authorization"] = "Bearer " + token
+            return self._request(path, method, payload, query, headers, content_type, stream)
+
+    def _request(self, path, method="GET", payload=None, query=None, headers=None, content_type="application/json", stream=None):
         query, headers = dict(query or {}), dict(headers or {})
-        if self.auth_mode == "query" and self.token and "token" not in query:
-            query["token"] = self.token
-        if self.auth_mode == "bearer" and self.token and "authorization" not in headers:
-            headers["authorization"] = "Bearer " + self.token
         headers["Accept"] = "application/json, text/event-stream, */*"
         body = None
         if payload is not None:
@@ -138,7 +190,7 @@ class APIClient:
                         "content_base64": base64.b64encode(raw).decode("ascii"), "size": len(raw)}
         except HTTPError as exc:
             detail = exc.read(8192).decode("utf-8", errors="replace")
-            raise ValueError("API HTTP {0}: {1}".format(exc.code, detail)) from None
+            raise APIHTTPError(exc.code, detail) from None
 
     def read_events(self, response, options):
         events, lines = [], []
@@ -264,8 +316,6 @@ class OpenAPIServer:
         for param in parameters:
             key = param["name"]
             if key not in arguments:
-                if param.get("required") and key == "token" and not self.client.token:
-                    raise ValueError("An API token is required")
                 continue
             value = fields.pop(key)
             if param["in"] == "path":
@@ -282,15 +332,23 @@ class OpenAPIServer:
                                    content_type=content_type or "application/json", stream=options)
 
     def websocket_input(self, path, arguments):
-        from websocket import create_connection
+        from websocket import create_connection, WebSocketBadStatusException
 
-        token = arguments.get("token", self.client.token)
+        token = arguments["token"] if "token" in arguments else self.client.ensure_token()
         if not token:
             raise ValueError("An API token is required")
         path = path.replace("{operation_id}", quote(arguments["operation_id"], safe=""))
         parts = urlsplit(self.client.url(path, {"token": token}))
         url = urlunsplit(("wss" if parts.scheme == "https" else "ws", parts.netloc, parts.path, parts.query, ""))
-        connection = create_connection(url, timeout=30)
+        try:
+            connection = create_connection(url, timeout=30)
+        except WebSocketBadStatusException as exc:
+            if exc.status_code != 401 or "token" in arguments or not self.client._managed_token:
+                raise
+            token = self.client.ensure_token(expired_token=token)
+            parts = urlsplit(self.client.url(path, {"token": token}))
+            url = urlunsplit(("wss" if parts.scheme == "https" else "ws", parts.netloc, parts.path, parts.query, ""))
+            connection = create_connection(url, timeout=30)
         try:
             ready = json.loads(connection.recv())
             connection.send(json.dumps({"data": arguments["data"]}))

@@ -248,5 +248,103 @@ class APIClientTests(unittest.TestCase):
         self.assertEqual(result["events"], [{"event": "status", "data": {"seq": 1}}])
 
 
+
+class AutomaticLoginTests(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+        self.logins = 0
+        self.reject_login = False
+        self.reject_token = None
+        self.fail_all = False
+        self.client = APIClient(base_url="http://127.0.0.1:8000/prefix", token="", opener=self.open_response)
+        self.protected = "/api/auth/me" if AUTH_MODE == "query" else "/dev/me"
+
+    def open_response(self, request, timeout):
+        from urllib.error import HTTPError
+        path = urlsplit(request.full_url).path
+        self.calls.append(request)
+        if path.endswith("/auth/login"):
+            self.logins += 1
+            if self.reject_login:
+                raise HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO(b'{"detail":"Invalid credentials"}'))
+            payload = json.loads(request.data) if AUTH_MODE == "query" else {k: v[0] for k, v in parse_qs(request.data.decode()).items()}
+            self.assertEqual(payload, {"username": "admin", "password": "admin123"})
+            value = {"access_token": "session-" + str(self.logins)}
+        else:
+            token = parse_qs(urlsplit(request.full_url).query).get("token", [None])[0] if AUTH_MODE == "query" else request.get_header("Authorization", "").replace("Bearer ", "")
+            if self.fail_all or token == self.reject_token and token is not None:
+                raise HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO(b'{"detail":"Invalid token"}'))
+            value = {"token_received": token}
+        response = io.BytesIO(json.dumps(value).encode())
+        response.headers = {"Content-Type": "application/json"}
+        response.status = 200
+        return response
+
+    def test_tools_login_lazily_and_reuse_token(self):
+        server = MCPServer(self.client)
+        name = "me" if AUTH_MODE == "query" else "dev_me"
+        server.call_tool(name, {})
+        server.call_tool(name, {})
+        self.assertEqual(self.logins, 1)
+        self.assertEqual(self.client.token, "session-1")
+
+    def test_public_calls_do_not_login(self):
+        self.client.request("/store/index")
+        self.assertEqual(self.logins, 0)
+
+    def test_expired_automatic_token_refreshes_once(self):
+        self.client.request(self.protected)
+        self.reject_token = "session-1"
+        self.assertEqual(self.client.request(self.protected)["token_received"], "session-2")
+        self.assertEqual(self.logins, 2)
+
+    def test_retry_is_bounded(self):
+        self.fail_all = True
+        with self.assertRaisesRegex(ValueError, "API HTTP 401"):
+            self.client.request(self.protected)
+        self.assertEqual(self.logins, 2)
+        self.assertEqual(len(self.calls), 4)
+
+    def test_explicit_token_is_not_replaced(self):
+        self.reject_token = "explicit"
+        options = {"query": {"token": "explicit"}} if AUTH_MODE == "query" else {"headers": {"Authorization": "Bearer explicit"}}
+        with self.assertRaisesRegex(ValueError, "API HTTP 401"):
+            self.client.request(self.protected, **options)
+        self.assertEqual(self.logins, 0)
+        self.client.token = "explicit"
+        with self.assertRaisesRegex(ValueError, "API HTTP 401"):
+            self.client.request(self.protected)
+        self.assertEqual(self.logins, 0)
+
+    def test_changed_credentials_prompt_without_leaking_password(self):
+        self.reject_login = True
+        with self.assertRaisesRegex(ValueError, "current username and password") as error:
+            self.client.request(self.protected)
+        self.assertNotIn("admin123", str(error.exception))
+        self.assertEqual(self.logins, 1)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_concurrent_calls_share_one_login(self):
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            values = list(executor.map(lambda _: self.client.request(self.protected), range(8)))
+        self.assertEqual(self.logins, 1)
+        self.assertTrue(all(value["token_received"] == "session-1" for value in values))
+
+    def test_websocket_uses_auto_login_and_refreshes_expired_token(self):
+        from websocket import WebSocketBadStatusException
+        if AUTH_MODE != "query":
+            return
+        server = MCPServer(self.client)
+        with patch("websocket.create_connection") as connect:
+            socket = connect.return_value
+            socket.recv.side_effect = ['{}', '{}']
+            connect.side_effect = [WebSocketBadStatusException("Unauthorized", status_code=401), socket]
+            server.call_tool("operation_interactive_ws", {"operation_id": "job", "data": "yes"})
+            self.assertEqual(self.logins, 2)
+            self.assertIn("token=session-2", connect.call_args[0][0])
+            socket.close.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

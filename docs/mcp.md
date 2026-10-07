@@ -20,7 +20,9 @@ Content-Type 为 `application/json`。不需要单独的 SSE 连接。
 | 环境变量 | 用途 |
 |---|---|
 | `AIVUDAOS_MCP_BASE_URL` | Caddy API 入口，默认 `http://127.0.0.1/aivuda_os`，必须包含服务前缀 |
-| `AIVUDAOS_MCP_TOKEN` | 默认后端 API token |
+| `AIVUDAOS_MCP_TOKEN` | 可选：显式后端 API token，覆盖自动登录 |
+| `AIVUDAOS_MCP_USERNAME` | 自动登录用户名，默认 admin |
+| `AIVUDAOS_MCP_PASSWORD` | 自动登录密码，默认 admin123 |
 | `AIVUDAOS_MCP_HOST` | MCP 监听地址，默认 127.0.0.1 |
 | `AIVUDAOS_MCP_PORT` | MCP 监听端口，默认 28794 |
 | `AIVUDAOS_MCP_ACCESS_TOKEN` | MCP 入站 Bearer token，与后端 token 独立 |
@@ -29,7 +31,11 @@ Content-Type 为 `application/json`。不需要单独的 SSE 连接。
 | `AIVUDAOS_MCP_MAX_BYTES` | HTTP 请求、上传、后端响应和事件读取的字节上限，默认 64 MiB |
 
 绑定非回环地址必须设置 MCP_ACCESS_TOKEN。远程使用应通过 HTTPS 反向代理，
-并根据代理入口设置允许的 Host/Origin。API token 可以逐次覆盖；登录返回值
+并根据代理入口设置允许的 Host/Origin。未提供显式 API token 时，受保护调用自动使用默认账号 `admin / admin123` 登录，
+token 仅缓存在 MCP 进程内；失效后重新登录并重试一次。公开商店查询不触发登录。
+默认/配置账号登录返回 401 后才提示提供当前账号密码；网络或服务错误不会提示修改凭据。
+可通过 MCP_USERNAME/MCP_PASSWORD 配置当前账号，或用登录工具取 token 后逐次传入。
+显式 token 不会被自动登录替换。API token 可以逐次覆盖；登录返回值
 不会保存为整个 MCP 服务的默认账号。上游错误以 MCP `isError` 返回。
 
 文件上传字段使用以下对象；表单中的 JSON 字符串（例如 manifest_json）
