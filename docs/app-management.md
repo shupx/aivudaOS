@@ -398,3 +398,15 @@ existing versions are not overwritten. System/app parameters are merged and
 validated through the existing config routes, then autostart is applied.
 `human_header.avahi_hostname`, `payload.system_parameters.avahi_hostname` and
 exported `running` state are ignored. No direct database import occurs.
+
+## Popen stop and gateway exit
+
+Popen applications are owned by the gateway instance that starts them. On
+normal gateway shutdown that instance stops its owned apps; it does not stop
+systemd-managed services or adopt another runtime's apps for shutdown. An
+explicit app stop waits for cleanup, including observed descendants in other
+sessions, before marking the app stopped. Processes get SIGTERM with a five
+second grace period and then SIGKILL if necessary. Identity checks use Linux
+PID start times. If cleanup fails, stop reports failure instead of recording a
+successful stop. A detached guardian also cleans owned Popen apps when the
+backend dies without running shutdown hooks. Autostart preferences are retained.

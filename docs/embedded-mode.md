@@ -17,3 +17,11 @@ An embedded manager supplies `AIVUDAOS_WS_ROOT` and owns the loopback Caddy
 listener. AivudaOS continues to update and reload installed application
 routes using its workspace Caddy binary and Caddyfile. This flag does not
 change standalone service installation scripts or disable app routing.
+
+### Desktop exit
+
+ACEswarm first terminates the embedded AivudaOS gateway and allows its shutdown
+hook to finish Popen app cleanup, then tears down the other local services.
+The existing Electron guardian cleans desktop service groups after a crash;
+AivudaOS's independent pipe guardian cleans the apps' separate sessions when
+the gateway exits or is killed. This policy does not stop systemd applications.

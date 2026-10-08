@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from aivudaos.core.apps.process_cleanup import processes, remember, terminate
 from aivudaos.core.apps.caddy_config import CaddyConfigService
 from aivudaos.core.apps.config_validation import validate_config_data
 from aivudaos.core.apps.magnet import MagnetService
@@ -51,6 +52,47 @@ class RuntimeService:
         self._systemd = SystemdRuntimeBackend(SHELL_HELPERS_DIR, SYSTEMD_RUNTIME_DIR)
         self._script_hooks = ScriptHookRunner()
         self._caddy = CaddyConfigService(versioning=versioning)
+        self._owned_processes = {}
+        self._process_lock = threading.RLock()
+        self._guardian = None
+        self._closing = False
+
+    def _ensure_guardian(self) -> None:
+        if self._guardian is not None:
+            if self._guardian.poll() is not None:
+                raise AppRuntimeError("Application guardian exited")
+            return
+        self._guardian = subprocess.Popen(
+            [sys.executable, str(Path(__file__).with_name("process_cleanup.py"))],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            start_new_session=True, close_fds=True,
+        )
+
+    def _guardian_message(self, action: str, pid: int, stamp: str) -> None:
+        if self._guardian is None or self._guardian.stdin.closed:
+            return
+        self._guardian.stdin.write((json.dumps({"action": action, "pid": pid, "stamp": stamp}) + "\n").encode())
+        self._guardian.stdin.flush()
+
+    def shutdown(self) -> None:
+        """Stop only Popen applications owned by this runtime; leave systemd alone."""
+        from concurrent.futures import ThreadPoolExecutor
+        with self._process_lock:
+            self._closing = True
+            app_ids = list(self._owned_processes)
+        errors = []
+        with ThreadPoolExecutor(max_workers=max(1, len(app_ids))) as pool:
+            for future in [pool.submit(self.stop, app_id) for app_id in app_ids]:
+                try:
+                    future.result()
+                except Exception as exc:
+                    errors.append(str(exc))
+        if self._guardian is not None:
+            with self._process_lock:
+                self._guardian.stdin.close()
+            self._guardian.wait(timeout=10)
+        if errors:
+            raise AppRuntimeError("Application shutdown failed: " + "; ".join(errors))
 
     # ------------------------------------------------------------------ #
     #  Manifest from DB
@@ -122,10 +164,17 @@ class RuntimeService:
                 using_systemd = False
 
         if (not using_systemd) and running and (not pid or not self._is_pid_alive(int(pid))):
-            stopped_at = int(time.time())
-            self._mark_stopped_if_pid_matches(app_id, pid, stopped_at)
-            running = False
-            pid = None
+            owned = self._owned_processes.get(app_id)
+            table = processes() if owned is not None else {}
+            descendants_alive = owned is not None and any(
+                child in table and table[child][2] == stamp
+                for child, stamp in list(owned[2].items())
+            )
+            if not descendants_alive:
+                stopped_at = int(time.time())
+                self._mark_stopped_if_pid_matches(app_id, pid, stopped_at)
+                running = False
+                pid = None
 
         return AppRuntimeState(
             app_id=app_id,
@@ -300,33 +349,48 @@ class RuntimeService:
             )
             return {"ok": True, "app_id": app_id, "running": live.running}
 
-        try:
-            with log_path.open("wb") as log_file:
-                proc = subprocess.Popen(
-                    command,
-                    cwd=str(install_path),
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    env={**os.environ, **runtime_env},
-                    start_new_session=True,
-                )
-        except OSError as exc:
-            raise AppRuntimeError(f"启动 {app_id} 失败，无法写入日志: {exc}") from exc
+        with self._process_lock:
+            if self._closing:
+                raise AppRuntimeError("Runtime is shutting down")
+            self._ensure_guardian()
+            try:
+                with log_path.open("wb") as log_file:
+                    proc = subprocess.Popen(
+                        command,
+                        cwd=str(install_path),
+                        stdout=log_file,
+                        stderr=subprocess.STDOUT,
+                        env={**os.environ, **runtime_env},
+                        start_new_session=True,
+                    )
+            except OSError as exc:
+                raise AppRuntimeError(f"启动 {app_id} 失败，无法写入日志: {exc}") from exc
 
-        self._sync_runtime_row(
-            app_id,
-            running=True,
-            pid=proc.pid,
-            autostart=runtime_state.autostart,
-            last_started_at=now,
-        )
+            table = processes()
+            if proc.pid in table:
+                stamp = table[proc.pid][2]
+                self._owned_processes[app_id] = (proc, stamp, {proc.pid: stamp})
+                try:
+                    self._guardian_message("add", proc.pid, stamp)
+                except (OSError, ValueError) as exc:
+                    terminate(self._owned_processes[app_id][2], proc.pid, stamp)
+                    proc.wait(timeout=2)
+                    self._owned_processes.pop(app_id, None)
+                    raise AppRuntimeError("Application guardian registration failed") from exc
+            self._sync_runtime_row(
+                app_id,
+                running=True,
+                pid=proc.pid,
+                autostart=runtime_state.autostart,
+                last_started_at=now,
+            )
 
-        watcher = threading.Thread(
-            target=self._watch_process_exit,
-            args=(app_id, proc),
-            daemon=True,
-        )
-        watcher.start()
+            watcher = threading.Thread(
+                target=self._watch_process_exit,
+                args=(app_id, proc),
+                daemon=True,
+            )
+            watcher.start()
 
         return {"ok": True, "app_id": app_id, "running": True}
 
@@ -349,11 +413,26 @@ class RuntimeService:
             except OSError:
                 pass
 
-        if runtime_state.pid:
+        if runtime_state.pid or app_id in self._owned_processes:
             try:
-                os.kill(runtime_state.pid, signal.SIGTERM)
+                owned = self._owned_processes.get(app_id)
+                table = processes()
+                if owned is not None:
+                    proc, stamp, tree = owned
+                    terminate(tree, proc.pid, stamp)
+                    proc.wait(timeout=2)
+                    with self._process_lock:
+                        if self._owned_processes.get(app_id) is owned:
+                            self._guardian_message("remove", proc.pid, stamp)
+                            self._owned_processes.pop(app_id, None)
+                elif runtime_state.pid in table:
+                    # Explicit stop may also adopt an app left by an older runtime.
+                    stamp = table[runtime_state.pid][2]
+                    terminate({runtime_state.pid: stamp}, runtime_state.pid, stamp)
             except ProcessLookupError:
                 pass
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+                raise AppRuntimeError("Application cleanup failed: " + str(exc)) from exc
 
         self._sync_runtime_row(
             app_id,
@@ -1214,8 +1293,20 @@ class RuntimeService:
 
     def _watch_process_exit(self, app_id: str, proc: subprocess.Popen[Any]) -> None:
         try:
-            proc.wait()
+            owned = self._owned_processes.get(app_id)
+            while proc.poll() is None:
+                if owned is not None:
+                    remember(owned[2], proc.pid, owned[1])
+                time.sleep(0.1)
+            if owned is not None:
+                terminate(owned[2], proc.pid, owned[1])
+                with self._process_lock:
+                    # A restart may already own a newer process for this app.
+                    if self._owned_processes.get(app_id) is owned:
+                        self._guardian_message("remove", proc.pid, owned[1])
+                        self._owned_processes.pop(app_id, None)
         except Exception:
+            # Keep the tracked PID/state until cleanup can be retried.
             return
 
         stopped_at = int(time.time())

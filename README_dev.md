@@ -298,3 +298,20 @@ python3 -m aivudaos.mcp_server --host 127.0.0.1 --port 28794
 Run `python3 -m unittest discover -s tests -p 'test_embedded_mode.py'` to
 verify that desktop embedding skips Avahi and HTTPS hostname coupling while
 standalone hostname updates retain their existing behavior.
+
+### Popen application shutdown ownership
+
+The gateway shutdown hook stops only Popen applications started by that runtime
+instance, concurrently, before releasing its application guardian. Systemd apps
+keep their existing service lifecycle. Explicit stop waits for confirmed process
+exit before recording stopped state. Linux `/proc` start times protect against
+PID reuse; observed descendants include children which start new sessions.
+Cleanup allows five seconds for SIGTERM, then escalates surviving processes to
+SIGKILL and verifies exit. A detached Python guardian monitors a private pipe;
+backend crashes/SIGKILL close that pipe and trigger the same cleanup. Application
+entrypoints should still implement their own graceful signal handling.
+
+Regression checks: `python -m unittest discover -s tests`, plus ACEswarm's
+`npm run test:cleanup`, which installs a disposable Popen fixture in an isolated
+workspace and verifies normal/system quit, SIGTERM and SIGKILL leave no fixture
+or service processes. The fixture includes a detached child ignoring SIGTERM.
