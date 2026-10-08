@@ -14,12 +14,23 @@ pip install aivudaos
 # pip install aivudaos==1.0.0.dev2026040602  # for a certain version
 ```
 
-If you install with `conda`, activate the target environment first and keep using that same environment for `aivudaos install`, `aivudaos start`, and related commands:
+If you install with `conda` or `venv`, activate the target environment first and keep using that same environment for `aivudaos install`, `aivudaos start`, and related commands:
 
 ```bash
-conda create -n aivuda python=3.8 -y
+## If you use conda (assume conda is installed):
+conda create -n aivuda python=3.10 -y # python>=3.8 is supported by aivudaos
 conda activate aivuda
 pip install aivudaos
+aivudaos install
+```
+
+```bash
+## If you use venv:
+sudo apt install python3-venv python3-pip
+python3 -m venv .venv
+source .venv/bin/activate
+pip install aivudaos
+aivudaos install
 ```
 
 #### 2. Install from a provided wheel:
