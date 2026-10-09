@@ -11,6 +11,7 @@ from aivudaos.core.config.avahi import AvahiService
 from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
 from aivudaos.core.config.filelock import atomic_write_text, get_lock
 from aivudaos.core.config.models import UserRecord, UsersConfig, VersionedConfig
+from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT, validate_runtime_environment
 from aivudaos.core.errors import ConfigVersionConflictError
 from aivudaos.core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
 from aivudaos.core.paths import embedded_mode
@@ -36,6 +37,9 @@ class ConfigService:
         self, data: Dict[str, Any], expected_version: int, username: str
     ) -> VersionedConfig:
         normalized_data = dict(data)
+        normalized_data["runtime_environment"] = validate_runtime_environment(
+            normalized_data.get("runtime_environment", DEFAULT_RUNTIME_ENVIRONMENT)
+        )
         if "avahi_hostname" in normalized_data:
             normalized_data["avahi_hostname"] = self._avahi.normalize_hostname(
                 str(normalized_data.get("avahi_hostname") or "")

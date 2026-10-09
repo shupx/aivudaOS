@@ -20,6 +20,7 @@ from aivudaos.gateway.deps import (
     get_aivudaos_service_manager,
     get_auth_service,
     get_config_service,
+    get_runtime_service,
     get_magnet_service,
     get_relogin_service,
     get_sudo_nopasswd_service,
@@ -274,6 +275,7 @@ async def restore_apt_sources_list(payload: AptSourcesRestoreRequest, token: str
             "SUDO_PASSWORD_REQUIRED",
             "BACKUP_ID_REQUIRED",
             "BACKUP_NOT_FOUND",
+            "BACKUP_TARGET_MISMATCH",
             "APT_UPDATE_FAILED",
             "WRITE_FAILED",
         } else 500
@@ -358,25 +360,22 @@ async def put_os_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, A
     user = _require_auth(token)
     config: ConfigService = get_config_service()
 
-    result = None
-    for _ in range(5):
-        current_for_write = config.get_os_config()
-        try:
-            result = config.update_os_config(
-                payload.data,
-                current_for_write.version,
-                user.username,
-            )
-            break
-        except ConfigVersionConflictError:
-            continue
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-
-    if result is None:
+    previous = config.get_os_config()
+    try:
+        result = config.update_os_config(payload.data, payload.version, user.username)
+    except ConfigVersionConflictError:
         raise HTTPException(status_code=409, detail="Config version conflict")
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
-    return {"ok": True, "version": result.version}
+    refresh_errors = []
+    if previous.data.get("runtime_environment") != result.data.get("runtime_environment"):
+        try:
+            refresh_errors = get_runtime_service().refresh_runtime_environment()
+        except (RuntimeError, OSError) as exc:
+            refresh_errors = [str(exc)]
+
+    return {"ok": True, "version": result.version, "runtime_environment_refresh_errors": refresh_errors}
 
 
 @router.get("/magnets")

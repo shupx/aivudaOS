@@ -207,7 +207,7 @@ App 启动时会注入配置路径相关环境变量：
 - `GET  /aivuda_os/api/config/system/aivudaos-service`（读取 AivudaOS 自身 systemd user service 状态）
 - `POST /aivuda_os/api/config/system/aivudaos-service/autostart`（启用/禁用 AivudaOS 自身自启动）
 - `POST /aivuda_os/api/config/system/aivudaos-service/{action}`（触发 `stop` / `restart` / `uninstall`，以后端脱离当前进程组的方式后台执行）
-- `GET  /aivuda_os/api/config/system/apt-sources-list`（读取 `/etc/apt/sources.list`）
+- `GET  /aivuda_os/api/config/system/apt-sources-list`（自动检测 Ubuntu 主源文件，返回路径和格式）
 - `GET  /aivuda_os/api/config/system/apt-sources-list/backups`（读取 APT 源备份列表）
 - `PUT  /aivuda_os/api/config/system/apt-sources-list`（写入 APT 源，写入前自动创建时间戳备份，并自动执行 `apt update`）
 - `POST /aivuda_os/api/config/system/apt-sources-list/restore`（按备份版本恢复 APT 源，并自动执行 `apt update`）
@@ -228,8 +228,8 @@ export AIVUDAOS_WS_ROOT=/path/to/private/aivudaos-workspace
 ### APT 源配置说明
 
 - UI 入口：`系统设置 -> 配置 APT 源`。
-- 当前仅管理单文件：`/etc/apt/sources.list`（不包含 `sources.list.d/*.list`）。
-- 每次写入或恢复前都会自动备份为时间戳文件：`/var/backups/aivudaos/apt-sources/sources.list.<timestamp>.bak`。
+- 自动按实际文件布局检测主源：存在 `/etc/apt/sources.list.d/ubuntu.sources` 时使用它（Ubuntu 24.04 起默认的 deb822 格式），否则使用 `/etc/apt/sources.list`（传统 deb/deb-src 格式）。不依赖版本号，因此兼容升级安装和自定义镜像；其他第三方源不会被修改。
+- 每次写入或恢复前都会自动备份到 `/var/backups/aivudaos/apt-sources/`，按目标文件分别命名为 `sources.list.<timestamp>.bak` 或 `ubuntu.sources.<timestamp>.bak`。备份列表仅显示当前目标的备份，跨目标恢复会被拒绝；旧 sources.list 备份 ID 保持兼容。
 - 写入和恢复后会自动执行 `apt update`，输出会在前端弹窗里显示。
 - 前端会收集 sudo 密码并仅用于当前请求，不会持久化到浏览器存储。
 
@@ -315,3 +315,21 @@ Regression checks: `python -m unittest discover -s tests`, plus ACEswarm's
 `npm run test:cleanup`, which installs a disposable Popen fixture in an isolated
 workspace and verifies normal/system quit, SIGTERM and SIGKILL leave no fixture
 or service processes. The fixture includes a detached child ignoring SIGTERM.
+
+## App 额外环境变量
+
+系统设置页面最下方提供变量名/值表格，支持增加、删除、修改并统一保存。配置保存在 `os.yaml` 的 `runtime_environment` 字符串映射中；新建配置及旧配置缺少该字段时默认加入 `ROS_LOCALHOST_ONLY: "1"`。显式保存 `{}` 可删除所有额外变量，重启不会重新填充。
+
+通过已有 `GET/PUT /aivuda_os/api/config/os` API 读写，PUT 请求包含完整 `data` 和 GET 返回的 `version`；版本过期返回 409，避免覆盖另一用户的配置。示例 data 字段：
+
+```yaml
+runtime_environment:
+  ROS_LOCALHOST_ONLY: "1"
+  ROS_DOMAIN_ID: "10"
+```
+
+所有 app 的启动、重启、自启动和 systemd unit 重建均读取这份配置。额外变量覆盖继承环境和默认日志变量，内部 `AIVUDA_*` 路径变量保留。变量名必须匹配 `[A-Za-z_][A-Za-z0-9_]*`，不允许 `AIVUDA_*`；值必须为不含 NUL/换行的字符串，空字符串有效。systemd 会转义引号、反斜杠和百分号，保持变量的字面值。
+
+保存后自动刷新 app systemd unit 并 daemon-reload；不会自动重启运行中的 app，它们在下一次启动/重启时获得新值。API 返回 `runtime_environment_refresh_errors`，若部分 unit 刷新失败，UI 会说明配置已保存并显示失败原因。Popen 删除额外变量后恢复继承 AivudaOS 进程环境；该功能不修改 AivudaOS 自身或 app 安装/卸载脚本的环境。
+
+验证：`../.venv/bin/python -m unittest discover -s tests -v`；UI 在 `aivudaos/resources/ui` 执行 `npm run build`。

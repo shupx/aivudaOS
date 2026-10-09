@@ -68,7 +68,6 @@ class SystemdRuntimeBackend:
     ) -> Path:
         unit_path = self.unit_file_path(app_id, scope)
         unit_path.parent.mkdir(parents=True, exist_ok=True)
-        common_env_path = self._ensure_common_runtime_env_file()
 
         exec_start = " ".join(shlex.quote(part) for part in command)
         truncate_bin = shutil.which("truncate") or "/usr/bin/truncate"
@@ -80,13 +79,15 @@ class SystemdRuntimeBackend:
         escaped_log = shlex.quote(str(log_path))
         wanted_by = "multi-user.target" if scope == "system" else "default.target"
         env_lines = []
-        for key, value in (environment or {}).items():
+        for key, value in {**self.COMMON_RUNTIME_ENV, **(environment or {})}.items():
             safe_key = str(key).strip()
             if not safe_key:
                 continue
-            if safe_key in self.COMMON_RUNTIME_ENV:
-                continue
-            safe_val = str(value).replace('"', '\\"')
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", safe_key):
+                raise ValueError("Invalid environment variable name")
+            if any(char in str(value) for char in ("\x00", "\n", "\r")):
+                raise ValueError("Invalid environment variable value")
+            safe_val = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
             env_lines.append(f'Environment="{safe_key}={safe_val}"')
 
         unit_lines = [
@@ -98,7 +99,6 @@ class SystemdRuntimeBackend:
             "Type=simple",
             f"WorkingDirectory={escaped_workdir}",
             f"ExecStartPre={exec_start_pre}",
-            f"EnvironmentFile={common_env_path}",
             *env_lines,
             f"ExecStart={exec_start}",
             f"StandardOutput=append:{escaped_log}",
@@ -113,13 +113,6 @@ class SystemdRuntimeBackend:
         unit_content = "\n".join(unit_lines)
         unit_path.write_text(unit_content, encoding="utf-8")
         return unit_path
-
-    def _ensure_common_runtime_env_file(self) -> Path:
-        env_path = self._runtime_dir / "runtime_common.env"
-        env_path.parent.mkdir(parents=True, exist_ok=True)
-        lines = [f"{k}={v}" for k, v in self.COMMON_RUNTIME_ENV.items()]
-        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return env_path
 
     def daemon_reload(self, scope: str) -> None:
         self._run_systemctl(scope, ["daemon-reload"], check=True)

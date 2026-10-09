@@ -206,6 +206,7 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 
 - `runtime_process_manager`: `auto` | `systemd` | `popen`
 - `runtime_systemd_scope`: `user` | `system`
+- `runtime_environment`: 所有 app 共用的额外环境变量字符串映射，默认 `{ROS_LOCALHOST_ONLY: "1"}`；允许显式清空为 `{}`
 - `avahi_hostname`: mDNS 主机名（默认自动生成 `robot-xxx`）
 
 ### systemd 模式（优先）
@@ -281,7 +282,7 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 | GET | `/aivuda_os/api/config/system/aivudaos-service` | 查询 AivudaOS 自身 user service 的安装/运行/自启动状态 |
 | POST | `/aivuda_os/api/config/system/aivudaos-service/autostart` | 设置 AivudaOS 自身自启动 `{ "enabled": true }` |
 | POST | `/aivuda_os/api/config/system/aivudaos-service/{action}` | 触发 `stop` / `restart` / `uninstall`，以脱离当前服务生命周期的后台脚本执行 |
-| GET | `/aivuda_os/api/config/system/apt-sources-list` | 读取 `/etc/apt/sources.list` |
+| GET | `/aivuda_os/api/config/system/apt-sources-list` | 自动检测并读取 Ubuntu 主源文件，返回 `path` 和 `format` |
 | GET | `/aivuda_os/api/config/system/apt-sources-list/backups` | 获取 APT 源时间戳备份列表 |
 | PUT | `/aivuda_os/api/config/system/apt-sources-list` | 写入 APT 源（写入前自动备份，并执行 `apt update`） |
 | POST | `/aivuda_os/api/config/system/apt-sources-list/restore` | 按备份版本恢复 APT 源，并执行 `apt update` |
@@ -410,3 +411,15 @@ second grace period and then SIGKILL if necessary. Identity checks use Linux
 PID start times. If cleanup fails, stop reports failure instead of recording a
 successful stop. A detached guardian also cleans owned Popen apps when the
 backend dies without running shutdown hooks. Autostart preferences are retained.
+
+### 全局 app 环境变量
+
+系统设置底部提供增删改表格，使用 `GET/PUT /api/config/os` 保存 `data.runtime_environment`。PUT 必须携带读取时的 `version`（冲突返回 409）。变量名必须匹配 `[A-Za-z_][A-Za-z0-9_]*` 且不能使用保留的 `AIVUDA_*`，值必须是无 NUL/换行的字符串。额外变量覆盖继承环境和默认日志变量，内部 app 路径变量保持由运行时管理。
+
+Popen 和 systemd 的 start、restart、自启动 unit 生成均应用同一配置。保存后自动刷新持久化 systemd unit 并 daemon-reload，已运行进程在 app 下一次重启时获得新环境。响应包含 `runtime_environment_refresh_errors`，用于报告配置已保存但部分 unit 刷新失败。不会修改 AivudaOS 自身或安装/卸载 hook 的环境。删除变量后，Popen 恢复其父进程的继承值。
+
+### Ubuntu APT 主源兼容
+
+存在 `/etc/apt/sources.list.d/ubuntu.sources` 时编辑该文件并返回 `format: deb822`；否则编辑 `/etc/apt/sources.list` 并返回 `format: list`。前者是 Ubuntu 24.04 起默认布局，后者仍适用于旧系统或保留旧布局的升级安装。UI 显示实际目标路径和对应格式说明；deb822 更换镜像需编辑 `URIs` 并保留 Suites、Components、Signed-By 等字段。其他第三方源文件不会改变。
+
+备份分别使用 `sources.list.<timestamp>.bak` 和 `ubuntu.sources.<timestamp>.bak`，列表仅包含当前目标的备份；旧 sources.list 备份 ID 仍受支持，跨源文件恢复返回 `BACKUP_TARGET_MISMATCH`。写入和恢复后照常执行 `apt update`。

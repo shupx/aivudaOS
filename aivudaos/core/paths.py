@@ -8,6 +8,7 @@ from typing import Dict
 import yaml
 
 from aivudaos.core.config.avahi import AvahiService
+from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT
 import aivudaos
 
 
@@ -78,6 +79,7 @@ APP_LOG_DIR = LOG_DIR / "apps"
 DEFAULT_OS_CONFIG: Dict[str, object] = {
     "runtime_process_manager": "auto",
     "runtime_systemd_scope": "user",
+    "runtime_environment": DEFAULT_RUNTIME_ENVIRONMENT,
 }
 
 DEFAULT_SYS_CONFIG: Dict[str, object] = {

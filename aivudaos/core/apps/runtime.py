@@ -318,7 +318,7 @@ class RuntimeService:
             manifest,
             install_path=install_path,
         )
-        runtime_env = {**self._runtime_log_env(), **config_env}
+        runtime_env = {**self._build_runtime_env(), **config_env}
         log_path = self._app_log_path(app_id)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -462,7 +462,7 @@ class RuntimeService:
                 command = self._build_exec_command(manifest, install_path)
                 command = self._decorate_command_for_realtime_logs(command)
                 runtime_env = {
-                    **self._runtime_log_env(),
+                    **self._build_runtime_env(),
                     **self._build_config_env(
                         app_id,
                         active_version,
@@ -523,7 +523,7 @@ class RuntimeService:
             if active_version is None:
                 raise AppNotInstalledError(f"{app_id} has no active version")
             runtime_env = {
-                **self._runtime_log_env(),
+                **self._build_runtime_env(),
                 **self._build_config_env(
                     app_id,
                     active_version,
@@ -976,8 +976,9 @@ class RuntimeService:
             ).fetchall()
         return [str(row["app_id"]) for row in rows]
 
-    def _reconcile_systemd_units(self, scope: str) -> None:
+    def _reconcile_systemd_units(self, scope: str) -> List[str]:
         """Refresh systemd unit files for installed apps to keep runtime wrappers/env in sync."""
+        errors: List[str] = []
         with db_conn() as conn:
             rows = conn.execute(
                 "SELECT app_id, autostart FROM app_runtime ORDER BY app_id"
@@ -993,7 +994,7 @@ class RuntimeService:
                 manifest = self._get_manifest(app_id)
                 command = self._build_exec_command(manifest, install_path)
                 command = self._decorate_command_for_realtime_logs(command)
-                runtime_env = self._runtime_log_env()
+                runtime_env = self._build_runtime_env()
                 active_version = self._versioning.active_version(app_id)
                 if active_version is None:
                     continue
@@ -1018,13 +1019,15 @@ class RuntimeService:
                     log_path=log_path,
                 )
                 self._systemd.set_enabled(app_id, scope, enabled)
-            except (AppNotInstalledError, OSError, subprocess.SubprocessError, ValueError):
+            except (AppNotInstalledError, OSError, subprocess.SubprocessError, ValueError) as exc:
+                errors.append("{}: {}".format(app_id, exc))
                 continue
 
         try:
             self._systemd.daemon_reload(scope)
-        except (OSError, subprocess.SubprocessError):
-            pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            errors.append("daemon-reload: {}".format(exc))
+        return errors
 
     def _write_systemd_unit(
         self,
@@ -1159,8 +1162,9 @@ class RuntimeService:
         except InvalidConfigError as exc:
             raise AppRuntimeError(str(exc)) from exc
 
-    @staticmethod
-    def _runtime_log_env() -> Dict[str, str]:
+    def _build_runtime_env(self) -> Dict[str, str]:
+        from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT, validate_runtime_environment
+
         return {
             "PYTHONUNBUFFERED": "1",
             "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
@@ -1168,7 +1172,17 @@ class RuntimeService:
             "CLICOLOR_FORCE": "1",
             "FORCE_COLOR": "1",
             "PY_COLORS": "1",
+            **validate_runtime_environment(
+                self._config.get_os_setting("runtime_environment", DEFAULT_RUNTIME_ENVIRONMENT)
+            ),
         }
+
+    def refresh_runtime_environment(self) -> List[str]:
+        """Refresh persisted units; running processes receive changes on restart."""
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            return self._reconcile_systemd_units(scope)
+        return []
 
     @staticmethod
     def _decorate_command_for_realtime_logs(command: List[str]) -> List[str]:

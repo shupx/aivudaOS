@@ -40,6 +40,8 @@ export function useSystemSettingsPage() {
   const osOriginalData = ref({})
   const osVersion = ref(0)
   const osCellErrors = ref({})
+  const environmentRows = ref([])
+  const environmentSaving = ref(false)
   
   // Modal state
   const showPasswordModal = ref(false)
@@ -51,7 +53,8 @@ export function useSystemSettingsPage() {
   const aptSourcesLoading = ref(false)
   const aptSourcesWriting = ref(false)
   const aptSourcesText = ref('')
-  const aptSourcesPath = ref('/etc/apt/sources.list')
+  const aptSourcesPath = ref('')
+  const aptSourcesFormat = ref('')
   const aptSudoPassword = ref('')
   const showAptSudoPassword = ref(false)
   const showAptPasswordModal = ref(false)
@@ -72,7 +75,9 @@ export function useSystemSettingsPage() {
     }))
   })
 
-  const osRows = computed(() => flattenDataLeaves(osDraftData.value || {}))
+  const osRows = computed(() => flattenDataLeaves(
+    Object.fromEntries(Object.entries(osDraftData.value || {}).filter(([key]) => key !== 'runtime_environment'))
+  ))
 
   async function load() {
     loading.value = true
@@ -92,12 +97,57 @@ export function useSystemSettingsPage() {
       serviceAutostartEnabled.value = Boolean(serviceData?.autostart_enabled)
       osDraftData.value = deepClone(osData?.data || {})
       osOriginalData.value = deepClone(osData?.data || {})
+      environmentRows.value = Object.entries(osData?.data?.runtime_environment ?? { ROS_LOCALHOST_ONLY: '1' })
+        .map(([name, value]) => ({ name, value: String(value) }))
       osVersion.value = Number(osData?.version || 0)
       osCellErrors.value = {}
     } catch (err) {
       error.value = String(err?.message || err || t('systemSettings.loadFailed'))
     } finally {
       loading.value = false
+    }
+  }
+
+  function addEnvironmentRow() {
+    environmentRows.value.push({ name: '', value: '' })
+  }
+
+  function removeEnvironmentRow(index) {
+    environmentRows.value.splice(index, 1)
+  }
+
+  async function saveEnvironment() {
+    if (loading.value || saving.value || environmentSaving.value) return
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+    const names = new Set()
+    for (const row of environmentRows.value) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name) || row.name.startsWith('AIVUDA_') ||
+          names.has(row.name) || /[\0\r\n]/.test(row.value)) {
+        error.value = t('systemSettings.environmentInvalid')
+        return
+      }
+      names.add(row.name)
+    }
+    environmentSaving.value = true
+    saving.value = true
+    try {
+      const nextData = deepClone(osDraftData.value)
+      nextData.runtime_environment = Object.fromEntries(environmentRows.value.map(row => [row.name, row.value]))
+      const resp = await updateOsConfig(nextData, osVersion.value)
+      osDraftData.value = deepClone(nextData)
+      osOriginalData.value = deepClone(nextData)
+      osVersion.value = Number(resp?.version || osVersion.value)
+      success.value = t('systemSettings.environmentSaved')
+      if (resp?.runtime_environment_refresh_errors?.length) {
+        error.value = t('systemSettings.environmentRefreshFailed', { errors: resp.runtime_environment_refresh_errors.join('; ') })
+      }
+    } catch (err) {
+      error.value = String(err?.message || err || t('systemSettings.osSaveFailed'))
+    } finally {
+      saving.value = false
+      environmentSaving.value = false
     }
   }
 
@@ -312,7 +362,8 @@ export function useSystemSettingsPage() {
         fetchAptSourcesBackups(),
       ])
       aptSourcesText.value = String(sourcesResp?.content || '')
-      aptSourcesPath.value = String(sourcesResp?.path || '/etc/apt/sources.list')
+      aptSourcesPath.value = String(sourcesResp?.path || '')
+      aptSourcesFormat.value = String(sourcesResp?.format || '')
       aptBackups.value = Array.isArray(backupsResp?.items) ? backupsResp.items : []
       selectedAptBackupId.value = String(aptBackups.value?.[0]?.backup_id || '')
     } catch (err) {
@@ -378,7 +429,7 @@ export function useSystemSettingsPage() {
     if (aptSourcesWriting.value || aptSourcesLoading.value) return
     if (!selectedAptBackupId.value) return
 
-    const confirmed = window.confirm(t('systemSettings.aptRestoreConfirm'))
+    const confirmed = window.confirm(t('systemSettings.aptRestoreConfirm', { path: aptSourcesPath.value }))
     if (!confirmed) return
 
     aptSourcesWriting.value = true
@@ -435,6 +486,7 @@ export function useSystemSettingsPage() {
   }
 
   async function applyOsValue(row, nextValue) {
+    if (loading.value || saving.value) return
     if (isOsValueSelectionBlocked(row, nextValue)) {
       error.value = t('systemSettings.osOptionNotAllowed')
       return
@@ -467,6 +519,7 @@ export function useSystemSettingsPage() {
     success.value = ''
     successLinks.value = []
 
+    saving.value = true
     try {
       const resp = await updateOsConfig(deepClone(nextData), Number(osVersion.value || 0))
       osVersion.value = Number(resp?.version || osVersion.value || 0)
@@ -489,6 +542,8 @@ export function useSystemSettingsPage() {
       await load()
       error.value = message
       successLinks.value = []
+    } finally {
+      saving.value = false
     }
   }
 
@@ -526,6 +581,7 @@ export function useSystemSettingsPage() {
     aptSourcesWriting,
     aptSourcesText,
     aptSourcesPath,
+    aptSourcesFormat,
     aptSourceLines,
     aptSudoPassword,
     showAptSudoPassword,
@@ -544,6 +600,11 @@ export function useSystemSettingsPage() {
     requestWriteAptSources,
     requestRestoreAptSources,
     submitAptAction,
+    environmentRows,
+    environmentSaving,
+    addEnvironmentRow,
+    removeEnvironmentRow,
+    saveEnvironment,
     osRows,
     getOsCellValue,
     getOsCellError,

@@ -39,6 +39,7 @@ const {
   aptSourcesWriting,
   aptSourcesText,
   aptSourcesPath,
+  aptSourcesFormat,
   aptSourceLines,
   aptSudoPassword,
   showAptSudoPassword,
@@ -57,6 +58,11 @@ const {
   requestWriteAptSources,
   requestRestoreAptSources,
   submitAptAction,
+  environmentRows,
+  environmentSaving,
+  addEnvironmentRow,
+  removeEnvironmentRow,
+  saveEnvironment,
   osRows,
   getOsCellValue,
   getOsCellError,
@@ -259,6 +265,33 @@ const osTextDrafts = useDeferredFieldDrafts({
           </div>
         </NCard>
       </NGi>
+      <NGi>
+        <NCard :title="t('systemSettings.environmentTitle')">
+          <NText depth="3">{{ t('systemSettings.environmentHint') }}</NText>
+          <div class="table-wrap" style="margin: 16px 0;">
+            <table class="config-table compact" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>{{ t('systemSettings.environmentName') }}</th>
+                  <th>{{ t('systemSettings.environmentValue') }}</th>
+                  <th>{{ t('systemSettings.environmentActions') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, index) in environmentRows" :key="index">
+                  <td><NInput v-model:value="row.name" :disabled="loading || saving" :placeholder="t('systemSettings.environmentName')" /></td>
+                  <td><NInput v-model:value="row.value" :disabled="loading || saving" :placeholder="t('systemSettings.environmentValue')" /></td>
+                  <td><NButton :disabled="loading || saving" type="error" size="small" @click="removeEnvironmentRow(index)">{{ t('systemSettings.environmentDelete') }}</NButton></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <NSpace>
+            <NButton :disabled="loading || saving" @click="addEnvironmentRow">{{ t('systemSettings.environmentAdd') }}</NButton>
+            <NButton type="primary" :loading="environmentSaving" :disabled="loading || saving" @click="saveEnvironment">{{ t('systemSettings.environmentSave') }}</NButton>
+          </NSpace>
+        </NCard>
+      </NGi>
     </NGrid>
 
     <NModal v-model:show="showPasswordModal" preset="card" style="width: 400px;" :title="t('systemSettings.confirmPasswordTitle')" @after-leave="closePasswordModal">
@@ -295,6 +328,7 @@ const osTextDrafts = useDeferredFieldDrafts({
         </header>
 
         <p class="muted">{{ aptSourcesPath }}</p>
+        <NAlert type="info" style="margin-bottom: 16px;">{{ t(aptSourcesFormat === 'deb822' ? 'systemSettings.aptDeb822Hint' : 'systemSettings.aptListHint') }}</NAlert>
 
         <div class="panel-actions wrap">
           <NButton :loading="aptSourcesLoading" :disabled="aptSourcesWriting" @click="loadAptSources">

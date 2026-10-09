@@ -35,9 +35,22 @@ class AptSourcesService:
         *,
         sources_path: Optional[Path] = None,
         backup_dir: Optional[Path] = None,
+        apt_dir: Optional[Path] = None,
     ) -> None:
-        self._sources_path = sources_path or Path("/etc/apt/sources.list")
+        self._explicit_sources_path = sources_path
+        self._apt_dir = apt_dir or Path("/etc/apt")
         self._backup_dir = backup_dir or Path("/var/backups/aivudaos/apt-sources")
+
+    @property
+    def _sources_path(self) -> Path:
+        if self._explicit_sources_path is not None:
+            return self._explicit_sources_path
+        modern = self._apt_dir / "sources.list.d" / "ubuntu.sources"
+        return modern if modern.is_file() else self._apt_dir / "sources.list"
+
+    @property
+    def _backup_prefix(self) -> str:
+        return "ubuntu.sources" if self._sources_path.suffix == ".sources" else "sources.list"
 
     def read_sources(self) -> Dict[str, object]:
         content = self._read_text_with_privilege(self._sources_path)
@@ -46,6 +59,7 @@ class AptSourcesService:
         return {
             "ok": True,
             "path": str(self._sources_path),
+            "format": "deb822" if self._sources_path.suffix == ".sources" else "list",
             "content": content,
             "line_count": line_count,
             "comment_line_count": comment_count,
@@ -70,7 +84,7 @@ class AptSourcesService:
         if not self._backup_dir.exists():
             return []
 
-        names = [path.name for path in sorted(self._backup_dir.glob("sources.list.*.bak"), reverse=True) if path.is_file()]
+        names = [path.name for path in sorted(self._backup_dir.glob(self._backup_prefix + ".*.bak"), reverse=True) if path.is_file()]
         return self._build_backup_items_from_names(names)
 
     def write_sources(
@@ -146,7 +160,7 @@ class AptSourcesService:
     def _create_backup(self, *, sudo_password: Optional[str] = None) -> Path:
         self._ensure_backup_dir(sudo_password=sudo_password)
         backup_id = datetime.now(self._TZ_SHANGHAI).strftime("%Y%m%dT%H%M%S%f%z")
-        backup_path = self._backup_dir / f"sources.list.{backup_id}.bak"
+        backup_path = self._backup_dir / f"{self._backup_prefix}.{backup_id}.bak"
 
         content = self._read_text_with_privilege(self._sources_path, sudo_password=sudo_password)
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
@@ -287,7 +301,15 @@ class AptSourcesService:
             raise AptSourcesError("WRITE_FAILED", message or "Failed to update apt sources") from exc
 
     def _resolve_backup_path(self, backup_id: str) -> Path:
-        candidate = self._backup_dir / f"sources.list.{backup_id}.bak"
+        modern_prefix = "ubuntu.sources."
+        is_modern = backup_id.startswith(modern_prefix)
+        timestamp = backup_id[len(modern_prefix):] if is_modern else backup_id
+        if not re.fullmatch(r"\d{8}T\d{12}(?:Z|[+-]\d{4})", timestamp):
+            raise AptSourcesError("BACKUP_NOT_FOUND", "Invalid backup id")
+        prefix = "ubuntu.sources" if is_modern else "sources.list"
+        if prefix != self._backup_prefix:
+            raise AptSourcesError("BACKUP_TARGET_MISMATCH", "Backup belongs to a different APT sources file")
+        candidate = self._backup_dir / f"{prefix}.{timestamp}.bak"
         if not candidate.exists() or not candidate.is_file():
             raise AptSourcesError("BACKUP_NOT_FOUND", f"Backup not found: {backup_id}")
         return candidate
@@ -309,12 +331,16 @@ class AptSourcesService:
         if not path:
             return ""
         name = path.name
-        if not name.startswith("sources.list.") or not name.endswith(".bak"):
+        if not name.startswith(self._backup_prefix + ".") or not name.endswith(".bak"):
             return ""
+        if self._backup_prefix == "ubuntu.sources":
+            return name[:-len(".bak")]
         return name[len("sources.list."):-len(".bak")]
 
     def _iso_from_backup_id(self, backup_id: str) -> str:
         value = str(backup_id or "").strip()
+        if value.startswith("ubuntu.sources."):
+            value = value[len("ubuntu.sources."):]
         if not value:
             return ""
         try:
