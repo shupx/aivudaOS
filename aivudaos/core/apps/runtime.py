@@ -573,7 +573,6 @@ class RuntimeService:
         except AppNotInstalledError as exc:
             raise NotFoundError(str(exc)) from exc
 
-        self._ensure_version_config_ready(app_id, version, manifest)
         try:
             self._caddy.validate_candidate(
                 app_id,
@@ -583,11 +582,24 @@ class RuntimeService:
         except InvalidConfigError as exc:
             raise AppRuntimeError(f"switch_version validation failed: {exc}") from exc
 
+        source_data = {}
+        if current_active:
+            source_config = self._config.get_app_config(app_id, current_active)
+            source_data = source_config.data if source_config.version > 0 else self._config.get_app_default_config(
+                app_id, current_active, fallback=self._get_manifest(app_id, current_active).default_config,
+            )
+        migration = self._config.migrate_app_config(
+            app_id, version, source_data,
+            self._config.get_app_default_config(app_id, version, fallback=manifest.default_config),
+            manifest.config_schema,
+        )
+
         if runtime_state.running and restart:
             self.stop(app_id)
 
         self._versioning.activate_version(app_id, version)
-        self._magnet.recompute(updated_by="system")
+        if migration["config_valid"]:
+            self._magnet.recompute(updated_by="system")
         try:
             self._caddy.sync_and_reload()
         except InvalidConfigError as exc:
@@ -600,7 +612,7 @@ class RuntimeService:
                     pass
             raise AppRuntimeError(f"switch_version failed while reloading caddy: {exc}") from exc
 
-        if runtime_state.running and restart:
+        if runtime_state.running and restart and migration["config_valid"]:
             self.start(app_id)
 
         return {
@@ -608,6 +620,7 @@ class RuntimeService:
             "app_id": app_id,
             "previous_version": current_active,
             "active_version": version,
+            **migration,
         }
 
     def update_this_version(

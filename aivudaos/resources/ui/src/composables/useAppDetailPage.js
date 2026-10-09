@@ -1,3 +1,4 @@
+import { formatConfigMigrationWarnings } from '../services/core/configMigration'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -43,6 +44,7 @@ export function useAppDetailPage() {
   const actionBusy = ref(false)
   const actionError = ref('')
   const actionMessage = ref('')
+  const actionWarning = ref('')
   const actionLiveStatus = ref('')
   const actionLiveStatusDone = ref(false)
   const actionLiveOutput = ref('')
@@ -105,6 +107,7 @@ export function useAppDetailPage() {
   function clearActionStatus() {
     actionError.value = ''
     actionMessage.value = ''
+    actionWarning.value = ''
     actionLiveStatus.value = ''
     actionLiveStatusDone.value = false
     actionLiveOutput.value = ''
@@ -334,7 +337,8 @@ export function useAppDetailPage() {
     actionBusy.value = true
     clearActionStatus()
     try {
-      await switchAppVersion(app.value.app_id, selectedVersion.value, switchWithRestart.value)
+      const result = await switchAppVersion(app.value.app_id, selectedVersion.value, switchWithRestart.value)
+      actionWarning.value = formatConfigMigrationWarnings(result, t)
       await refresh()
       await loadVersions(app.value.app_id)
       clearAndReloadLogs()
@@ -545,6 +549,7 @@ export function useAppDetailPage() {
     actionBusy,
     actionError,
     actionMessage,
+    actionWarning,
     actionLiveStatus,
     actionLiveStatusDone,
     actionLiveOutput,

@@ -124,6 +124,19 @@ class MagnetService:
 
             previous = previous_groups.get(path)
             value = self._pick_value(entries, previous)
+            # A version may narrow a constraint without changing the field type.
+            # Keep migrated values when the previous shared value is no longer
+            # valid, rather than failing activation or partially applying a group.
+            try:
+                for entry in entries:
+                    validate_config_data(value, entry.get("schema"))
+            except InvalidConfigError as exc:
+                conflicts.append({
+                    "path": path,
+                    "reason": str(exc),
+                    "bindings": [_binding_of(item) for item in entries],
+                })
+                continue
             value_type = _infer_type_name(value)
             bindings = [_binding_of(item) for item in entries]
             group_id = _stable_group_id(path)

@@ -27,6 +27,7 @@ const {
   actionBusy,
   actionError,
   actionMessage,
+  actionWarning,
   actionLiveStatus,
   actionLiveStatusDone,
   actionLiveOutput,
@@ -131,6 +132,7 @@ const {
 
     <NCard v-if="app" :title="t('appDetail.actionsTitle')" style="margin-bottom: 24px;">
       <NAlert v-if="actionError" type="error" style="margin-bottom: 16px;">{{ actionError }}</NAlert>
+      <NAlert v-if="actionWarning" type="warning" style="margin-bottom: 16px; white-space: pre-wrap;">{{ actionWarning }}</NAlert>
       <NAlert v-if="actionMessage" type="success" style="margin-bottom: 16px;">{{ actionMessage }}</NAlert>
       <NAlert v-if="actionLiveStatus" :type="actionLiveStatusDone ? 'success' : 'info'" style="margin-bottom: 16px;">
         {{ t('appDetail.statusPrefix', { status: actionLiveStatus }) }}

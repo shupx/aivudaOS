@@ -359,6 +359,43 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 - `uninstall` 可删除单个版本或整个 App（`purge=true` 同时删除配置）
 - 卸载版本或整应用时，会同步删除 `${AIVUDAOS_WS_ROOT}/data/runtime/{app_id}/{version}`（或整个 `{app_id}`）目录
 
+## 参数尽量迁移
+
+文件布局不变：每个版本分别保存自己的 `{version}.yaml`、`{version}_default.yaml` 和 schema。
+升级及切换（包括切回旧版本）均从操作前 active 版本迁移参数；覆盖安装使用被覆盖版本
+原有参数，不使用其他 active 版本的参数。目标版本已有参数也会参与合并，不恢复其整套旧配置。
+
+字段选择优先级：来源合法值 → 目标已有合法值 → 目标默认值。对象递归合并；数组整体选择。
+`false`、`0`、空字符串、允许的 `null` 和空数组不会被当成未配置。
+新增字段使用目标已有值或默认值；动态键只在目标 schema 明确禁止额外字段时省略。
+类型、枚举、范围、字符串及数组约束不兼容时不猜测转换，逐字段回退，并保留其他合法字段。
+
+安装和切换返回：
+
+```json
+{
+  "config_valid": true,
+  "config_migration_warnings": [
+    {
+      "path": "$.network.port",
+      "source": "source",
+      "reason": "$ must be <= 100",
+      "action": "used_default"
+    }
+  ]
+}
+```
+
+`source` 为 `source`、`target`、`default` 或 `result`；action 常见值为
+`used_target`、`used_default`、`skipped`、`requires_configuration`。
+warning 不导致迁移、安装或切换失败。缺少无合法来源/默认值的必填字段时，保留其他合法参数，
+返回 `config_valid=false`，完成版本激活但不自动启动新版本；需补充配置后手动启动。
+新安装包的 schema/default 仍需通过原有包校验，磁吸绑定的旧共享值若违反新约束则记为冲突，
+不会覆盖合法迁移值或中断版本激活。
+
+UI 在上传/覆盖安装完成及切换版本后显示 warning；安装事件流也记录字段与处理结果。
+目标参数原子写入并保留配置乐观锁，来源版本参数保持不变；无变化时不增加配置修订号。
+
 ## 升级流程
 
 `POST /aivuda_os/api/apps/{app_id}/upgrade` 上传新版本包：

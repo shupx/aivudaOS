@@ -8,6 +8,7 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   busy: { type: Boolean, default: false },
   error: { type: String, default: '' },
+  warning: { type: String, default: '' },
   status: { type: String, default: '' },
   statusDone: { type: Boolean, default: false },
   output: { type: String, default: '' },
@@ -64,6 +65,7 @@ const {
       aria-modal="true"
     >
       <div class="upload-install-modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        <NAlert v-if="warning" type="warning" style="white-space: pre-wrap;">{{ warning }}</NAlert>
         <NText v-if="hint" depth="3">{{ hint }}</NText>
 
         <div v-if="showFilePicker && !fileName" style="display: flex; flex-direction: column; gap: 8px;">

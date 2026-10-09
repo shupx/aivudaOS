@@ -264,6 +264,7 @@ const {
   uploadError,
   uploadStatus,
   uploadStatusDone,
+  uploadWarning,
   uploadOutput,
   uploadFileName,
   uploadHint,
@@ -1041,6 +1042,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       :error="uploadError"
       :status="uploadStatus"
       :status-done="uploadStatusDone"
+      :warning="uploadWarning"
       :output="uploadOutput"
       :file-name="uploadFileName"
       :hint="uploadHint"

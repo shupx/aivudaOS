@@ -49,6 +49,15 @@ export default {
     lastSync: 'Last Sync',
   },
   apps: {
+    migrationWarning: 'Some parameters could not be carried over. Review the changes below.',
+    migrationAction: {
+      used_target: 'Used the target version’s existing value',
+      used_default: 'Used the target version’s default value',
+      used_source: 'Preserved the source value',
+      fallback: 'Used a compatible target value or default; otherwise omitted',
+      skipped: 'Omitted from the target configuration',
+      requires_configuration: 'Complete the configuration before starting the app',
+    },
     title: 'Apps',
     restartAutostart: 'Restart Autostart Apps',
     startAutostart: 'Start All Autostart Apps',

@@ -27,6 +27,7 @@ const {
   uploadError,
   uploadStatus,
   uploadStatusDone,
+  uploadWarning,
   uploadOutput,
   uploadFileName,
   uploadHint,
@@ -122,6 +123,7 @@ const {
       :error="uploadError"
       :status="uploadStatus"
       :status-done="uploadStatusDone"
+      :warning="uploadWarning"
       :output="uploadOutput"
       :file-name="uploadFileName"
       :hint="uploadHint"

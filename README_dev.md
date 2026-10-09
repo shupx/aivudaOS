@@ -336,3 +336,30 @@ runtime_environment:
 保存后自动刷新 app systemd unit 并 daemon-reload；不会自动重启运行中的 app，它们在下一次启动/重启时获得新值。API 返回 `runtime_environment_refresh_errors`，若部分 unit 刷新失败，UI 会说明配置已保存并显示失败原因。Popen 删除额外变量后恢复继承 AivudaOS 进程环境；该功能不修改 AivudaOS 自身或 app 安装/卸载脚本的环境。
 
 验证：`../.venv/bin/python -m unittest discover -s tests -v`；UI 在 `aivudaos/resources/ui` 执行 `npm run build`。
+
+## App 参数跨版本迁移
+
+配置目录继续按 App 和版本隔离。安装新版本及切换版本（包含降级）时，以操作前
+active 版本参数为来源；覆盖安装时，以被覆盖版本参数为来源。统一通过
+`ConfigService.migrate_app_config` 调用 `core/config/app_migration.py`：递归合并对象，
+按来源合法值、目标已有合法值、目标默认值的顺序选择；数组整体选择，不进行猜测类型转换。
+仅明确禁止的额外字段会被省略，允许的动态键继续保留。来源配置不被重写。
+
+迁移失败的字段返回 `config_migration_warnings`（path/source/reason/action），操作仍成功。
+缺少无可用值的必填字段时返回 `config_valid=false`，跳过磁吸重算和自动启动；手动启动仍执行
+原有完整校验。schema/default 本身无效的安装包仍按原有包校验拒绝。
+磁吸重算会把不满足新字段约束的旧共享值记为冲突，保留迁移结果。
+
+UI 上传/覆盖安装弹窗及版本切换页展示中英文 warning，说明字段和回退方式。
+安装 SSE 也输出 warning；完成结果保留同一列表，轮询回退不会丢失提示。
+
+验证：
+
+```bash
+python3 -m unittest discover -s tests -v
+node --test tests/test_config_migration_ui.mjs
+cd aivudaos/resources/ui
+npm run build
+```
+
+详见 [App 管理](docs/app-management.md)。

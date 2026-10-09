@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from aivudaos.core.config.app_migration import migrate_app_parameters
 from aivudaos.core.config.avahi import AvahiService
 from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
 from aivudaos.core.config.filelock import atomic_write_text, get_lock
@@ -160,6 +161,23 @@ class ConfigService:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
         self._write_versioned(path, default_data, expected_version=0, updated_by="system")
+
+    def migrate_app_config(
+        self, app_id: str, app_version: str, source_data: Dict[str, Any],
+        default_data: Dict[str, Any], schema: Dict[str, Any],
+        *, overwrite_default: bool = False,
+    ) -> Dict[str, Any]:
+        """Preserve compatible source values, then target values, then defaults."""
+        current = self.get_app_config(app_id, app_version)
+        data, warnings, valid = migrate_app_parameters(
+            source_data, current.data, default_data, schema,
+        )
+        self._write_default_app_config(
+            app_id, app_version, default_data, overwrite=overwrite_default,
+        )
+        if current.version == 0 or data != current.data:
+            self.update_app_config(app_id, app_version, data, current.version)
+        return {"config_migration_warnings": warnings, "config_valid": valid}
 
     def delete_app_config(self, app_id: str, app_version: Optional[str] = None) -> None:
         if app_version is None:

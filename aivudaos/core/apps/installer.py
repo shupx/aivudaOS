@@ -125,6 +125,12 @@ class InstallerService:
                 raise PackageFormatError(
                     f"App version already installed: {app_id}@{version}"
                 )
+            # Capture before overwrite hooks or activation change the source.
+            source_version = version if version in existing_versions else self._versioning.active_version(app_id)
+            source_data = {}
+            if source_version:
+                source_config = self._config.get_app_config(app_id, source_version)
+                source_data = source_config.data if source_config.version > 0 else self._config.get_app_default_config(app_id, source_version)
             emit(
                 "status",
                 phase="manifest",
@@ -212,18 +218,20 @@ class InstallerService:
                 self._record_installation(app_id, version, install_path, manifest)
                 emit("status", phase="db", status="running", message="写入数据库", app_id=app_id)
 
-                # Initialize per-app config
-                self._config.init_app_config(
-                    app_id,
-                    version,
-                    manifest.default_config,
-                    overwrite_default=True,
+                migration = self._config.migrate_app_config(
+                    app_id, version, source_data, manifest.default_config,
+                    manifest.config_schema, overwrite_default=True,
                 )
+                for warning in migration["config_migration_warnings"]:
+                    emit("status", phase="config_migration", status="warning",
+                         message="%s: %s (%s)" % (warning["path"], warning["reason"], warning["action"]),
+                         app_id=app_id, warning=warning)
                 ensure_not_canceled()
 
                 # Activate this version
                 self._versioning.activate_version(app_id, version)
-                self._magnet.recompute(updated_by="system")
+                if migration["config_valid"]:
+                    self._magnet.recompute(updated_by="system")
                 try:
                     self._caddy.sync_and_reload()
                 except InvalidConfigError as exc:
@@ -241,6 +249,7 @@ class InstallerService:
             "name": manifest.name,
             "version": version,
             "install_path": str(install_path),
+            **migration,
         }
 
     # ------------------------------------------------------------------ #

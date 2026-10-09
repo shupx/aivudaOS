@@ -49,6 +49,15 @@ export default {
     lastSync: '最近同步',
   },
   apps: {
+    migrationWarning: '部分参数未能沿用，请查看以下处理结果。',
+    migrationAction: {
+      used_target: '已采用目标版本已有参数值',
+      used_default: '已采用目标版本默认值',
+      used_source: '已保留来源参数值',
+      fallback: '采用目标版本合法值或默认值；无可用值时省略',
+      skipped: '已从目标配置中省略',
+      requires_configuration: '请补充配置后再启动应用',
+    },
     title: '应用菜单',
     restartAutostart: '重启自启动应用',
     startAutostart: '启动所有自启动应用',

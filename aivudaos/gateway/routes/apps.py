@@ -532,12 +532,16 @@ async def upgrade_app(
         raise HTTPException(status_code=500, detail=f"升级失败: {e}")
 
     # If was running, restart with new version
-    if was_running:
+    if was_running and result.get("config_valid", True):
         try:
             runtime.restart(result["app_id"])
             result["restarted"] = True
         except Exception:
             result["restarted"] = False
+
+    if was_running and not result.get("config_valid", True):
+        runtime.stop(result["app_id"])
+        result["restarted"] = False
 
     result["upgraded"] = True
     return result

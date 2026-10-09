@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { formatConfigMigrationWarnings } from '../services/core/configMigration'
 import { useI18n } from 'vue-i18n'
 import {
   cancelAppOperation,
@@ -14,6 +15,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
   const showUploadModal = ref(false)
   const uploadBusy = ref(false)
   const uploadError = ref('')
+  const uploadWarning = ref('')
   const uploadStatus = ref('')
   const uploadStatusDone = ref(false)
   const uploadOutput = ref('')
@@ -34,6 +36,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
 
   function openUploadModal({ hint = '', showFilePicker = true } = {}) {
     uploadError.value = ''
+    uploadWarning.value = ''
     uploadStatusDone.value = false
     uploadHint.value = String(hint || '')
     uploadShowFilePicker.value = Boolean(showFilePicker)
@@ -44,6 +47,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     if (uploadBusy.value) return
     showUploadModal.value = false
     uploadError.value = ''
+    uploadWarning.value = ''
     uploadStatus.value = ''
     uploadStatusDone.value = false
     uploadOutput.value = ''
@@ -242,6 +246,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     if (!uploadFile.value || uploadBusy.value) return
     uploadBusy.value = true
     uploadError.value = ''
+    uploadWarning.value = ''
     uploadStatus.value = t('apps.taskQueued')
     uploadStatusDone.value = false
     uploadOutput.value = ''
@@ -249,7 +254,8 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
       const operation = await uploadAppPackage(uploadFile.value, { overwrite: false })
       currentOperationId.value = String(operation?.operation_id || '')
       uploadInteractiveReady.value = false
-      await waitForOperation(operation.operation_id)
+      const result = await waitForOperation(operation.operation_id)
+      uploadWarning.value = formatConfigMigrationWarnings(result, t)
       if (onInstalled) {
         await onInstalled(operation)
       }
@@ -284,7 +290,8 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
         const overwriteOperation = await uploadAppPackage(uploadFile.value, { overwrite: true })
         currentOperationId.value = String(overwriteOperation?.operation_id || '')
         uploadInteractiveReady.value = false
-        await waitForOperation(overwriteOperation.operation_id)
+        const result = await waitForOperation(overwriteOperation.operation_id)
+        uploadWarning.value = formatConfigMigrationWarnings(result, t)
         if (onInstalled) {
           await onInstalled(overwriteOperation)
         }
@@ -305,6 +312,7 @@ export function useAppUploadInstallModal({ onInstalled } = {}) {
     showUploadModal,
     uploadBusy,
     uploadError,
+    uploadWarning,
     uploadStatus,
     uploadStatusDone,
     uploadOutput,
