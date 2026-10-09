@@ -3,7 +3,7 @@
 本方案用于 `aivudaOS`：
 
 - Caddy 托管前端静态文件（`aivudaos/resources/ui/dist`）
-- Caddy 反向代理后端 API（`127.0.0.1:8000`）
+- Caddy 反向代理后端 API 和内置 MCP（`127.0.0.1:8000`）
 - 对外暴露 HTTP `80` 与 HTTPS `443`
 
 > 本项目用caddy而不是nginx，是因为caddy配置https tls证书和websocket反代更简单，caddyfile比nginx config好写
@@ -118,7 +118,9 @@ journalctl --user -u aivudaos.service -f
 
 ## 5. 路由行为
 
-- `/aivuda_os/api/*` -> 反代到 `127.0.0.1:8000`
+- `/aivuda_os/api/*` 和 `/aivuda_os/mcp` -> 反代到 `127.0.0.1:8000`
+- MCP 随主后端启动，HTTP/HTTPS 均使用相同路由，无需额外端口；见 [mcp.md](mcp.md)
+- 旧标准 `@api path /aivuda_os/api*` matcher 启动时自动补充 MCP 路径，自定义 matcher 需手工加入
 - 其他路径 -> 前端静态资源，SPA 回退到 `/index.html`
 
 说明：

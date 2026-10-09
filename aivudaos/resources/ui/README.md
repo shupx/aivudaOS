@@ -35,6 +35,10 @@ npm run dev
 
 开发环境后端地址由 `vite.config.js` 的 `/aivuda_os/api` 代理决定（当前指向 `http://127.0.0.1:8000`）。
 
+后端同时内置 `/aivuda_os/mcp`，生产 Caddy 的 HTTP/HTTPS 入口会将该路径代理到
+同一后端，不会回退为 UI 静态页面。MCP 客户端使用后端或 Caddy 入口，见
+[MCP 使用说明](../../../../docs/mcp.md)；浏览器 UI 登录不会自动认证 MCP 请求。
+
 ## 打包
 
 ```bash

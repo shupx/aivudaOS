@@ -35,13 +35,19 @@ class CaddyRuntimeService:
         self._ensure_caddyfile_exists()
 
         text = self._caddyfile_path.read_text(encoding="utf-8")
+        # Migrate the shipped API-only matcher without replacing custom sites,
+        # application imports, backend ports or TLS configuration.
+        routed = re.sub(
+            r"(?m)^(\s*@api\s+path\s+/aivuda_os/api\*)[ \t]*$",
+            r"\1 /aivuda_os/mcp", text,
+        )
         
         def _replace(match: re.Match[str]) -> str:
             indent = match.group("indent") or ""
             port = match.group("port") or ""
             return f"{indent}https://{normalized}.local{port} {{"
 
-        updated, count = self._https_site_re.subn(_replace, text, count=1)
+        updated, count = self._https_site_re.subn(_replace, routed, count=1)
 
         if count == 0:
             if not updated.endswith("\n"):

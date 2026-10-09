@@ -108,6 +108,9 @@ aivudaos get-avahi-hostname --debug
 
 > Each robot has a randomly generated and unique avahi_hostname on install, which can also be changed in the system setting of the aivudaOS panel.
 
+MCP is built into the backend at `/aivuda_os/mcp`, sharing the HTTP/HTTPS web entry.
+No separate MCP command or port is needed. See [MCP usage and authentication](docs/mcp.md).
+
 After installation, you can use the unified CLI:
 
 ```bash

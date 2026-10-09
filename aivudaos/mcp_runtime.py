@@ -332,6 +332,8 @@ class OpenAPIServer:
                                    content_type=content_type or "application/json", stream=options)
 
     def websocket_input(self, path, arguments):
+        if hasattr(self.client, "websocket_input"):
+            return self.client.websocket_input(path, arguments)
         from websocket import create_connection, WebSocketBadStatusException
 
         token = arguments["token"] if "token" in arguments else self.client.ensure_token()
@@ -392,25 +394,32 @@ class OpenAPIServer:
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def create_http_app(server, access_token="", allowed_hosts=("127.0.0.1", "localhost", "::1"), allowed_origins=()):
+def create_http_app(server, access_token="", allowed_hosts=("127.0.0.1", "localhost", "::1"), allowed_origins=(),
+                    server_factory=None, include_health=True):
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 
-    @app.get("/health")
     async def health():
         return {"status": "ok", "transport": "streamable-http", "server": server.name}
 
-    @app.api_route("/mcp", methods=["POST", "GET", "DELETE"])
+    if include_health:
+        app.add_api_route("/health", health, methods=["GET"])
+
+    @app.api_route("/mcp", methods=["POST", "GET", "DELETE"], include_in_schema=False)
     async def mcp(request: HTTPRequest):
         try:
             hostname = urlsplit("//" + request.headers.get("host", "")).hostname
         except ValueError:
             return Response(status_code=403)
-        if hostname not in allowed_hosts:
+        if not hostname or (allowed_hosts is not None and hostname not in allowed_hosts):
             return Response(status_code=403)
         origin = request.headers.get("origin")
-        if origin and origin not in allowed_origins and origin != str(request.base_url).rstrip("/"):
+        if origin and origin not in allowed_origins and origin != "{0}://{1}".format(request.url.scheme, request.url.netloc):
             return Response(status_code=403)
         if access_token and not secrets.compare_digest(request.headers.get("authorization", "").encode("utf-8"), ("Bearer " + access_token).encode("utf-8")):
+            return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
+        try:
+            request_server = server_factory(request) if server_factory else server
+        except ValueError:
             return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
         if request.headers.get("mcp-session-id"):
             return Response(status_code=404)
@@ -427,7 +436,7 @@ def create_http_app(server, access_token="", allowed_hosts=("127.0.0.1", "localh
         raw = bytearray()
         async for chunk in request.stream():
             raw.extend(chunk)
-            if len(raw) > server.client.max_bytes:
+            if len(raw) > request_server.client.max_bytes:
                 return Response(status_code=413)
         try:
             message = json.loads(raw)
@@ -435,14 +444,14 @@ def create_http_app(server, access_token="", allowed_hosts=("127.0.0.1", "localh
             return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}, status_code=400)
         if isinstance(message, list) and message and version != "2025-06-18":
             def handle_batch():
-                responses = [server.handle(item) for item in message]
+                responses = [request_server.handle(item) for item in message]
                 return [item for item in responses if item is not None]
 
             responses = await run_in_threadpool(handle_batch)
             return JSONResponse(responses) if responses else Response(status_code=202)
         if not isinstance(message, dict):
             return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}}, status_code=400)
-        response = await run_in_threadpool(server.handle, message)
+        response = await run_in_threadpool(request_server.handle, message)
         if response is None:
             return Response(status_code=202)
         return JSONResponse(response)

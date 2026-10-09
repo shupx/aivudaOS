@@ -1,5 +1,5 @@
 (aivudaos_common_route) {
-  @api path /aivuda_os/api*
+  @api path /aivuda_os/api* /aivuda_os/mcp
 
   route {
     handle @api {

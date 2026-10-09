@@ -30,6 +30,9 @@ def create_app() -> FastAPI:
     app.include_router(config.router, prefix=API_PREFIX)
     app.include_router(apps.router, prefix=API_PREFIX)
 
+    from aivudaos.mcp_server import install_mcp
+    install_mcp(app)
+
     @app.on_event("startup")
     async def startup() -> None:
         ensure_dirs()

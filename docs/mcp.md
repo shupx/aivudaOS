@@ -1,12 +1,25 @@
-# Streamable HTTP MCP
+# 内置 Streamable HTTP MCP
 
-完成 `aivudaos install` 后，直接运行 `aivudaos-mcp` 或
-`python3 -m aivudaos.mcp_server` 启动 MCP；默认通过 Caddy 入口
-`http://127.0.0.1/aivuda_os` 调用 API，客户端连接 `http://127.0.0.1:28794/mcp`。
+MCP 是 AivudaOS FastAPI 后端的一部分，随主服务启动、关闭，无需单独命令、
+监听端口或代理站点。统一路径为 `/aivuda_os/mcp`：
+
+- standalone 本机：`http://127.0.0.1/aivuda_os/mcp`
+- standalone 远端：`https://<avahi_hostname>.local/aivuda_os/mcp`
+- ACEswarm：`http://127.0.0.1:28790/aivuda_os/mcp`（随 `ACESWARM_GATEWAY_PORT`）
+
+HTTP 和 HTTPS 站点共用 Caddy 路由，均转发到同一个后端。内部通过 ASGI
+请求同一 FastAPI 应用的 `/aivuda_os/api/...`，保留路由、middleware、参数校验、
+认证和业务权限检查；不访问客户端提供的 Host，不回连 Caddy，也不需要信任
+自己的 HTTPS 证书。远端客户端仍需信任 Caddy 的本地 CA。
+
+原 `aivudaos-mcp` 命令和 `python -m aivudaos.mcp_server` 启动方式已移除，
+客户端应将旧 `:28794/mcp` 地址改为上述入口。主服务启动时会为旧包内
+`@api path /aivuda_os/api*` matcher 补充 MCP 路径；自定义 matcher 需自行加入
+`/aivuda_os/mcp`。ACEswarm 重新生成网关配置时也会加入该路径。
 
 ## 传输与调用约定
 
-客户端连接 `http://127.0.0.1:28794/mcp`。这是无会话 Streamable HTTP：
+客户端连接 `/aivuda_os/mcp`。这是无会话 Streamable HTTP：
 POST 可返回 JSON；通知返回 202；GET 和 DELETE 返回 405；不分配
 `Mcp-Session-Id`。支持协议版本 2025-06-18、2025-03-26 和 2024-11-05。
 HTTP POST 的 Accept 必须包含 `application/json, text/event-stream`，
@@ -17,33 +30,42 @@ Content-Type 为 `application/json`。不需要单独的 SSE 连接。
 路径、query、header、form 参数使用各自名称。使用 `tools/call` 调用。
 所有写操作仍通过后端认证及权限检查，不绕过业务服务。
 
-| 环境变量 | 用途 |
-|---|---|
-| `AIVUDAOS_MCP_BASE_URL` | Caddy API 入口，默认 `http://127.0.0.1/aivuda_os`，必须包含服务前缀 |
-| `AIVUDAOS_MCP_TOKEN` | 可选：显式后端 API token，覆盖自动登录 |
-| `AIVUDAOS_MCP_USERNAME` | 自动登录用户名，默认 admin |
-| `AIVUDAOS_MCP_PASSWORD` | 自动登录密码，默认 admin123 |
-| `AIVUDAOS_MCP_HOST` | MCP 监听地址，默认 127.0.0.1 |
-| `AIVUDAOS_MCP_PORT` | MCP 监听端口，默认 28794 |
-| `AIVUDAOS_MCP_ACCESS_TOKEN` | MCP 入站 Bearer token，与后端 token 独立 |
-| `AIVUDAOS_MCP_ALLOWED_HOSTS` | 可接受的 Host 主机名，逗号分隔 |
-| `AIVUDAOS_MCP_ALLOWED_ORIGINS` | 额外允许的 Origin，逗号分隔，默认仅同源 |
-| `AIVUDAOS_MCP_MAX_BYTES` | HTTP 请求、上传、后端响应和事件读取的字节上限，默认 64 MiB |
+## 认证与请求隔离
 
-绑定非回环地址必须设置 MCP_ACCESS_TOKEN。远程使用应通过 HTTPS 反向代理，
-并根据代理入口设置允许的 Host/Origin。未提供显式 API token 时，受保护调用自动使用默认账号 `admin / admin123` 登录，
-token 仅缓存在 MCP 进程内；失效后重新登录并重试一次。公开商店查询不触发登录。
-默认/配置账号登录返回 401 后才提示提供当前账号密码；网络或服务错误不会提示修改凭据。
-可通过 MCP_USERNAME/MCP_PASSWORD 配置当前账号，或用登录工具取 token 后逐次传入。
-显式 token 不会被自动登录替换。API token 可以逐次覆盖；登录返回值
-不会保存为整个 MCP 服务的默认账号。上游错误以 MCP `isError` 返回。
+agent 先直接调用工具，不必预先向用户索要 token 或账号密码。未显式提供
+API token 时，内置 MCP 自动使用 `admin / admin123` 登录，临时 token 缓存在
+主进程内，并发调用共用一次登录。受保护 API 返回 401 时，自动重新登录并
+重试一次；不会无限重试。
+
+只有默认/配置账号登录返回 401 时，才提示 agent 向用户获取当前用户名和密码：
+
+1. 调用 `login`，参数 `body: {"username": "...", "password": "..."}`。
+2. 从结果读取 `access_token`。
+3. 后续工具参数传 `token`，或为 MCP HTTP 请求设置
+   `Authorization: Bearer <access_token>`。显式工具 token 优先于请求头。
+
+网络/服务故障不会提示修改账号密码。显式 token 被拒绝时不会自动替换为默认
+账号；手动登录和请求头身份不会改变共享的自动登录账号。自动 token 只存在于
+MCP 进程内，客户端身份和 ASGI 传输仍按请求隔离；浏览器登录不认证 MCP。
+请求头 Authorization 格式错误返回 HTTP 401。
+
+`AIVUDAOS_MCP_USERNAME` / `AIVUDAOS_MCP_PASSWORD` 可覆盖自动登录账号；
+`AIVUDAOS_MCP_TOKEN` 可配置显式 API token，失效时不会自动替换。
+不再使用 `AIVUDAOS_MCP_HOST`、`PORT`、`BASE_URL`、`ACCESS_TOKEN`、
+`ALLOWED_HOSTS` 或 `ALLOWED_ORIGINS` 配置内置 MCP。
+入口跟随 Caddy 站点；有 Origin 的请求必须与当前入口完全同源，跨源请求返回
+403。生产部署应保持后端为回环监听，由可信 Caddy 处理入口及转发协议。
+
+`AIVUDAOS_MCP_MAX_BYTES` 仍控制 HTTP 请求、上传、响应和事件读取上限，默认
+64 MiB。MCP 不持有额外监听资源，内部请求结束、超时或失败后关闭 ASGI 请求；
+事件流按事件数和期限读取，交互 WebSocket 完成一次输入/回复后关闭。
 
 文件上传字段使用以下对象；表单中的 JSON 字符串（例如 manifest_json）
 仍按原 API 传入字符串：
 
 ```json
 {
-  "package_zip": {
+  "file": {
     "filename": "app.zip",
     "content_type": "application/zip",
     "content_base64": "UEsDB..."
@@ -58,15 +80,15 @@ token 仅缓存在 MCP 进程内；失效后重新登录并重试一次。公开
 
 目前提供 47 个工具，覆盖 46 个 HTTP 操作和 1 个 WebSocket 操作。
 `login` 接收 `body: {"username": "...", "password": "..."}`；之后传入 `token`，
-或预设 MCP_TOKEN。原有 `aivudaos_status`、`list_installed_apps`、`get_app_status`、
+或通过 MCP HTTP Bearer 请求头传递。原有 `aivudaos_status`、`list_installed_apps`、`get_app_status`、
 `get_config`、`queue_config_import` 名称保留。
 
 `queue_config_import` 的标准参数为 `body: {"document": {...}, "app_store_base_url": "..."}`；
 同时兼容原来顶层 document/app_store_base_url 的调用方式。
 `stream_operation_events` 接收 operation_id、token、max_events（1–1000，默认100）、
-timeout_seconds（1–60，默认20），返回 events 数组和 timed_out。每次调用从原 API
+timeout_seconds（1–60，默认20），返回 events 数组和 timed_out。每次调用通过内部 ASGI 从原 API
 重新读取事件，客户端按事件 seq 去重；返回的有限批次不表示操作已经完成。
-`operation_interactive_ws` 接收 operation_id、token、data，建立上游 WebSocket，
+`operation_interactive_ws` 接收 operation_id、token、data，建立内部 ASGI WebSocket，
 读取 ready、发送输入、读取 reply 后关闭连接；输出日志继续通过事件工具读取。
 
 ## 完整工具清单
@@ -93,5 +115,9 @@ timeout_seconds（1–60，默认20），返回 events 数组和 timed_out。每
 ## 验证
 
 ```bash
-PYTHONPATH=. python3 -m unittest discover -s tests -p test_mcp_server.py -v
+PYTHONPATH=. python3 -m unittest discover -s tests -p 'test_mcp*.py' -v
 ```
+
+`test_mcp_gateway.py` 在存在 ACEswarm 开发 Caddy 二进制时启动隔离后端及
+Caddy，使用包内模板验证 HTTP 和 HTTPS、CA 证书信任、同源 Origin、登录、
+Bearer 调用及退出端口释放；不安装 CA 到系统信任库。

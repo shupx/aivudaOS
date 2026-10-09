@@ -233,25 +233,28 @@ export AIVUDAOS_WS_ROOT=/path/to/private/aivudaos-workspace
 - 写入和恢复后会自动执行 `apt update`，输出会在前端弹窗里显示。
 - 前端会收集 sudo 密码并仅用于当前请求，不会持久化到浏览器存储。
 
-## 独立 MCP 服务
+## 内置 MCP
 
-AivudaOS 提供独立的 Streamable HTTP MCP 服务，默认地址为
-`http://127.0.0.1:28794/mcp`：
+MCP 在 FastAPI 主进程中提供 `/aivuda_os/mcp`，随 AivudaOS 服务一起启动。
+本机为 `http://127.0.0.1/aivuda_os/mcp`，远端为
+`https://<avahi_hostname>.local/aivuda_os/mcp`，HTTP/HTTPS 均复用现有 Caddy
+入口。ACEswarm 使用 `http://127.0.0.1:28790/aivuda_os/mcp`（端口可配置）。
+无需 `aivudaos-mcp` 命令、独立 MCP 端口或额外代理；旧客户端地址需要更新。
 
-```bash
-python3 -m aivudaos.mcp_server --host 127.0.0.1 --port 28794
-# 或安装后：aivudaos-mcp
-```
+根据业务 API 路由生成 46 个 HTTP 工具及 1 个交互 WebSocket 工具，保留原有
+5 个工具名。MCP 和静态 UI 不参与工具生成。内部传输通过 ASGI 调用同一应用
+的 API，保留认证、参数校验、middleware、异步任务、文件、SSE 和 WebSocket。
+同步 MCP 调度在工作线程中执行，API 请求在服务事件循环中运行，不回连 Caddy。
 
-根据后端路由生成全部工具，目前覆盖 46 个 HTTP 操作（含 HEAD）及 1 个
-交互 WebSocket 操作。原有 5 个工具名保留，新增工具名采用路由函数名。
-完成 `aivudaos install` 后可直接运行 `aivudaos-mcp` 或上述 Python 命令。
-`AIVUDAOS_MCP_BASE_URL` 默认 `http://127.0.0.1/aivuda_os`，通过 Caddy HTTP 入口调用 API。
-受保护工具默认用 `admin / admin123` 自动登录并缓存临时 token，失效后重登重试一次。
-默认登录失败才需提供当前账号密码；可设置 `AIVUDAOS_MCP_USERNAME`/`AIVUDAOS_MCP_PASSWORD`，
-或调用 `login` 后逐次传入 `token`。`AIVUDAOS_MCP_TOKEN` 是可选的显式覆盖。MCP 入站认证使用独立的
-`AIVUDAOS_MCP_ACCESS_TOKEN`，不会将其转发给后端。
-配置导入仍由 AivudaOS 校验并排队执行。详细配置、上传、下载及事件调用见
+agent 无 token 时先使用默认 `admin / admin123` 自动登录，主进程缓存临时
+自动 token，并发请求共用登录，失效后重新登录并重试一次。仅默认/配置登录
+被拒绝时才提示用户提供当前账号密码，再调用 `login` 并显式传入返回的 token。
+网络故障不触发索要凭据；手动登录或 Bearer 身份不会覆盖自动账号，显式 token
+被拒绝时也不会自动切换默认账号。支持 `AIVUDAOS_MCP_USERNAME` / `PASSWORD` 和
+显式 `AIVUDAOS_MCP_TOKEN`，`AIVUDAOS_MCP_MAX_BYTES` 默认 64 MiB；其余旧独立
+服务的绑定地址、端口和入站访问 token 配置不再生效。
+旧标准 Caddy matcher 会在 standalone 启动时迁移，保留自定义端口和应用导入；
+自定义 matcher 需加入 `/aivuda_os/mcp`。详细使用和测试见
 [docs/mcp.md](docs/mcp.md)。
 
 ### 应用管理
