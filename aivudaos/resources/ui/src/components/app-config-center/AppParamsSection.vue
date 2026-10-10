@@ -1,76 +1,21 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
 import { useDefaultValueModal } from '../../composables/useDefaultValueModal'
+import { useResizableConfigTable } from '../../composables/useResizableConfigTable'
 import { NCard, NButton } from 'naive-ui'
 
 const { t } = useI18n()
 
-const columnWidths = ref([260, 320, 180, 110, 180, 260, 120])
-const totalTableWidth = computed(() => columnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
-const tableWrapRef = ref(null)
-const tableRef = ref(null)
-const headerRefs = ref([])
-const resizeLineLefts = ref([])
+const {
+  columnWidths, totalTableWidth, tableWrapRef, resizeLineLefts,
+  setHeaderRef, startColumnResize,
+} = useResizableConfigTable([260, 320, 180, 110, 180, 260, 120])
 const {
   expandedDefaultValue, expandedDefaultIsJson, expandedDefaultRows,
   defaultValueCopySuccess, defaultValueCopyFailed,
   openDefaultValueModal, closeDefaultValueModal, copyExpandedDefaultValue,
 } = useDefaultValueModal()
-let stopColumnResize = null
-let resizeFrame = 0
-
-function startColumnResize(index, event) {
-  event.preventDefault()
-  const startX = event.clientX
-  const startWidth = Number(columnWidths.value[index] || 0)
-
-  const onPointerMove = (moveEvent) => {
-    const nextWidth = Math.max(80, startWidth + moveEvent.clientX - startX)
-    columnWidths.value = columnWidths.value.map((width, currentIndex) => (
-      currentIndex === index ? nextWidth : width
-    ))
-  }
-
-  const onPointerUp = () => {
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerup', onPointerUp)
-    stopColumnResize = null
-  }
-
-  stopColumnResize = onPointerUp
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', onPointerUp)
-}
-
-function setHeaderRef(index) {
-  return (element) => {
-    headerRefs.value[index] = element || null
-    queueResizeLineUpdate()
-  }
-}
-
-function updateResizeLines() {
-  resizeFrame = 0
-  const wrap = tableWrapRef.value
-  if (!wrap) return
-
-  resizeLineLefts.value = headerRefs.value
-    .slice(0, -1)
-    .map((header) => {
-      if (!header) return 0
-      return header.offsetLeft + header.offsetWidth - wrap.scrollLeft
-    })
-}
-
-function queueResizeLineUpdate() {
-  if (resizeFrame) return
-  resizeFrame = window.requestAnimationFrame(() => {
-    updateResizeLines()
-  })
-}
-
 function rowDraftKey(row) {
   return `${row?.scope || 'app'}:${row?.appId || ''}:${row?.path || ''}`
 }
@@ -99,39 +44,6 @@ const enumDrafts = useDeferredFieldDrafts({
   commitDraftValue: (row, value) => props.onEnumChange(row, value),
   isEqual: (left, right) => String(left ?? '') === String(right ?? ''),
 })
-
-onBeforeUnmount(() => {
-  if (stopColumnResize) {
-    stopColumnResize()
-  }
-  if (resizeFrame) {
-    window.cancelAnimationFrame(resizeFrame)
-    resizeFrame = 0
-  }
-  const wrap = tableWrapRef.value
-  if (wrap) {
-    wrap.removeEventListener('scroll', queueResizeLineUpdate)
-  }
-  window.removeEventListener('resize', queueResizeLineUpdate)
-})
-
-onMounted(() => {
-  const wrap = tableWrapRef.value
-  if (wrap) {
-    wrap.addEventListener('scroll', queueResizeLineUpdate, { passive: true })
-  }
-  window.addEventListener('resize', queueResizeLineUpdate)
-  queueResizeLineUpdate()
-})
-
-onUpdated(() => {
-  queueResizeLineUpdate()
-})
-
-watch(columnWidths, async () => {
-  await nextTick()
-  queueResizeLineUpdate()
-}, { deep: true })
 
 const props = defineProps({
   appOptions: { type: Array, default: () => [] },
@@ -189,7 +101,7 @@ const props = defineProps({
     <div v-if="!treeRows.length" class="empty-box">{{ t('appConfigCenter.empty') }}</div>
 
     <div ref="tableWrapRef" v-else class="table-wrap resizable-table-wrap">
-      <table ref="tableRef" class="config-table config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
+      <table class="config-table config-table-resizable" :style="{ width: `${totalTableWidth}px` }">
         <colgroup>
           <col v-for="(width, index) in columnWidths" :key="`app-col-${index}`" :style="{ width: `${width}px` }">
         </colgroup>

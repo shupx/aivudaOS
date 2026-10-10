@@ -1,8 +1,9 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppConfigCenterPage } from '../composables/useAppConfigCenterPage'
 import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
+import { useResizableConfigTable } from '../composables/useResizableConfigTable'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
@@ -10,69 +11,20 @@ import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
 import { ArrowLeft, Check, Download, RefreshCw, Plus, Trash2, Upload, X } from 'lucide-vue-next'
 
 const { t } = useI18n()
-const systemColumnWidths = ref([260, 320, 110, 180, 260, 120, 100])
-const systemTableWidth = computed(() => systemColumnWidths.value.reduce((sum, width) => sum + Number(width || 0), 0))
-const systemTableWrapRef = ref(null)
-const systemHeaderRefs = ref([])
-const systemResizeLineLefts = ref([])
-let stopSystemColumnResize = null
-let systemResizeFrame = 0
+const {
+  columnWidths: systemColumnWidths,
+  totalTableWidth: systemTableWidth,
+  tableWrapRef: systemTableWrapRef,
+  resizeLineLefts: systemResizeLineLefts,
+  setHeaderRef: setSystemHeaderRef,
+  startColumnResize: startSystemColumnResize,
+} = useResizableConfigTable([260, 320, 110, 180, 260, 120, 100])
 
 const objectEditorRows = computed(() => {
   const text = String(arrayEditorJsonText.value || '')
   const lineCount = text ? text.split('\n').length : 1
   return Math.min(Math.max(lineCount + 1, 8), 28)
 })
-
-function startSystemColumnResize(index, event) {
-  event.preventDefault()
-  const startX = event.clientX
-  const startWidth = Number(systemColumnWidths.value[index] || 0)
-
-  const onPointerMove = (moveEvent) => {
-    const nextWidth = Math.max(80, startWidth + moveEvent.clientX - startX)
-    systemColumnWidths.value = systemColumnWidths.value.map((width, currentIndex) => (
-      currentIndex === index ? nextWidth : width
-    ))
-  }
-
-  const onPointerUp = () => {
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerup', onPointerUp)
-    stopSystemColumnResize = null
-  }
-
-  stopSystemColumnResize = onPointerUp
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', onPointerUp)
-}
-
-function setSystemHeaderRef(index) {
-  return (element) => {
-    systemHeaderRefs.value[index] = element || null
-    queueSystemResizeLineUpdate()
-  }
-}
-
-function updateSystemResizeLines() {
-  systemResizeFrame = 0
-  const wrap = systemTableWrapRef.value
-  if (!wrap) return
-
-  systemResizeLineLefts.value = systemHeaderRefs.value
-    .slice(0, -1)
-    .map((header) => {
-      if (!header) return 0
-      return header.offsetLeft + header.offsetWidth - wrap.scrollLeft
-    })
-}
-
-function queueSystemResizeLineUpdate() {
-  if (systemResizeFrame) return
-  systemResizeFrame = window.requestAnimationFrame(() => {
-    updateSystemResizeLines()
-  })
-}
 
 function systemRowDraftKey(row) {
   return `${row?.scope || 'sys'}:${row?.appId || '__system__'}:${row?.path || ''}`
@@ -81,39 +33,6 @@ function systemRowDraftKey(row) {
 function getSystemEnumIndexValue(row) {
   return String(getSystemEnumValues(row).findIndex((item) => JSON.stringify(item) === JSON.stringify(getCellValue(row))))
 }
-
-onBeforeUnmount(() => {
-  if (stopSystemColumnResize) {
-    stopSystemColumnResize()
-  }
-  if (systemResizeFrame) {
-    window.cancelAnimationFrame(systemResizeFrame)
-    systemResizeFrame = 0
-  }
-  const wrap = systemTableWrapRef.value
-  if (wrap) {
-    wrap.removeEventListener('scroll', queueSystemResizeLineUpdate)
-  }
-  window.removeEventListener('resize', queueSystemResizeLineUpdate)
-})
-
-onMounted(() => {
-  const wrap = systemTableWrapRef.value
-  if (wrap) {
-    wrap.addEventListener('scroll', queueSystemResizeLineUpdate, { passive: true })
-  }
-  window.addEventListener('resize', queueSystemResizeLineUpdate)
-  queueSystemResizeLineUpdate()
-})
-
-onUpdated(() => {
-  queueSystemResizeLineUpdate()
-})
-
-watch(systemColumnWidths, async () => {
-  await nextTick()
-  queueSystemResizeLineUpdate()
-}, { deep: true })
 
 const {
   loading,
