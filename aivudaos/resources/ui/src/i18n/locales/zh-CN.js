@@ -207,6 +207,13 @@ export default {
     avahiHostnameUpdatedNotice: '请改用新网址登录并刷新（HTTPS 需更新证书信任，HTTP 仅本机 127.0.0.1:80）：',
   },
   store: {
+    installed: '已安装',
+    updateAvailable: '可更新',
+    notInstalled: '未安装',
+    update: '更新',
+    updatesCount: '可更新（{count}）',
+    noUpdates: '暂无可更新的应用',
+
     title: '在线应用商店',
     detailTitle: '商店应用详情',
     backToStore: '返回商店',

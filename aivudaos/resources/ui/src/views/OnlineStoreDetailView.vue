@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { useOnlineStoreDetailPage } from '../composables/useOnlineStoreDetailPage'
-import { NCard, NSpace, NButton, NText, NAlert, NIcon, NEmpty, NGrid, NGi, NProgress } from 'naive-ui'
+import { NCard, NSpace, NButton, NText, NAlert, NIcon, NEmpty, NGrid, NGi, NProgress, NTag } from 'naive-ui'
 import { RefreshCw, ArrowLeft, Download, ArrowDownToLine } from 'lucide-vue-next'
 
 const { t } = useI18n()
@@ -79,7 +79,8 @@ const {
       <NGi v-for="version in versions" :key="version.version">
         <NCard>
           <div style="display: flex; flex-direction: column; gap: 8px; height: 100%;">
-            <NText style="font-size: 16px; font-weight: 600;">{{ version.version }}</NText>
+            <NText style="font-size: 16px; font-weight: 600;">{{ version.installation_status === 'updateAvailable' ? `${version.installed_version} → ${version.version}` : version.version }}</NText>
+            <NTag v-if="version.installation_status === 'updateAvailable'" type="warning" size="small">{{ t('store.updateAvailable') }}</NTag>
             <NText depth="3" style="font-size: 13px;">{{ version.description || t('store.noDescription') }}</NText>
             <NText depth="3" style="font-size: 12px; margin-top: 8px;">{{ t('store.updatedAt') }}: {{ version.updated_at_display || '-' }}</NText>
             <NText depth="3" style="font-size: 12px;">{{ t('store.size') }}: {{ version.artifact_size_display || '0 kB' }}</NText>
@@ -94,7 +95,7 @@ const {
               >
                 <template #icon><NIcon><Download /></NIcon></template>
                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                  {{ t('store.downloadAndInstall') }}
+                  {{ t(version.installation_status === 'updateAvailable' ? 'store.update' : 'store.downloadAndInstall') }}
                 </span>
               </NButton>
               <NButton

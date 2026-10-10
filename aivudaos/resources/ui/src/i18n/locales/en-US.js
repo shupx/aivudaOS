@@ -207,6 +207,13 @@ export default {
     avahiHostnameUpdatedNotice: 'Please sign in again via the new URL and refresh (update HTTPS certificate trust; HTTP is localhost-only at 127.0.0.1:80):',
   },
   store: {
+    installed: 'Installed',
+    updateAvailable: 'Update available',
+    notInstalled: 'Not installed',
+    update: 'Update',
+    updatesCount: 'Updates ({count})',
+    noUpdates: 'All installed apps are up to date',
+
     title: 'Online App Store',
     detailTitle: 'Store App Details',
     backToStore: 'Back to Store',

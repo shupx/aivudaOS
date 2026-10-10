@@ -467,3 +467,13 @@ Popen 和 systemd 的 start、restart、自启动 unit 生成均应用同一配�
 存在 `/etc/apt/sources.list.d/ubuntu.sources` 时编辑该文件并返回 `format: deb822`；否则编辑 `/etc/apt/sources.list` 并返回 `format: list`。前者是 Ubuntu 24.04 起默认布局，后者仍适用于旧系统或保留旧布局的升级安装。UI 显示实际目标路径和对应格式说明；deb822 更换镜像需编辑 `URIs` 并保留 Suites、Components、Signed-By 等字段。其他第三方源文件不会改变。
 
 备份分别使用 `sources.list.<timestamp>.bak` 和 `ubuntu.sources.<timestamp>.bak`，列表仅包含当前目标的备份；旧 sources.list 备份 ID 仍受支持，跨源文件恢复返回 `BACKUP_TARGET_MISMATCH`。写入和恢复后照常执行 `apt update`。
+
+## 在线商店更新提示
+
+Online Store 导航图标右上角显示可更新的已安装 App 数量（超过 99 显示 99+，零时隐藏）。登录后检查商店索引，每 60 秒刷新；商店刷新及修改地址也同步更新。商店无法访问时清除角标，避免显示旧提示，不影响本机 App 使用。
+
+商店卡片按 App ID 对照本机当前启用版本，显示“已安装 / 可更新 / 未安装”；商店版本高于本机时显示版本变化，并可通过“可更新（数量）”筛选。详情中的较新版本显示“更新”按钮，沿用现有下载安装及覆盖确认流程；安装成功重新读取本机版本，角标和标签随之更新，不自动安装。
+
+版本比较按数字段及 SemVer 预发布规则进行，忽略构建元数据；未知格式或缺失版本不会触发更新提醒。当前商店索引没有设备兼容性字段，提示依据已发布版本，不额外推断设备兼容性。业务逻辑位于 `useStoreUpdates.js` 和 `services/core/storeUpdates.js`，中英文词条位于 `i18n/locales/`。
+
+验证：在 aivudaOS 目录运行 `node --test tests/test_store_updates_ui.mjs`，在 UI 目录运行 `npm run build`。

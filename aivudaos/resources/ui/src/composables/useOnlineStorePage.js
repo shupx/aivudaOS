@@ -6,9 +6,9 @@ import {
 } from '../services/core/config'
 import {
   buildStoreCaddyLocalCaDownloadUrl,
-  fetchStoreIndex,
   normalizeStoreBaseUrl,
 } from '../services/core/store'
+import { useStoreUpdates } from './useStoreUpdates'
 import { useStoreDisplayFormat } from './useStoreDisplayFormat'
 
 const STORE_SORT_OPTION_STORAGE_KEY = 'ONLINE_STORE_SORT_OPTION'
@@ -24,7 +24,8 @@ export function useOnlineStorePage() {
   const addressError = ref('')
   const storeAddress = ref('')
   const searchText = ref('')
-  const items = ref([])
+  const { storeItems: items, updateCount, refreshStoreIndex, refreshInstalledApps } = useStoreUpdates()
+  const updatesOnly = ref(false)
   const addressCertificateHintVisible = ref(false)
   const storedSortOption = localStorage.getItem(STORE_SORT_OPTION_STORAGE_KEY) || 'updated_at'
   const storedSortDesc = localStorage.getItem(STORE_SORT_DESC_STORAGE_KEY)
@@ -46,6 +47,7 @@ export function useOnlineStorePage() {
         ...item,
         updated_at_display: formatStoreUpdatedAt(item?.updated_at),
       }))
+      .filter((item) => !updatesOnly.value || item.installation_status === 'updateAvailable')
       .filter((item) => matchesSearch(item, searchText.value))
       .sort((left, right) => compareStoreItems(left, right, sortOption.value, sortDesc.value))
   ))
@@ -56,8 +58,7 @@ export function useOnlineStorePage() {
     try {
       const baseUrl = resolveAppStoreBaseUrl()
       storeAddress.value = baseUrl
-      const data = await fetchStoreIndex(baseUrl)
-      items.value = Array.isArray(data?.items) ? data.items : []
+      await Promise.all([refreshStoreIndex(baseUrl), refreshInstalledApps()])
     } catch (err) {
       error.value = String(err?.message || err || t('store.loadFailed'))
     } finally {
@@ -78,8 +79,7 @@ export function useOnlineStorePage() {
       }
       const saved = await saveAppStoreBaseUrl(cleanUrl)
       storeAddress.value = saved
-      const data = await fetchStoreIndex(saved)
-      items.value = Array.isArray(data?.items) ? data.items : []
+      await Promise.all([refreshStoreIndex(saved), refreshInstalledApps()])
     } catch (err) {
       addressError.value = String(err?.message || err || t('store.saveAddressFailed'))
     } finally {
@@ -128,6 +128,8 @@ export function useOnlineStorePage() {
     showAddressManualCheckHint,
     addressCertificateHintVisible,
     items,
+    updateCount,
+    updatesOnly,
     sortOption,
     sortDesc,
     displayItems,

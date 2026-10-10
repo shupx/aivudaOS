@@ -9,6 +9,9 @@ import {
   fetchStoreAppDetail,
 } from '../services/core/store'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
+import { useStoreUpdates } from './useStoreUpdates'
+import { annotateStoreItems } from '../services/core/storeUpdates'
+import { appState } from '../state/appState'
 import { useStoreDisplayFormat } from './useStoreDisplayFormat'
 
 export function useOnlineStoreDetailPage() {
@@ -26,6 +29,8 @@ export function useOnlineStoreDetailPage() {
   const storeBaseUrl = ref('')
   const appInfo = ref(null)
   const versions = ref([])
+  const { refreshInstalledApps } = useStoreUpdates()
+  const displayVersions = computed(() => annotateStoreItems(versions.value.map((item) => ({ ...item, app_id: appId.value })), appState.apps))
 
   const actingByVersion = ref({})
   const localDownloadingByVersion = ref({})
@@ -33,6 +38,7 @@ export function useOnlineStoreDetailPage() {
 
   const uploadModal = useAppUploadInstallModal({
     async onInstalled() {
+      await refreshInstalledApps()
       actionMessage.value = t('store.installCompleted')
     },
   })
@@ -67,7 +73,7 @@ export function useOnlineStoreDetailPage() {
       const baseUrl = resolveAppStoreBaseUrl()
       storeBaseUrl.value = baseUrl
 
-      const detail = await fetchStoreAppDetail(baseUrl, appId.value)
+      const [detail] = await Promise.all([fetchStoreAppDetail(baseUrl, appId.value), refreshInstalledApps()])
       appInfo.value = detail?.app || null
       versions.value = Array.isArray(detail?.versions)
         ? detail.versions
@@ -165,7 +171,7 @@ export function useOnlineStoreDetailPage() {
     actionError,
     actionMessage,
     appInfo,
-    versions,
+    versions: displayVersions,
     actingByVersion,
     localDownloadingByVersion,
     getDownloadProgress,

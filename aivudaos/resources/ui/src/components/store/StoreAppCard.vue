@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NAvatar, NText, NTag, NTooltip } from 'naive-ui'
+import { NCard, NAvatar, NText, NTag, NTooltip, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -48,8 +48,11 @@ function goDetail() {
               </NText>
             </div>
           </div>
-          <div style="flex-shrink: 0;">
-            <NTag type="info" size="small">{{ item.version || '-' }}</NTag>
+          <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+            <NTag type="info" size="small">{{ item.installation_status === 'updateAvailable' ? `${item.installed_version} → ${item.version}` : (item.version || '-') }}</NTag>
+            <NTag :type="item.installation_status === 'updateAvailable' ? 'warning' : item.installation_status === 'installed' ? 'success' : 'default'" size="small">
+              {{ t(`store.${item.installation_status}`) }}
+            </NTag>
           </div>
         </div>
 
@@ -60,6 +63,9 @@ function goDetail() {
           </div>
           <NText depth="3" style="font-size: 12px; margin-top: auto;">{{ t('store.updatedAt') }}: {{ item.updated_at_display || '-' }}</NText>
         </div>
+        <NButton v-if="item.installation_status === 'updateAvailable'" type="primary" size="small" @click.stop="goDetail">
+          {{ t('store.update') }}
+        </NButton>
       </NCard>
     </template>
     {{ title }}

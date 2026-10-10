@@ -1,13 +1,17 @@
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { appState, setLocale } from '../state/appState'
 import { fetchMe, logout } from '../services/core/auth'
+import { useStoreUpdates } from './useStoreUpdates'
 import { useAppsPanel } from './useAppsPanel'
 
 export function useDashboard() {
   const route = useRoute()
   const router = useRouter()
   const { refresh } = useAppsPanel()
+  const { updateCount, refreshStoreIndex } = useStoreUpdates()
+  let storePollTimer
+  const checkStore = () => refreshStoreIndex().catch(() => {})
 
   const sidebarCollapsed = computed(() => appState.sidebarMode !== 'expanded')
   const sidebarMode = computed(() => appState.sidebarMode || 'icon')
@@ -28,11 +32,15 @@ export function useDashboard() {
         await fetchMe()
       }
       await refresh()
+      void checkStore()
+      storePollTimer = setInterval(checkStore, 60000)
     } catch {
       logout()
       router.replace('/login')
     }
   })
+
+  onUnmounted(() => clearInterval(storePollTimer))
 
   function collapseSidebar() {
     if (appState.sidebarMode === 'expanded') {
@@ -82,6 +90,7 @@ export function useDashboard() {
   }
 
   return {
+    updateCount,
     sidebarCollapsed,
     sidebarMode,
     isStatusRoute,

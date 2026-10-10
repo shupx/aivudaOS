@@ -11,6 +11,7 @@ import {
   NMenu,
   NLayoutContent,
   NIcon,
+  NBadge,
   NDropdown,
   NButton,
   NSpace,
@@ -41,6 +42,7 @@ const {
   goApps,
   goConfigs,
   goStore,
+  updateCount,
   goSystemSettings,
   sidebarMode,
   collapseSidebar,
@@ -81,7 +83,7 @@ const menuOptions = computed(() => [
   {
     label: t('dashboard.onlineStore'),
     key: 'store',
-    icon: renderIcon(ShoppingBag),
+    icon: () => h(NBadge, { value: updateCount.value, max: 99, show: updateCount.value > 0, title: t('store.updatesCount', { count: updateCount.value }) }, { default: () => h(NIcon, null, { default: () => h(ShoppingBag) }) }),
   },
   {
     label: t('dashboard.systemSettings'),

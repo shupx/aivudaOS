@@ -15,6 +15,8 @@ export const appState = reactive({
   gatewayOnline: false,
   lastSyncAt: null,
   apps: [],
+  storeItems: [],
+  storeBaseUrl: '',
   appDetailsById: {},
   appsLoading: false,
   appsError: '',
@@ -82,6 +84,8 @@ export function clearSession() {
   setUserSession(null, null)
   appState.aivudaosVersion = ''
   appState.apps = []
+  appState.storeItems = []
+  appState.storeBaseUrl = ''
   appState.appDetailsById = {}
   appState.appsError = ''
   appState.busyById = {}

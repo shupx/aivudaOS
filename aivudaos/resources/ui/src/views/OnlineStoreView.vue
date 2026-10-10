@@ -14,6 +14,8 @@ const {
   savingAddress,
   storeAddress,
   searchText,
+  updateCount,
+  updatesOnly,
   normalizedStoreAddress,
   storeCertificateDownloadUrl,
   showAddressManualCheckHint,
@@ -21,7 +23,6 @@ const {
   sortOption,
   sortDesc,
   displayItems,
-  hasItems,
   load,
   saveAddress,
   openStoreCertificate,
@@ -112,6 +113,10 @@ const sortOptions = computed(() => [
             </template>
           </NInput>
 
+          <NButton :type="updatesOnly ? 'primary' : 'default'" :aria-pressed="updatesOnly" @click="updatesOnly = !updatesOnly">
+            {{ t('store.updatesCount', { count: updateCount }) }}
+          </NButton>
+
           <NDropdown trigger="click" :options="sortOptions" @select="setSortOption">
             <NButton quaternary circle :title="t('store.sortTooltip')">
               <template #icon><NIcon><ArrowUpDown /></NIcon></template>
@@ -123,7 +128,7 @@ const sortOptions = computed(() => [
 
     <NAlert v-if="error" type="error" style="margin-bottom: 24px;">{{ error }}</NAlert>
 
-    <NEmpty v-if="!hasItems && !loading" :description="t('store.empty')" style="margin-top: 48px;" />
+    <NEmpty v-if="!displayItems.length && !loading" :description="t(updatesOnly ? 'store.noUpdates' : 'store.empty')" style="margin-top: 48px;" />
 
     <div class="apps-grid">
       <StoreAppCard
