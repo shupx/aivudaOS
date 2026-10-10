@@ -19,6 +19,10 @@
 - APT 源编辑器：显示后端检测到的实际路径与 deb822/传统格式说明，兼容 `ubuntu.sources` 与 `sources.list`，按目标文件区分备份，恢复确认使用实际路径。
 - 状态同步：操作后即时更新 + 后台轮询自动纠偏
 
+## 参数弹窗复制
+
+参数中心的默认值弹窗及数组/对象编辑弹窗共用 `src/services/core/clipboard.js`：优先使用 Clipboard API，在 API 缺失（非安全 HTTP）或被 Electron WebView 权限拒绝时，降级为文本选区复制；失败显示国际化提示。默认值弹窗逻辑位于 `src/composables/useDefaultValueModal.js`。
+
 ## 目录结构
 
 - `src/state/`：全局响应式状态

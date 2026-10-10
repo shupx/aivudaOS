@@ -13,6 +13,7 @@ import {
 import { fetchConfigExportMeta, fetchSysConfig, resolveAppStoreBaseUrl, updateSysConfig } from '../services/core/config'
 import { downloadStorePackageForInstall, fetchStoreAppDetail, fetchStoreIndex, MAX_IN_MEMORY_INSTALL_BYTES } from '../services/core/store'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
+import { copyText } from '../services/core/clipboard'
 import {
   buildConfigExportFilename,
   createConfigExportDocument,
@@ -591,7 +592,7 @@ export function useAppConfigCenterPage() {
     }
   }
 
-  function copyArrayEditorJson() {
+  async function copyArrayEditorJson() {
     let textToCopy = ''
     try {
       if (arrayEditorMode.value === 'json') {
@@ -600,16 +601,18 @@ export function useAppConfigCenterPage() {
         const values = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
         textToCopy = JSON.stringify(values, null, 2)
       }
-      navigator.clipboard.writeText(textToCopy).then(() => {
-        arrayEditorCopySuccess.value = true
-        setTimeout(() => {
-          arrayEditorCopySuccess.value = false
-        }, 2000)
-      }).catch(() => {
-         error.value = t('appConfigCenter.arrayEditorCopyFailed')
-      })
-    } catch(err) {
+    } catch (err) {
       error.value = t('appConfigCenter.arrayEditorInvalidCopyValue')
+      return
+    }
+    try {
+      await copyText(textToCopy)
+      arrayEditorCopySuccess.value = true
+      setTimeout(() => {
+        arrayEditorCopySuccess.value = false
+      }, 2000)
+    } catch (err) {
+      error.value = t('appConfigCenter.arrayEditorCopyFailed')
     }
   }
 

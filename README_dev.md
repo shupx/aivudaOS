@@ -170,6 +170,10 @@ App 启动时会注入配置路径相关环境变量：
 - 用户名: `admin`
 - 密码: `admin123`
 
+## 参数弹窗复制
+
+参数中心的默认值弹窗及数组/对象编辑弹窗共用 `src/services/core/clipboard.js`：优先使用 Clipboard API，在 API 缺失（非安全 HTTP）或被 Electron WebView 权限拒绝时，降级为文本选区复制；失败显示国际化提示。默认值弹窗逻辑位于 `src/composables/useDefaultValueModal.js`。
+
 ## 前端多语言
 
 - UI 支持语言切换：`简体中文 (zh-CN)` / `English (en-US)`。

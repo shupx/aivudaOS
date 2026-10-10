@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
+import { useDefaultValueModal } from '../../composables/useDefaultValueModal'
 import { NCard, NButton } from 'naive-ui'
 
 const { t } = useI18n()
@@ -12,12 +13,13 @@ const tableWrapRef = ref(null)
 const tableRef = ref(null)
 const headerRefs = ref([])
 const resizeLineLefts = ref([])
-const expandedDefaultValue = ref('')
-const expandedDefaultIsJson = ref(false)
-const defaultValueCopySuccess = ref(false)
+const {
+  expandedDefaultValue, expandedDefaultIsJson, expandedDefaultRows,
+  defaultValueCopySuccess, defaultValueCopyFailed,
+  openDefaultValueModal, closeDefaultValueModal, copyExpandedDefaultValue,
+} = useDefaultValueModal()
 let stopColumnResize = null
 let resizeFrame = 0
-let defaultValueCopyTimer = null
 
 function startColumnResize(index, event) {
   event.preventDefault()
@@ -69,72 +71,6 @@ function queueResizeLineUpdate() {
   })
 }
 
-function openDefaultValueModal(value) {
-  const normalized = formatExpandedValue(value)
-  expandedDefaultValue.value = normalized.text
-  expandedDefaultIsJson.value = normalized.isJson
-  defaultValueCopySuccess.value = false
-}
-
-function closeDefaultValueModal() {
-  expandedDefaultValue.value = ''
-  expandedDefaultIsJson.value = false
-  defaultValueCopySuccess.value = false
-  if (defaultValueCopyTimer) {
-    clearTimeout(defaultValueCopyTimer)
-    defaultValueCopyTimer = null
-  }
-}
-
-async function copyExpandedDefaultValue() {
-  const text = String(expandedDefaultValue.value || '')
-  if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
-    defaultValueCopySuccess.value = true
-    if (defaultValueCopyTimer) {
-      clearTimeout(defaultValueCopyTimer)
-    }
-    defaultValueCopyTimer = window.setTimeout(() => {
-      defaultValueCopySuccess.value = false
-      defaultValueCopyTimer = null
-    }, 2000)
-  } catch {}
-}
-
-function formatExpandedValue(value) {
-  if (value === null || value === undefined) {
-    return { text: '', isJson: false }
-  }
-
-  if (typeof value === 'object') {
-    return {
-      text: JSON.stringify(value, null, 2),
-      isJson: true,
-    }
-  }
-
-  const rawText = String(value)
-  const trimmed = rawText.trim()
-  if (!trimmed) {
-    return { text: '', isJson: false }
-  }
-
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(trimmed)
-      if (parsed && typeof parsed === 'object') {
-        return {
-          text: JSON.stringify(parsed, null, 2),
-          isJson: true,
-        }
-      }
-    } catch {}
-  }
-
-  return { text: rawText, isJson: false }
-}
-
 function rowDraftKey(row) {
   return `${row?.scope || 'app'}:${row?.appId || ''}:${row?.path || ''}`
 }
@@ -167,10 +103,6 @@ const enumDrafts = useDeferredFieldDrafts({
 onBeforeUnmount(() => {
   if (stopColumnResize) {
     stopColumnResize()
-  }
-  if (defaultValueCopyTimer) {
-    clearTimeout(defaultValueCopyTimer)
-    defaultValueCopyTimer = null
   }
   if (resizeFrame) {
     window.cancelAnimationFrame(resizeFrame)
@@ -230,10 +162,6 @@ const props = defineProps({
   valueToInlineText: { type: Function, required: true },
 })
 
-const expandedDefaultRows = computed(() => {
-  const lineCount = String(expandedDefaultValue.value || '').split('\n').length
-  return Math.min(Math.max(lineCount, 6), 24)
-})
 </script>
 
 <template>
@@ -432,6 +360,7 @@ const expandedDefaultRows = computed(() => {
           readonly
           spellcheck="false"
         ></textarea>
+        <p v-if="defaultValueCopyFailed" role="alert">{{ t('appConfigCenter.arrayEditorCopyFailed') }}</p>
         <div class="panel-actions">
           <NButton @click="closeDefaultValueModal">{{ t('common.close') }}</NButton>
         </div>

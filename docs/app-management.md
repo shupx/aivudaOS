@@ -12,6 +12,10 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 
 App 的 `start / stop / restart` 与批量 `restart-autostart / start-autostart / stop-all` 现在会先返回 queued operation，由后台线程并行执行；同一 app 仍然保留单操作冲突保护。
 
+### 参数弹窗复制
+
+参数中心的默认值弹窗及数组/对象编辑弹窗共用 `aivudaos/resources/ui/src/services/core/clipboard.js`：优先使用 Clipboard API，在 API 缺失（非安全 HTTP）或被 Electron WebView 权限拒绝时，降级为文本选区复制；失败显示国际化提示。默认值弹窗逻辑位于 `aivudaos/resources/ui/src/composables/useDefaultValueModal.js`。
+
 ## 核心模块
 
 | 模块 | 路径 | 职责 |
