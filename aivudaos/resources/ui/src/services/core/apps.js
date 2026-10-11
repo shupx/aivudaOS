@@ -61,8 +61,8 @@ export async function restartApp(appId) {
   })
 }
 
-export async function restartAutostartApps() {
-  return request('/api/apps/bulk/restart-autostart', {
+export async function restartRunningApps() {
+  return request('/api/apps/bulk/restart-running', {
     method: 'POST',
     auth: true,
   })

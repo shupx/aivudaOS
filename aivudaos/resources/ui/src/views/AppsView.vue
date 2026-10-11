@@ -59,7 +59,7 @@ const {
   toggleRunning,
   toggleAutostart,
   restartSingleApp,
-  restartEnabledApps,
+  restartRunningApps,
   startEnabledApps,
   stopEveryApp,
   showUploadModal,
@@ -155,10 +155,10 @@ const handleSortSelect = (key) => {
         <NSpace :size="4">
           <NButton
             quaternary circle
-            :title="t('apps.restartAutostartTooltip')"
+            :title="t('apps.restartRunningTooltip')"
             :disabled="Boolean(bulkActionPending)"
-            :loading="bulkActionPending === 'restartAutostart'"
-            @click="restartEnabledApps"
+            :loading="bulkActionPending === 'restartRunning'"
+            @click="restartRunningApps"
           >
             <template #icon><NIcon><RotateCcw /></NIcon></template>
           </NButton>

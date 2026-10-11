@@ -12,6 +12,8 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 ## Python 兼容性约束
 
+Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。
+
 - 后端 Python 代码必须兼容 `Python 3.8`。
 - 类型标注不要使用 `dict[str, Any]`、`list[str]`、`set[str]`、`tuple[int, int]` 这类 3.9+ 内建泛型写法。
 - 统一使用 `typing.Dict`、`typing.List`、`typing.Set`、`typing.Tuple`，避免在 Pydantic 等运行时解析注解时触发兼容性问题。

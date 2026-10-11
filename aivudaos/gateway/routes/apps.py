@@ -294,6 +294,26 @@ async def get_logs(
 # ================================================================== #
 
 
+@router.post("/bulk/restart-running", status_code=202)
+async def restart_running_apps(token: str) -> Dict[str, Any]:
+    _require_auth(token)
+    runtime = get_runtime_service()
+    app_ids = [
+        str(item.get("app_id") or "")
+        for item in runtime.get_installed_list()
+        if bool(item.get("running"))
+    ]
+    app_ids = [app_id for app_id in app_ids if app_id]
+    return {
+        **_queue_bulk_app_operations(
+            "restart",
+            app_ids,
+            lambda app_id: runtime.restart(app_id),
+        ),
+        "message": "Running apps restart queued.",
+    }
+
+
 @router.post("/bulk/restart-autostart", status_code=202)
 async def restart_autostart_apps(token: str) -> Dict[str, Any]:
     _require_auth(token)

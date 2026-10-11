@@ -10,7 +10,9 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 
 前端 UI 支持 `zh-CN / en-US` 语言切换（Dashboard 左侧栏入口），并将选择持久化到本地存储。当前版本只对前端固定文案做国际化，后端返回的动态文本（如 SSE 日志、错误详情）按原文显示。
 
-App 的 `start / stop / restart` 与批量 `restart-autostart / start-autostart / stop-all` 现在会先返回 queued operation，由后台线程并行执行；同一 app 仍然保留单操作冲突保护。
+App 的 `start / stop / restart` 与批量 `restart-running / restart-autostart / start-autostart / stop-all` 现在会先返回 queued operation，由后台线程并行执行；同一 app 仍然保留单操作冲突保护。
+
+Apps 页面顶部 Restart 图标调用 `POST /api/apps/bulk/restart-running`，重启请求时所有正在运行的 app，不受自启动开关影响，也不会启动已停止的 app。原 `restart-autostart` API 保留原有行为。
 
 ### 参数弹窗复制
 

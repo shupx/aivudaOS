@@ -6,7 +6,7 @@ import {
   fetchAppStatus,
   fetchInstalledApps,
   restartApp,
-  restartAutostartApps,
+  restartRunningApps as requestRestartRunningApps,
   setAutostart,
   startAutostartApps,
   startApp,
@@ -433,9 +433,9 @@ export function useAppsPanel() {
     }
   }
 
-  async function restartEnabledApps() {
-    await runBulkAction('restartAutostart', async () => {
-      const result = await restartAutostartApps()
+  async function restartRunningApps() {
+    await runBulkAction('restartRunning', async () => {
+      const result = await requestRestartRunningApps()
       const operations = Array.isArray(result?.operations) ? result.operations : []
       for (const item of operations) {
         const appId = String(item?.app_id || '')
@@ -503,7 +503,7 @@ export function useAppsPanel() {
     toggleRunning,
     toggleAutostart,
     restartSingleApp,
-    restartEnabledApps,
+    restartRunningApps,
     startEnabledApps,
     stopEveryApp,
     ...uploadModal,
