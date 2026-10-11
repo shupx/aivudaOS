@@ -300,7 +300,7 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 
 ## 在线应用商店流程
 
-1. 在 UI 的“在线应用商店”页面设置商店地址（保存到浏览器 localStorage，key: `aivuda_ui_appstore_base_url`）。
+1. 在 UI 的“在线应用商店”页面设置商店地址（默认 `http://127.0.0.1:28791`；自定义地址保存到浏览器 localStorage，key: `aivuda_ui_appstore_base_url`）。
 2. 前端调用：`{appstore_base_url}/aivuda_app_store/store/index` 获取应用卡片列表。
 3. 点击应用后调用：`.../store/apps/{app_id}` 查看版本详情。
 4. 点击“下载到本机”后，前端调用 `.../download-url` 与 `.../download`，将安装包下载到浏览器本机。
