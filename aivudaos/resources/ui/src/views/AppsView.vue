@@ -199,7 +199,7 @@ const handleSortSelect = (key) => {
         :highlighted="highlightedAppId === app.app_id"
         :compact="compactMode"
         :favorite="isFavoriteApp(app)"
-        :show-restart="!compactMode"
+        show-restart
         @toggle-running="toggleRunning"
         @toggle-autostart="toggleAutostart"
         @toggle-favorite="toggleFavoriteApp"
