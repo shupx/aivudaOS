@@ -10,6 +10,8 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 - `aivudaos/resources/`: 打包后的运行时资源根目录
 - `aivudaos/resources/scripts/`: 开发态/运维态入口脚本
 
+配置参数中心的文本/数字输入支持浏览器历史下拉选择，成功提交后按站点和参数缓存最近 20 个不同值。历史存储与输入交互逻辑分别位于 `services/core/parameterValueHistory.js`、`composables/useParameterValueInput.js`，视图共用 `ParameterValueInput.vue`；只读与密码/密钥类字段不缓存。验证：`node --test tests/test_parameter_value_history.mjs`，以及在 UI 目录执行 `npm run build`。源码构建不会自动更新已经部署的本机 AppImage 或远程设备 UI。
+
 ## Python 兼容性约束
 
 Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。

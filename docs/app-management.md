@@ -14,6 +14,12 @@ App 的 `start / stop / restart` 与批量 `restart-running / restart-autostart 
 
 Apps 页面顶部 Restart 图标调用 `POST /api/apps/bulk/restart-running`，重启请求时所有正在运行的 app，不受自启动开关影响，也不会启动已停止的 app。原 `restart-autostart` API 保留原有行为。
 
+### 参数值输入历史
+
+配置参数中心的应用、系统、磁吸文本/数字输入框提供可选择的历史值。点击输入框显示该参数最近的历史记录，输入时过滤，支持鼠标点击或方向键与回车选择；选择后仍走原有类型校验和提交流程。失焦/回车成功提交后缓存，失败值不记录。
+
+历史保存在浏览器 localStorage，按站点、范围、App ID、参数路径和类型隔离，每个参数最多 20 个不同值，刷新页面后保留。只读及密码/密钥类字段不缓存；布尔、枚举、数组/对象编辑器不变。存储不可用不影响编辑和保存。实现位于 `services/core/parameterValueHistory.js`、`composables/useParameterValueInput.js` 和 `components/app-config-center/ParameterValueInput.vue`。验证：`node --test tests/test_parameter_value_history.mjs`，UI 构建：`npm run build`。
+
 ### 参数弹窗复制
 
 参数中心的默认值弹窗及数组/对象编辑弹窗共用 `aivudaos/resources/ui/src/services/core/clipboard.js`：优先使用 Clipboard API，在 API 缺失（非安全 HTTP）或被 Electron WebView 权限拒绝时，降级为文本选区复制；失败显示国际化提示。默认值弹窗逻辑位于 `aivudaos/resources/ui/src/composables/useDefaultValueModal.js`。

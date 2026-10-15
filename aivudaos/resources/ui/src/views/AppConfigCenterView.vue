@@ -6,6 +6,8 @@ import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
 import { useResizableConfigTable } from '../composables/useResizableConfigTable'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
+import ParameterValueInput from '../components/app-config-center/ParameterValueInput.vue'
+import { parameterHistoryKey } from '../services/core/parameterValueHistory'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
 import { ArrowLeft, Check, Download, RefreshCw, Plus, Trash2, Upload, X } from 'lucide-vue-next'
@@ -338,17 +340,16 @@ const systemEnumDrafts = useDeferredFieldDrafts({
                   >
                     {{ getArrayPreviewText(getCellValue(row)) }}
                   </button>
-                  <input
+                  <ParameterValueInput
                     v-else
-                    class="input"
+                    :history-key="parameterHistoryKey(row)"
                     :type="getSystemInputType(row)"
                     :disabled="row.readonly"
                     :placeholder="getSystemValuePlaceholder(row)"
                     :value="systemTextDrafts.getDraftValue(row)"
-                    @input="systemTextDrafts.setDraftValue(row, $event?.target?.value || '')"
-                    @blur="systemTextDrafts.commitDraft(row)"
-                    @keyup.enter="systemTextDrafts.commitDraft(row)"
-                  >
+                    @update:value="systemTextDrafts.setDraftValue(row, $event)"
+                    :commit="() => systemTextDrafts.commitDraft(row)"
+                  />
 
                   <template v-if="row.readonly">
                     <button class="link-btn" @click="jumpToMagnetByPath(row.path)">

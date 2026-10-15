@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
+import ParameterValueInput from './ParameterValueInput.vue'
+import { parameterHistoryKey } from '../../services/core/parameterValueHistory'
 import { NCard, NButton, NIcon } from 'naive-ui'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 
@@ -212,14 +214,13 @@ const magnetBooleanDrafts = useDeferredFieldDrafts({
                   >
                     {{ getArrayPreviewText(getMagnetValue(group)) }}
                   </NButton>
-                  <input
+                  <ParameterValueInput
                     v-else
-                    class="input"
+                    :history-key="parameterHistoryKey({ scope: 'magnet', path: group.path, type: group.value_type })"
                     :value="magnetTextDrafts.getDraftValue(group)"
-                    @input="magnetTextDrafts.setDraftValue(group, $event?.target?.value || '')"
-                    @blur="magnetTextDrafts.commitDraft(group)"
-                    @keyup.enter="magnetTextDrafts.commitDraft(group)"
-                  >
+                    @update:value="magnetTextDrafts.setDraftValue(group, $event)"
+                    :commit="() => magnetTextDrafts.commitDraft(group)"
+                  />
                 </td>
                 <td>{{ group.value_type || '-' }}</td>
                 <td>{{ getMagnetBindingsText(group.bindings || []) }}</td>

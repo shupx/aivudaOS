@@ -3,6 +3,8 @@ import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
 import { useDefaultValueModal } from '../../composables/useDefaultValueModal'
 import { useResizableConfigTable } from '../../composables/useResizableConfigTable'
+import ParameterValueInput from './ParameterValueInput.vue'
+import { parameterHistoryKey } from '../../services/core/parameterValueHistory'
 import { NCard, NButton } from 'naive-ui'
 
 const { t } = useI18n()
@@ -196,16 +198,15 @@ const props = defineProps({
                     {{ getArrayPreviewText(getCellValue(item.row)) }}
                   </button>
 
-                  <input
+                  <ParameterValueInput
                     v-else
-                    class="input"
                     :class="{ 'config-default-changed-value': item.defaultChanged }"
+                    :history-key="parameterHistoryKey(item.row)"
                     :disabled="item.row.readonly"
                     :value="textDrafts.getDraftValue(item.row)"
-                    @input="textDrafts.setDraftValue(item.row, $event?.target?.value || '')"
-                    @blur="textDrafts.commitDraft(item.row)"
-                    @keyup.enter="textDrafts.commitDraft(item.row)"
-                  >
+                    @update:value="textDrafts.setDraftValue(item.row, $event)"
+                    :commit="() => textDrafts.commitDraft(item.row)"
+                  />
 
                   <template v-if="item.row.readonly">
                     <button class="link-btn" @click="jumpToMagnetByPath(item.row.path)">
