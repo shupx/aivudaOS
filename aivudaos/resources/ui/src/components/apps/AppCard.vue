@@ -306,7 +306,7 @@ function onIconError() {
 }
 
 .app-card-footer-extra {
-  min-width: 0;
+  flex: 0 0 auto;
   margin-right: auto;
 }
 

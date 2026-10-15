@@ -1769,7 +1769,7 @@ label.config-default-changed-value {
 }
 
 .apps-grid-compact {
-  --app-card-min-width: min(200px, 100%);
+  --app-card-min-width: 240px;
 }
 
 .app-card-compact .app-icon {
