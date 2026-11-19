@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeferredFieldDrafts } from '../../composables/useDeferredFieldDrafts'
+import { copyText } from '../../utils/clipboard'
 import { NCard, NButton } from 'naive-ui'
 
 const { t } = useI18n()
@@ -90,7 +91,7 @@ async function copyExpandedDefaultValue() {
   const text = String(expandedDefaultValue.value || '')
   if (!text) return
   try {
-    await navigator.clipboard.writeText(text)
+    await copyText(text)
     defaultValueCopySuccess.value = true
     if (defaultValueCopyTimer) {
       clearTimeout(defaultValueCopyTimer)

@@ -27,8 +27,8 @@ prepare_station_assets() {
     (cd "$ui" && npm run build:h16 -- --outDir "$stage/assets/panel")
 
     if [[ -n "${AIVUDA_STORE_CA:-}" ]]; then
-        if [[ ! "$host" =~ ^[A-Za-z0-9.-]+$ ]]; then
-            printf 'Set AIVUDA_STORE_HOST to the hostname of the store using this CA.\n' >&2
+        if [[ ! "$host" =~ ^[A-Za-z0-9.-]+$ ]] || [[ "$host" =~ ^[0-9.]+$ ]]; then
+            printf 'Set AIVUDA_STORE_HOST to the domain name (not an IP address) of the store using this CA.\n' >&2
             return 1
         fi
         mkdir -p "$station_res/raw"
@@ -36,7 +36,7 @@ prepare_station_assets() {
     fi
     {
         printf '%s\n' '<network-security-config>' \
-            '  <base-config cleartextTrafficPermitted="true"><trust-anchors><certificates src="system"/></trust-anchors></base-config>'
+            '  <base-config cleartextTrafficPermitted="true"><trust-anchors><certificates src="system"/><certificates src="user"/></trust-anchors></base-config>'
         if [[ -n "${AIVUDA_STORE_CA:-}" ]]; then
             printf '  <domain-config><domain>%s</domain><trust-anchors><certificates src="@raw/store_ca"/></trust-anchors></domain-config>\n' "$host"
         fi

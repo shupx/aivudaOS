@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { appConfigLocation, appDetailPath, appIconUrl } from '../../utils/appLinks'
+import { appConfigLocation, appDetailPath, appIconUrl, DEFAULT_APP_ICON_URL } from '../../utils/appLinks'
 import {
   NCard,
   NSpace,
@@ -40,7 +40,7 @@ const configButtonTitle = computed(() => t('appCard.openConfig', { name: appDisp
 const favoriteTitle = computed(() => props.favorite ? t('appCard.unfavorite') : t('appCard.favorite'))
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
-    return '/app-default-icon.png'
+    return DEFAULT_APP_ICON_URL
   }
   return appIconUrl(props.app.app_id)
 })
@@ -127,7 +127,7 @@ function onIconError() {
         <NAvatar
           :src="iconSrc"
           :size="compact ? 36 : 40"
-          fallback-src="/app-default-icon.png"
+          :fallback-src="DEFAULT_APP_ICON_URL"
           @error="onIconError"
           style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
         />

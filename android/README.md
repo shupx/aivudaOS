@@ -20,10 +20,12 @@ npm --prefix aivudaos/resources/ui ci
 
 ## 安装到设备
 
-启用设备的 USB 调试，连接电脑并授权后，使用 Android SDK Platform Tools 中的 `adb` 安装地面站。
+启用设备的 USB 调试，连接电脑并授权后，使用 Android SDK Platform Tools 中的 `adb` 安装地面站（可安装本分支预编译的 `android/apk/aivuda-station.apk`，或自行构建的 `android/build/aivuda-station.apk`）。
 
 ```bash
-adb install -r android/build/aivuda-station.apk
+adb install -r android/apk/aivuda-station.apk
+# 或安装自行从源码构建的 APK：
+# adb install -r android/build/aivuda-station.apk
 ```
 
 打开「Aivuda 地面站」，点「设置服务器地址」，输入设备可访问的服务器 IP 或 HTTP(S) 地址，再使用服务器账号登录。登录后可从应用卡片进入参数页面。[地面站操作指南](../docs/android-h16.md)
@@ -42,13 +44,14 @@ unset AIVUDA_KEY_PASSWORD
 
 发布新版本前，更新对应 `AndroidManifest.xml` 的 `versionCode` 和 `versionName`。源码和锁文件随 Git 提交，正式签名的 APK 作为 GitHub Release 附件上传。签名密钥和密码保存在仓库外。
 
-默认构建使用系统受信任的 CA。若部署环境使用私有商店 CA，在构建前设置 `AIVUDA_STORE_HOST` 为商店主机名，`AIVUDA_STORE_CA` 为 PEM 根证书的绝对路径。该证书会打入地面站 APK，信任范围仅限指定主机。
+默认构建同时信任系统受信任的 CA 以及用户在 Android 系统设置中安装的 CA 根证书（可用于信任 Caddy Local CA 或私有商店 CA）。若希望在构建阶段直接内置私有商店 CA，在构建前设置 `AIVUDA_STORE_HOST` 为商店域名（不能是纯 IP 地址），`AIVUDA_STORE_CA` 为 PEM 根证书的绝对路径。该证书会打入地面站 APK，信任范围仅限指定域名。
 
 ## 代码目录
 
 | 路径 | 职责 |
 | --- | --- |
-| `station/` | 地面站入口、服务器地址选择和 WebView 宿主 |
+| `apk/` | 本分支提供的开发密钥签名预编译 APK |
+| `station/` | 地面站入口、服务器地址选择、原生文件保存桥接和 WebView 宿主 |
 | `i18n/locales/` | 原生界面的中英文资源 |
 | `../aivudaos/resources/ui/` | 与桌面版共用的 Vue 源码，以及 H16 入口、兼容样式和词表 |
 | `build.sh` | 构建网页资源、打包、签名和验证 |

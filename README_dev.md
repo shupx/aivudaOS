@@ -266,10 +266,10 @@ App 启动时会注入配置路径相关环境变量：
 
 Android 地面站的源码在 `android/`。构建、签名与发布见 [Android 客户端 README](android/README.md)，设备操作见 [H16 使用指南](docs/android-h16.md)。
 
-单独调试网页资源时，在 UI 目录运行 `npm run build:h16`，输出位于 `android/build/panel/`。构建 APK 时，`android/build.sh` 直接在临时目录中生成网页资源。UI 入口 `src/h16-panel.js` 在 Vue 初始化前应用设备语言和商店地址。
+单独调试网页资源时，在 UI 目录运行 `npm run build:h16`，输出位于 `android/build/panel/`。构建 APK 时，`android/build.sh` 直接在临时目录中生成网页资源。UI 入口 `src/h16-panel.js` 在 Vue 初始化前应用设备语言和商店地址，并为 Chromium 52 补齐 `Event.prototype.composedPath`、`InputEvent` 及 `Blob.prototype.text/arrayBuffer` polyfill。
 
 H16 构建通过 Vite 的 h16 模式启用横屏卡片和旧版 WebView 的 Flexbox 样式。开发时可用多个短时测试服务验证独立启停，并检查退出面板后应用列表的轮询是否结束。数据库连接应使用 `with db_conn() as conn`，作用域结束时会提交或回滚并关闭连接。
 
 H16 布局回归应覆盖登录、系统状态、应用列表及详情、内置 UI、参数表和编辑弹窗、商店版本及系统设置。用长应用 ID、长版本号、深色中文和浅色英文界面检查按钮是否可见、文字是否换行。
 
-H16 的桌面入口 `android/station/StationActivity.java` 在选定服务的源加载打包的 `/login`。从桌面重新启动时创建新的登录会话。升级验证需覆盖已保存的地址、首次设置地址和登录后打开商店。
+H16 的桌面入口 `android/station/StationActivity.java` 在选定服务的源加载打包的 `/login`（并拦截 `/`、`/login`、`/dashboard*` 与 `/_aivuda_h16/*`）。文件选择器会将非标准 MIME 的 `accept` 归一化为 `*/*` 以兼容 Android 7.1，配置导出通过 `window.h16Station.saveTextFile` 调用 `ACTION_CREATE_DOCUMENT` 保存，剪贴板复制在旧版 WebView 下回退至 `document.execCommand('copy')`。默认网络安全配置同时信任系统与用户安装的 CA 证书。从桌面重新启动时创建新的登录会话。升级验证需覆盖已保存的地址、首次设置地址和登录后打开商店。

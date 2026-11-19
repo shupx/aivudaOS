@@ -1,4 +1,4 @@
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { appState, setLocale } from '../state/appState'
 import { fetchMe, logout } from '../services/core/auth'
@@ -6,6 +6,7 @@ import { fetchMe, logout } from '../services/core/auth'
 export function useDashboard() {
   const route = useRoute()
   const router = useRouter()
+  const userMenuVisible = ref(false)
 
   const sidebarCollapsed = computed(() => appState.sidebarMode !== 'expanded')
   const sidebarMode = computed(() => appState.sidebarMode || 'icon')
@@ -20,7 +21,32 @@ export function useDashboard() {
   const user = computed(() => appState.user)
   const role = computed(() => appState.role)
 
+  function setUserMenuVisible(visible) {
+    userMenuVisible.value = Boolean(visible)
+  }
+
+  function closeUserMenu() {
+    userMenuVisible.value = false
+  }
+
+  function handleOutsideUserMenu(event) {
+    if (!userMenuVisible.value) return
+    const target = event?.target
+    if (target instanceof Element) {
+      if (target.closest('.dashboard-user-menu-trigger') || target.closest('.n-dropdown-menu')) {
+        return
+      }
+    }
+    userMenuVisible.value = false
+  }
+
+  watch(() => route.fullPath, () => {
+    userMenuVisible.value = false
+  })
+
   onMounted(async () => {
+    document.addEventListener('touchstart', handleOutsideUserMenu, true)
+    document.addEventListener('mousedown', handleOutsideUserMenu, true)
     try {
       if (!appState.user) {
         await fetchMe()
@@ -29,6 +55,11 @@ export function useDashboard() {
       logout()
       router.replace('/login')
     }
+  })
+
+  onUnmounted(() => {
+    document.removeEventListener('touchstart', handleOutsideUserMenu, true)
+    document.removeEventListener('mousedown', handleOutsideUserMenu, true)
   })
 
   function collapseSidebar() {
@@ -98,5 +129,8 @@ export function useDashboard() {
     expandSidebar,
     doLogout,
     changeLocale,
+    userMenuVisible,
+    setUserMenuVisible,
+    closeUserMenu,
   }
 }

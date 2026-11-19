@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NCard, NAvatar, NText, NTag, NTooltip } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { DEFAULT_APP_ICON_URL } from '../../utils/appLinks'
 
 const { t } = useI18n()
 
@@ -35,7 +36,7 @@ function goDetail() {
         <div class="store-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
             <NAvatar
-              src="/app-default-icon.png"
+              :src="DEFAULT_APP_ICON_URL"
               :size="40"
               style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
             />

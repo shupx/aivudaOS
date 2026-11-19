@@ -47,6 +47,9 @@ const {
   doLogout,
   changeLocale,
   user,
+  userMenuVisible,
+  setUserMenuVisible,
+  closeUserMenu,
 } = useDashboard()
 
 const sidebarCollapsed = computed(() => sidebarMode.value !== 'expanded')
@@ -155,6 +158,7 @@ const userOptions = computed(() => [
 ])
 
 const handleUserAction = (key) => {
+  closeUserMenu()
   if (key === 'logout') {
     doLogout()
   } else if (key.startsWith('lang-')) {
@@ -229,8 +233,8 @@ function onSidebarDragEnd(event) {
         @update:value="handleUpdateValue"
       />
       <div v-if="!isSidebarHidden" style="padding: 12px; flex-shrink: 0; display: flex; justify-content: center;">
-        <NDropdown trigger="click" placement="top" :options="userOptions" @select="handleUserAction">
-          <NButton quaternary :style="isSidebarExpanded ? 'width: 100%; justify-content: flex-start;' : 'padding: 0; width: 40px;'">
+        <NDropdown trigger="click" placement="top" :show="userMenuVisible" :options="userOptions" @update:show="setUserMenuVisible" @select="handleUserAction">
+          <NButton class="dashboard-user-menu-trigger" quaternary :style="isSidebarExpanded ? 'width: 100%; justify-content: flex-start;' : 'padding: 0; width: 40px;'">
             <NSpace align="center" :size="isSidebarExpanded ? 8 : 0" :wrap="false">
               <NAvatar round size="small" :style="{ backgroundColor: isDarkMode ? '#334155' : '#f1f5f9', color: isDarkMode ? '#fff' : '#000' }">
                 <NIcon><User /></NIcon>

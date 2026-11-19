@@ -12,6 +12,8 @@ import {
 } from '../services/core/apps'
 import { fetchConfigExportMeta, fetchSysConfig, resolveAppStoreBaseUrl, updateSysConfig } from '../services/core/config'
 import { downloadStorePackageForInstall, fetchStoreAppDetail, fetchStoreIndex, MAX_IN_MEMORY_INSTALL_BYTES } from '../services/core/store'
+import { copyText } from '../utils/clipboard'
+import { exportTextFile } from '../utils/fileExport'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 import {
   buildConfigExportFilename,
@@ -600,7 +602,7 @@ export function useAppConfigCenterPage() {
         const values = parseArrayEditorItems(arrayEditorItems.value, arrayEditorItemType.value)
         textToCopy = JSON.stringify(values, null, 2)
       }
-      navigator.clipboard.writeText(textToCopy).then(() => {
+      copyText(textToCopy).then(() => {
         arrayEditorCopySuccess.value = true
         setTimeout(() => {
           arrayEditorCopySuccess.value = false
@@ -1126,16 +1128,11 @@ export function useAppConfigCenterPage() {
         appItems: appItems.value,
       })
       const text = JSON.stringify(doc, null, 2)
-      const blob = new Blob([text], { type: 'application/json;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = buildConfigExportFilename(meta?.avahi_hostname || 'aivudaos')
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      success.value = t('appConfigCenter.exportSuccess')
+      const filename = buildConfigExportFilename(meta?.avahi_hostname || 'aivudaos')
+      const mode = exportTextFile(text, filename, 'application/json;charset=utf-8')
+      success.value = mode === 'native'
+        ? t('appConfigCenter.exportSavePrompt')
+        : t('appConfigCenter.exportSuccess')
       exportModalVisible.value = false
     } catch (err) {
       error.value = String(err?.message || err || t('appConfigCenter.exportFailed'))

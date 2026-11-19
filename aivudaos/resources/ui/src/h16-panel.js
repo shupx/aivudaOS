@@ -13,7 +13,16 @@ document.documentElement.classList.add('h16')
 // Chromium 52 exposes the event propagation path under its original name.
 if (!Event.prototype.composedPath) {
   Event.prototype.composedPath = function () {
-    return Array.from(this.path || [])
+    if (this.path && this.path.length) return Array.from(this.path)
+    const path = []
+    let node = this.target
+    while (node) {
+      path.push(node)
+      node = node.parentNode || node.host || null
+    }
+    if (path.indexOf(document) === -1 && this.target !== window) path.push(document)
+    if (path.indexOf(window) === -1) path.push(window)
+    return path
   }
 }
 
@@ -27,5 +36,28 @@ if (typeof window.InputEvent === 'undefined') {
       this.inputType = init.inputType || ''
       this.isComposing = Boolean(init.isComposing)
     }
+  }
+}
+
+// Chromium 52 lacks Blob/File.prototype.text and arrayBuffer (added in Chrome 76).
+if (typeof Blob !== 'undefined' && !Blob.prototype.text) {
+  Blob.prototype.text = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(reader.error || new Error('Failed to read file'))
+      reader.readAsText(this)
+    })
+  }
+}
+
+if (typeof Blob !== 'undefined' && !Blob.prototype.arrayBuffer) {
+  Blob.prototype.arrayBuffer = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(reader.error || new Error('Failed to read file'))
+      reader.readAsArrayBuffer(this)
+    })
   }
 }

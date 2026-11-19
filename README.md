@@ -164,6 +164,6 @@ Refer to [README_dev.md](README_dev.md)
 
 ## Android ground station
 
-Install `aivuda-station.apk` on an Android 7.1+ controller to manage apps and parameters on an AivudaOS server. Open **Aivuda 地面站**, select the server address, and sign in.
+Install `aivuda-station.apk` on an Android 7.1+ controller to manage apps and parameters on an AivudaOS server. Open **Aivuda Station** (**Aivuda 地面站**), select the server address, and sign in.
 
 [Build, sign and install the APK](android/README.md) · [H16 operator guide](docs/android-h16.md)

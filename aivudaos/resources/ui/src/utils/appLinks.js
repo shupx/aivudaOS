@@ -1,5 +1,7 @@
 import { buildApiPath } from '../services/core/api'
 
+export const DEFAULT_APP_ICON_URL = `${import.meta.env.BASE_URL}app-default-icon.png`
+
 export function appDetailPath(appId) {
   return `/dashboard/apps/${encodeURIComponent(appId)}`
 }

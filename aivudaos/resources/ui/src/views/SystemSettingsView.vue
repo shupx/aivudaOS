@@ -137,15 +137,20 @@ const osTextDrafts = useDeferredFieldDrafts({
               </NButton>
             </div>
             <NAlert v-if="caddyLocalCaHintVisible" type="info">
-              {{ t('systemSettings.caddyLocalCaHintPrefix') }}
-              <a :href="t('systemSettings.caddyLocalCaChromeUrl')" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
-                {{ t('systemSettings.caddyLocalCaChromeUrl') }}
-              </a>
-              {{ t('systemSettings.caddyLocalCaHintMiddle') }}
-              <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
-              {{ t('systemSettings.caddyLocalCaHintImport') }}
-              <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
-              {{ t('systemSettings.caddyLocalCaHintSuffix') }}
+              <template v-if="stationPanel">
+                {{ t('systemSettings.caddyLocalCaAndroidHint') }}
+              </template>
+              <template v-else>
+                {{ t('systemSettings.caddyLocalCaHintPrefix') }}
+                <a :href="t('systemSettings.caddyLocalCaChromeUrl')" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+                  {{ t('systemSettings.caddyLocalCaChromeUrl') }}
+                </a>
+                {{ t('systemSettings.caddyLocalCaHintMiddle') }}
+                <strong>{{ t('systemSettings.caddyLocalCaTrustedCertificates') }}</strong>
+                {{ t('systemSettings.caddyLocalCaHintImport') }}
+                <strong>{{ t('systemSettings.caddyLocalCaImportAction') }}</strong>
+                {{ t('systemSettings.caddyLocalCaHintSuffix') }}
+              </template>
             </NAlert>
           </div>
         </NCard>

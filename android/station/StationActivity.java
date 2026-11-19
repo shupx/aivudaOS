@@ -7,13 +7,17 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Bundle;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.webkit.*;
 import android.widget.*;
 import org.json.JSONObject;
 import java.io.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 /** Hosts the bundled management panel at the selected server's origin so its API,
  * event streams, interactive installation and app UI routes use the desktop protocol. */
@@ -21,16 +25,21 @@ public class StationActivity extends Activity {
     private static final String ASSETS = "/_aivuda_h16/";
     // This reserved origin serves only bundled pages until the user chooses a server.
     private static final String SETUP_ORIGIN = "https://aivuda.invalid";
+    private static final int REQUEST_PICK_FILE = 1;
+    private static final int REQUEST_EXPORT_FILE = 2;
     private WebView web;
     private String origin;
     private String store;
     private ValueCallback<Uri[]> pendingFiles;
+    private String pendingExportText;
+    private boolean sslErrorShown;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         SharedPreferences prefs = getSharedPreferences("panel", MODE_PRIVATE);
         try { origin = address(prefs.getString("origin", "")); }
         catch (Exception invalidStoredAddress) { origin = ""; }
+        // Preserve store address migrated from older station builds.
         store = prefs.getString("store", "");
         open();
     }
@@ -47,7 +56,13 @@ public class StationActivity extends Activity {
     }
 
     private boolean isPageOrigin(Uri uri) {
-        return pageOrigin().equals(uri.getScheme() + "://" + uri.getEncodedAuthority());
+        if (uri == null || uri.getScheme() == null || uri.getHost() == null) return false;
+        String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        int port = uri.getPort();
+        if (("http".equals(scheme) && port == 80) || ("https".equals(scheme) && port == 443)) port = -1;
+        String normalized = port > 0 ? scheme + "://" + host + ":" + port : scheme + "://" + host;
+        return pageOrigin().equals(normalized);
     }
 
     private String address(String text) throws Exception {
@@ -92,6 +107,7 @@ public class StationActivity extends Activity {
 
     private void open() {
         releaseWebView();
+        sslErrorShown = false;
         WebView.setWebContentsDebuggingEnabled(getPackageName().equals(android.provider.Settings.Global.getString(
             getContentResolver(), android.provider.Settings.Global.DEBUG_APP)));
         web = new WebView(this);
@@ -104,6 +120,7 @@ public class StationActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setUseWideViewPort(true);
         settings.setTextZoom(100);
+        web.addJavascriptInterface(new StationBridge(this), "h16Station");
         web.setWebChromeClient(new FileChooser(this));
         web.setDownloadListener((url, ua, disposition, mime, length) -> {
             Uri uri = Uri.parse(url);
@@ -121,14 +138,55 @@ public class StationActivity extends Activity {
         web.loadUrl(pageOrigin() + "/login");
     }
 
+    private void startExportTextFile(String filename, String content) {
+        if (web == null || !isPageOrigin(Uri.parse(web.getUrl() == null ? "" : web.getUrl()))) return;
+        String safeName = filename == null ? "" : filename.trim().replace('\\', '/');
+        int slash = safeName.lastIndexOf('/');
+        if (slash >= 0) safeName = safeName.substring(slash + 1);
+        if (safeName.isEmpty()) safeName = "aivudaos-config.json";
+        pendingExportText = content == null ? "" : content;
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.putExtra(Intent.EXTRA_TITLE, safeName);
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT_FILE);
+        } catch (ActivityNotFoundException e) {
+            pendingExportText = null;
+            new AlertDialog.Builder(this).setMessage(getString(R.string.export_unavailable))
+                .setPositiveButton(android.R.string.ok, null).show();
+        }
+    }
+
+    private static final class StationBridge {
+        final StationActivity owner;
+        StationBridge(StationActivity owner) { this.owner = owner; }
+
+        @JavascriptInterface public void saveTextFile(String filename, String content) {
+            owner.runOnUiThread(() -> owner.startExportTextFile(filename, content));
+        }
+    }
+
     private static final class FileChooser extends WebChromeClient {
         final StationActivity owner;
         FileChooser(StationActivity owner) { this.owner = owner; }
         @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
             if (owner.pendingFiles != null) owner.pendingFiles.onReceiveValue(null);
             owner.pendingFiles = callback;
-            try { owner.startActivityForResult(params.createIntent(), 1); }
-            catch (ActivityNotFoundException e) { callback.onReceiveValue(null); owner.pendingFiles = null; }
+            Intent intent = params.createIntent();
+            String type = intent.getType();
+            if (type == null || !type.contains("/") || type.contains(",")) {
+                intent.setType("*/*");
+            }
+            try { owner.startActivityForResult(intent, REQUEST_PICK_FILE); }
+            catch (ActivityNotFoundException e) {
+                intent.setType("*/*");
+                try { owner.startActivityForResult(intent, REQUEST_PICK_FILE); }
+                catch (ActivityNotFoundException fallbackError) {
+                    callback.onReceiveValue(null);
+                    owner.pendingFiles = null;
+                }
+            }
             return true;
         }
     }
@@ -148,10 +206,28 @@ public class StationActivity extends Activity {
             Uri uri = req.getUrl();
             if (!owner.isPageOrigin(uri) || !"GET".equals(req.getMethod())) return null;
             String path = uri.getPath();
-            if (req.isForMainFrame() && ("/login".equals(path) || "/dashboard".equals(path) || path.startsWith("/dashboard/")))
+            if (path == null) path = "";
+            if (req.isForMainFrame() && (path.isEmpty() || "/".equals(path) || "/login".equals(path)
+                || "/dashboard".equals(path) || path.startsWith("/dashboard/")))
                 return owner.panelFile("index.html");
             if (path.startsWith(ASSETS)) return owner.panelFile(path.substring(ASSETS.length()));
             return null;
+        }
+
+        @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+            handler.cancel();
+            if (owner.sslErrorShown || owner.isFinishing()) return;
+            Uri failedUri = error != null && error.getUrl() != null ? Uri.parse(error.getUrl()) : null;
+            if (failedUri == null || owner.isPageOrigin(failedUri)) {
+                owner.sslErrorShown = true;
+                owner.runOnUiThread(() -> {
+                    if (!owner.isFinishing()) {
+                        new AlertDialog.Builder(owner).setTitle(R.string.error)
+                            .setMessage(R.string.ssl_error)
+                            .setPositiveButton(android.R.string.ok, null).show();
+                    }
+                });
+            }
         }
     }
 
@@ -178,9 +254,23 @@ public class StationActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request == 1 && pendingFiles != null) {
+        if (request == REQUEST_PICK_FILE && pendingFiles != null) {
             pendingFiles.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
             pendingFiles = null;
+        } else if (request == REQUEST_EXPORT_FILE) {
+            String content = pendingExportText;
+            pendingExportText = null;
+            if (result == RESULT_OK && data != null && data.getData() != null && content != null) {
+                try (OutputStream out = getContentResolver().openOutputStream(data.getData())) {
+                    if (out == null) throw new IOException("Unable to open destination file");
+                    out.write(content.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                    Toast.makeText(this, R.string.export_saved, Toast.LENGTH_SHORT).show();
+                } catch (IOException | SecurityException e) {
+                    new AlertDialog.Builder(this).setMessage(getString(R.string.error) + "\n" + e.getMessage())
+                        .setPositiveButton(android.R.string.ok, null).show();
+                }
+            }
         }
     }
 
@@ -203,11 +293,14 @@ public class StationActivity extends Activity {
             pendingFiles.onReceiveValue(null);
             pendingFiles = null;
         }
+        pendingExportText = null;
         if (web != null) {
             web.stopLoading();
+            web.removeJavascriptInterface("h16Station");
             web.setWebChromeClient(null);
             web.setWebViewClient(null);
-            ((android.view.ViewGroup)web.getParent()).removeView(web);
+            ViewParent parent = web.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(web);
             web.destroy();
             web = null;
         }

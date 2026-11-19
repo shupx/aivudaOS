@@ -48,6 +48,6 @@ Run `npm run build:h16` in this directory to inspect the standalone WebView buil
 
 The H16 build uses a wrapping Flexbox board for Chromium 52. The board polls the installed list while visible. Each card tracks its own pending action. The status page reads counts from the same list, and the detail page loads the selected app’s description.
 
-The H16 stylesheet also supplies legacy WebView fallbacks for status cards, detail headers, settings rows, store versions and configuration dialogs. Check the store with a long version tag, and scroll an add-parameter dialog to its footer on the device.
+The H16 stylesheet also supplies legacy WebView fallbacks for status cards, detail headers, settings rows, store versions and configuration dialogs, and disables collapsed sidebar hover tooltips on touchscreens. Shared helpers in `src/utils/` handle base-aware default icons (`appLinks.js`), native H16 config file export (`fileExport.js`), and legacy clipboard fallback (`clipboard.js`). Check the store with a long version tag, and scroll an add-parameter dialog to its footer on the device.
 
 The H16 launcher opens the bundled login page. The address link opens the native server selector. Station credentials use a WebView session, while server selection survives relaunch.

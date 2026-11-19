@@ -180,3 +180,6 @@
 
 .h16 .login-server { display: inline-block; padding: 4px 8px; color: #245b9a; word-break: break-all; }
 .h16 .dark-mode .login-server { color: #93c5fd; }
+
+/* Prevent collapsed sidebar hover tooltips from sticking over touch controls on H16. */
+.h16 .n-menu-tooltip { display: none !important; }

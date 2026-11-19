@@ -3,4 +3,7 @@
     <string name="error">Operation failed</string>
     <string name="endpoint">AivudaOS server address</string>
     <string name="invalid_server">Enter a server IP address or an HTTP(S) URL.</string>
+    <string name="export_saved">Configuration saved</string>
+    <string name="export_unavailable">No file manager is available to save the file.</string>
+    <string name="ssl_error">The server HTTPS certificate is not trusted. Install its CA certificate in Android settings or use an HTTP address.</string>
 </resources>
