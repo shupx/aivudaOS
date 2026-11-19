@@ -1,12 +1,19 @@
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
+import { stationPanel } from '../stationPanel'
+import { LOCALE_KEY } from './preferenceKeys'
 import i18n, { normalizeLocale } from '../i18n'
 
 const TOKEN_KEY = 'aivuda_ui_token'
-const LOCALE_KEY = 'aivuda_ui_locale'
+const tokenStorage = stationPanel ? sessionStorage : localStorage
+if (stationPanel) {
+  // Previous station builds persisted the token between launches.
+  localStorage.removeItem(TOKEN_KEY)
+  if (location.pathname === '/login') tokenStorage.removeItem(TOKEN_KEY)
+}
 const DEFAULT_LOCALE = normalizeLocale(localStorage.getItem(LOCALE_KEY) || 'en-US')
 
 export const appState = reactive({
-  token: localStorage.getItem(TOKEN_KEY) || '',
+  token: tokenStorage.getItem(TOKEN_KEY) || '',
   locale: DEFAULT_LOCALE,
   user: null,
   role: null,
@@ -24,12 +31,14 @@ export const appState = reactive({
   restartBusyById: {},
 })
 
+export const runningAppCount = computed(() => appState.apps.filter(app => app.running).length)
+
 export function setToken(token) {
   appState.token = token || ''
   if (appState.token) {
-    localStorage.setItem(TOKEN_KEY, appState.token)
+    tokenStorage.setItem(TOKEN_KEY, appState.token)
   } else {
-    localStorage.removeItem(TOKEN_KEY)
+    tokenStorage.removeItem(TOKEN_KEY)
   }
 }
 

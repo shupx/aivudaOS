@@ -32,7 +32,7 @@ function goDetail() {
         :style="{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }"
         :content-style="{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, gap: '16px' }"
       >
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+        <div class="store-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
             <NAvatar
               src="/app-default-icon.png"
@@ -48,12 +48,12 @@ function goDetail() {
               </NText>
             </div>
           </div>
-          <div style="flex-shrink: 0;">
+          <div class="store-card-version" style="flex-shrink: 0;">
             <NTag type="info" size="small">{{ item.version || '-' }}</NTag>
           </div>
         </div>
 
-        <div style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; flex: 1;">
+        <div class="store-card-summary" style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; flex: 1;">
           <NText depth="3" style="font-size: 12px;">{{ item.app_id }}</NText>
           <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">
             {{ description || t('store.noDescription') }}

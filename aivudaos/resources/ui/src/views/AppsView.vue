@@ -1,8 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import StationAppCard from '../components/apps/StationAppCard.vue'
 import AppCard from '../components/apps/AppCard.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
+import { stationPanel } from '../stationPanel'
 import { useAppsPanel } from '../composables/useAppsPanel'
 import {
   NSpace,
@@ -32,7 +34,7 @@ import {
 const { t } = useI18n()
 
 const {
-  apps,
+  apps, boardApps, boardToolsOpen, runningCount,
   loading,
   error,
   bulkActionPending,
@@ -97,8 +99,16 @@ const handleSortSelect = (key) => {
 </script>
 
 <template>
-  <section>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
+  <section class="apps-page">
+    <div v-if="stationPanel" class="station-toolbar">
+      <div class="station-heading">
+        <strong>{{ t('apps.boardTitle') }}</strong>
+        <span>{{ t('apps.boardCount', { running: runningCount, total: apps.length }) }}</span>
+      </div>
+      <NInput v-model:value="searchText" clearable size="small" :placeholder="t('apps.boardSearch')" :aria-label="t('apps.boardSearch')" />
+      <NButton size="small" :aria-expanded="boardToolsOpen" @click="boardToolsOpen = !boardToolsOpen">{{ t('apps.boardTools') }}</NButton>
+    </div>
+    <div v-if="!stationPanel || boardToolsOpen" class="apps-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
       <NSpace align="center">
         <NText style="font-size: 20px; font-weight: 600;">{{ t('apps.title') }}</NText>
         <NButton secondary size="small" :loading="loading" @click="refresh">
@@ -112,8 +122,8 @@ const handleSortSelect = (key) => {
       </NButton>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
-      <div style="position: relative; width: 320px; max-width: 100%;">
+    <div v-if="!stationPanel || boardToolsOpen" class="apps-tools" style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
+      <div v-if="!stationPanel" class="apps-search-box" style="position: relative; width: 320px; max-width: 100%;">
         <NInput
           v-model:value="searchText"
           :input-props="{ name: 'apps-search', autocomplete: 'on' }"
@@ -146,7 +156,7 @@ const handleSortSelect = (key) => {
         </NButton>
       </NDropdown>
 
-      <NButton quaternary circle @click="toggleCompactMode" :title="t('apps.compactToggleTooltip')">
+      <NButton v-if="!stationPanel" quaternary circle @click="toggleCompactMode" :title="t('apps.compactToggleTooltip')">
         <template #icon><NIcon><component :is="compactMode ? List : LayoutGrid" /></NIcon></template>
       </NButton>
 
@@ -187,7 +197,12 @@ const handleSortSelect = (key) => {
 
     <NEmpty v-if="!apps.length && !loading" :description="t('apps.noInstalledApps')" style="margin-top: 48px;" />
 
-    <div class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
+    <NEmpty v-if="stationPanel && apps.length && !boardApps.length" :description="t('apps.searchEmpty')" />
+    <div v-if="stationPanel" class="apps-grid station-board">
+      <StationAppCard v-for="app in boardApps" :key="app.app_id" :app="app"
+        :busy="Boolean(busyById[app.app_id])" @toggle-running="toggleRunning" />
+    </div>
+    <div v-else class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
       <AppCard
         v-for="app in apps"
         :key="app.app_id"

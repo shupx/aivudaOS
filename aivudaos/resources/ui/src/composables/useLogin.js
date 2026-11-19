@@ -1,4 +1,5 @@
 import { reactive, ref } from 'vue'
+import { stationPanel } from '../stationPanel'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { markGatewayOnline } from '../state/appState'
@@ -10,20 +11,22 @@ export function useLogin() {
   const busy = ref(false)
   const error = ref('')
 
+  const serverAddress = stationPanel ? window.h16Settings?.server || '' : ''
+  const needsServer = stationPanel && !serverAddress
   const form = reactive({
     username: 'admin',
-    password: 'admin123',
+    password: stationPanel ? '' : 'admin123',
   })
 
   async function submit() {
-    if (busy.value) return
+    if (busy.value || needsServer) return
     busy.value = true
     error.value = ''
     try {
       await login(form.username, form.password)
       await fetchMe()
       markGatewayOnline(true)
-      router.replace('/dashboard')
+      router.replace(router.currentRoute.value.query.next === 'store' ? '/dashboard/store' : '/dashboard')
     } catch (err) {
       markGatewayOnline(false)
       error.value = String(err?.message || err || t('login.failed'))
@@ -33,6 +36,7 @@ export function useLogin() {
   }
 
   return {
+    stationPanel, serverAddress, needsServer,
     form,
     busy,
     error,

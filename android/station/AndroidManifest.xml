@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.aivuda.h16.station" android:versionCode="4" android:versionName="1.3">
+    <uses-sdk android:minSdkVersion="25" android:targetSdkVersion="29"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <application android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/panel_network" android:label="@string/station" android:icon="@drawable/aivuda_icon" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false">
+        <activity android:name="com.aivuda.h16.StationActivity" android:launchMode="singleTop" android:screenOrientation="landscape" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
+    </application>
+</manifest>

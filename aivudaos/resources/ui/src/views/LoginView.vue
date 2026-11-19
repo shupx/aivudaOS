@@ -4,16 +4,17 @@ import { useLogin } from '../composables/useLogin'
 import { NCard, NForm, NFormItem, NInput, NButton, NSpace, NText, NAlert } from 'naive-ui'
 
 const { t } = useI18n()
-const { form, busy, error, submit } = useLogin()
+const { form, busy, error, submit, stationPanel, serverAddress, needsServer } = useLogin()
 </script>
 
 <template>
-  <main style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f4f7f9; padding: 20px;">
+  <main class="login-screen" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f4f7f9; padding: 20px;">
     <NCard style="width: 100%; max-width: 420px;">
       <div style="text-align: center; margin-bottom: 24px;">
         <NText style="font-size: 28px; font-weight: 700;">AivudaOS</NText>
         <div style="margin-top: 8px;">
-           <NText depth="3">{{ t('login.subtitle') }}</NText>
+           <a v-if="stationPanel" class="login-server" href="aivuda-station://server">{{ serverAddress || t('login.chooseServer') }}</a>
+           <NText v-else depth="3">{{ t('login.subtitle') }}</NText>
         </div>
       </div>
 
@@ -23,10 +24,10 @@ const { form, busy, error, submit } = useLogin()
         </NFormItem>
 
         <NFormItem :label="t('login.password')">
-          <NInput v-model:value="form.password" type="password" show-password-on="click" placeholder="admin123" @keyup.enter="submit" />
+          <NInput v-model:value="form.password" type="password" show-password-on="click" :placeholder="stationPanel ? t('login.password') : 'admin123'" @keyup.enter="submit" />
         </NFormItem>
 
-        <NButton type="primary" block :loading="busy" @click="submit" size="large" style="margin-top: 12px;">
+        <NButton type="primary" block :loading="busy" :disabled="needsServer" @click="submit" size="large" style="margin-top: 12px;">
           {{ t('login.login') }}
         </NButton>
 

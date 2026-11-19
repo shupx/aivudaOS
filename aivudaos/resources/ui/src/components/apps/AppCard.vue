@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { buildApiPath } from '../../services/core/api'
+import { appConfigLocation, appDetailPath, appIconUrl } from '../../utils/appLinks'
 import {
   NCard,
   NSpace,
@@ -35,14 +35,14 @@ const { t } = useI18n()
 const description = computed(() => props.app.description || t('appCard.noDescription'))
 const appDisplayName = computed(() => props.app.name || props.app.app_id)
 const hasBuiltInUi = computed(() => Boolean(props.app.has_builtin_ui))
-const builtInUiHref = computed(() => `/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
+const builtInUiHref = computed(() => `${appDetailPath(props.app.app_id)}/ui`)
 const configButtonTitle = computed(() => t('appCard.openConfig', { name: appDisplayName.value }))
 const favoriteTitle = computed(() => props.favorite ? t('appCard.unfavorite') : t('appCard.favorite'))
 const iconSrc = computed(() => {
   if (iconLoadFailed.value) {
     return '/app-default-icon.png'
   }
-  return buildApiPath(`/api/apps/${encodeURIComponent(props.app.app_id)}/icon`)
+  return appIconUrl(props.app.app_id)
 })
 
 watch(
@@ -70,15 +70,12 @@ function onRestartClick() {
 
 function goDetail() {
   if (!props.clickable) return
-  router.push(`/dashboard/apps/${encodeURIComponent(props.app.app_id)}`)
+  router.push(appDetailPath(props.app.app_id))
 }
 
 function goConfigCenter(e) {
   e.stopPropagation()
-  router.push({
-    path: '/dashboard/apps/configs',
-    query: { app_id: props.app.app_id },
-  })
+  router.push(appConfigLocation(props.app.app_id))
 }
 
 function goBuiltInUi() {
@@ -125,7 +122,7 @@ function onIconError() {
       </NIcon>
     </button>
 
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-right: 26px;">
+    <div class="managed-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-right: 26px;">
       <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
         <NAvatar
           :src="iconSrc"
@@ -154,7 +151,7 @@ function onIconError() {
       </div>
     </div>
 
-    <div v-if="!compact" style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; flex: 1;">
+    <div v-if="!compact" class="managed-card-summary" style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; flex: 1;">
       <NText depth="3" style="font-size: 12px;">{{ app.app_id }}</NText>
       <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">
         {{ description }}
@@ -193,6 +190,7 @@ function onIconError() {
         <div class="app-card-action" @click.stop>
           <NText v-if="!compact" class="app-card-action-label" depth="3">{{ t('appCard.start') }}</NText>
           <NSwitch
+            :aria-label="t('appCard.start')"
             :value="Boolean(app.running)"
             :disabled="busy"
             @update:value="onRunningChange"
@@ -202,7 +200,7 @@ function onIconError() {
         </div>
         <div class="app-card-action" @click.stop>
           <NText v-if="!compact" class="app-card-action-label" depth="3">{{ t('appCard.autostart') }}</NText>
-          <NSwitch :value="Boolean(app.autostart)" :disabled="busy" @update:value="onAutostartChange" size="small">
+          <NSwitch :aria-label="t('appCard.autostart')" :value="Boolean(app.autostart)" :disabled="busy" @update:value="onAutostartChange" size="small">
              <template #checked-icon>
                 A
              </template>

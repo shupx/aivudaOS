@@ -5,6 +5,7 @@ import StoreAppCard from '../components/store/StoreAppCard.vue'
 import { useOnlineStorePage } from '../composables/useOnlineStorePage'
 import { NCard, NSpace, NButton, NInput, NText, NAlert, NIcon, NEmpty, NDropdown } from 'naive-ui'
 import { RefreshCw, Search, Send, ExternalLink, Download, ArrowUpDown } from 'lucide-vue-next'
+import { stationPanel } from '../stationPanel'
 
 const { t } = useI18n()
 const {
@@ -41,7 +42,7 @@ const sortOptions = computed(() => [
 </script>
 
 <template>
-  <section>
+  <section class="store-page">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <NText style="font-size: 20px; font-weight: 600;">{{ t('store.title') }}</NText>
       <NButton secondary size="small" :loading="loading" @click="load">
@@ -51,6 +52,8 @@ const sortOptions = computed(() => [
     </div>
 
     <NSpace vertical :size="16" style="margin-bottom: 24px;">
+      <component :is="stationPanel ? 'details' : 'div'" class="store-address">
+        <summary v-if="stationPanel">{{ t('store.addressLabel') }}</summary>
       <NCard>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <NText depth="3" style="font-size: 13px;">{{ t('store.addressLabel') }}</NText>
@@ -97,6 +100,7 @@ const sortOptions = computed(() => [
           </NAlert>
         </div>
       </NCard>
+      </component>
 
       <NCard>
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">

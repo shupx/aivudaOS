@@ -27,6 +27,7 @@ export default {
     languageOptionEn: 'English',
   },
   login: {
+    chooseServer: 'Set server address',
     subtitle: 'Sign in to the control console',
     username: 'Username',
     password: 'Password',
@@ -49,6 +50,13 @@ export default {
     lastSync: 'Last Sync',
   },
   apps: {
+    boardTitle: 'App control',
+    boardCount: '{running} of {total} running',
+    boardSearch: 'Find app',
+    boardTools: 'Tools',
+    boardStop: 'Stop',
+    boardConfig: 'Settings',
+    boardBusy: 'Updating…',
     title: 'Apps',
     restartAutostart: 'Restart Autostart Apps',
     startAutostart: 'Start All Autostart Apps',

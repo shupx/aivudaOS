@@ -1,0 +1,6 @@
+<resources>
+    <string name="station">Aivuda 地面站</string>
+    <string name="error">操作失败</string>
+    <string name="endpoint">aivudaOS 服务地址</string>
+    <string name="invalid_server">请输入服务器 IP 地址或 HTTP(S) 网址。</string>
+</resources>

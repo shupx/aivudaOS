@@ -41,3 +41,13 @@ npm run preview
 ```
 
 前端构建产物会输出到当前目录下的 `dist/`，也就是仓库中的 `aivudaos/resources/ui/dist`，供后端/Caddy 和 wheel 打包统一复用。
+
+### Android 7.1 ground stations
+
+Run `npm run build:h16` in this directory to inspect the standalone WebView build in `android/build/panel/`. During APK packaging the Android build script generates these assets in a temporary directory. The station serves the bundled panel at the configured server origin so the existing API, upload, event stream, and WebSocket routes can be reused. [Build and install the APK](../../../android/README.md) · [H16 operator guide](../../../docs/android-h16.md)
+
+The H16 build uses a wrapping Flexbox board for Chromium 52. The board polls the installed list while visible. Each card tracks its own pending action. The status page reads counts from the same list, and the detail page loads the selected app’s description.
+
+The H16 stylesheet also supplies legacy WebView fallbacks for status cards, detail headers, settings rows, store versions and configuration dialogs. Check the store with a long version tag, and scroll an add-parameter dialog to its footer on the device.
+
+The H16 launcher opens the bundled login page. The address link opens the native server selector. Station credentials use a WebView session, while server selection survives relaunch.

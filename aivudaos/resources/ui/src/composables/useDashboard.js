@@ -2,12 +2,10 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { appState, setLocale } from '../state/appState'
 import { fetchMe, logout } from '../services/core/auth'
-import { useAppsPanel } from './useAppsPanel'
 
 export function useDashboard() {
   const route = useRoute()
   const router = useRouter()
-  const { refresh } = useAppsPanel()
 
   const sidebarCollapsed = computed(() => appState.sidebarMode !== 'expanded')
   const sidebarMode = computed(() => appState.sidebarMode || 'icon')
@@ -27,7 +25,6 @@ export function useDashboard() {
       if (!appState.user) {
         await fetchMe()
       }
-      await refresh()
     } catch {
       logout()
       router.replace('/login')

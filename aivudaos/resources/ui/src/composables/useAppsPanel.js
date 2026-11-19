@@ -1,10 +1,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import i18n from '../i18n'
-import { appState, markGatewayOnline, patchApp, setAppDetail, setApps, setBusy, setRestartBusy } from '../state/appState'
+import { appState, patchApp, runningAppCount, setBusy, setRestartBusy } from '../state/appState'
 import {
-  fetchAppStatus,
-  fetchInstalledApps,
   restartApp,
   restartAutostartApps,
   setAutostart,
@@ -16,7 +14,9 @@ import {
 } from '../services/core/apps'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 
-let pollTimer = null
+import { stationPanel } from '../stationPanel'
+import { refreshInstalledApps } from '../state/installedApps'
+
 const APPS_COMPACT_MODE_STORAGE_KEY = 'aivuda_ui_apps_compact_mode'
 const FAVORITE_APP_IDS_STORAGE_KEY = 'aivuda_ui_favorite_app_ids'
 
@@ -34,124 +34,6 @@ function writeFavoriteAppIds(appIds) {
   localStorage.setItem(FAVORITE_APP_IDS_STORAGE_KEY, JSON.stringify(appIds))
 }
 
-function mergeAppsWithDetail(items) {
-  return items.map((item) => {
-    const detail = appState.appDetailsById[item.app_id]
-    const description = detail?.manifest?.description || ''
-    return {
-      ...item,
-      description,
-    }
-  })
-}
-
-async function hydrateDescriptions(apps) {
-  const missingIds = apps
-    .filter((item) => !appState.appDetailsById[item.app_id])
-    .map((item) => item.app_id)
-
-  await Promise.all(
-    missingIds.map(async (appId) => {
-      try {
-        const detail = await fetchAppStatus(appId)
-        setAppDetail(appId, detail)
-      } catch {
-      }
-    }),
-  )
-}
-
-async function refresh() {
-  appState.appsLoading = true
-  appState.appsError = ''
-  try {
-    const items = await fetchInstalledApps()
-    await hydrateDescriptions(items)
-    setApps(mergeAppsWithDetail(items))
-    markGatewayOnline(true)
-  } catch (err) {
-    appState.appsError = String(err?.message || err || i18n.global.t('errors.loadFailed'))
-    markGatewayOnline(false)
-  } finally {
-    appState.appsLoading = false
-  }
-}
-
-async function toggleRunning(app, nextValue) {
-  const appId = app.app_id
-  const previousValue = Boolean(app.running)
-  patchApp(appId, { running: Boolean(nextValue) })
-  setBusy(appId, true)
-
-  try {
-    let operation = null
-    if (nextValue) {
-      operation = await startApp(appId)
-    } else {
-      operation = await stopApp(appId)
-    }
-    if (operation?.operation_id) {
-      await waitForAppOperation(operation.operation_id)
-    }
-    await refresh()
-  } catch (err) {
-    patchApp(appId, { running: previousValue })
-    appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
-  } finally {
-    setBusy(appId, false)
-  }
-}
-
-async function toggleAutostart(app, nextValue) {
-  const appId = app.app_id
-  const previousValue = Boolean(app.autostart)
-  patchApp(appId, { autostart: Boolean(nextValue) })
-  setBusy(appId, true)
-
-  try {
-    await setAutostart(appId, nextValue)
-    await refresh()
-  } catch (err) {
-    patchApp(appId, { autostart: previousValue })
-    appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
-  } finally {
-    setBusy(appId, false)
-  }
-}
-
-async function restartSingleApp(app) {
-  const appId = app?.app_id
-  if (!appId) return
-
-  setBusy(appId, true)
-  setRestartBusy(appId, true)
-  try {
-    const operation = await restartApp(appId)
-    if (operation?.operation_id) {
-      await waitForAppOperation(operation.operation_id)
-    }
-    await refresh()
-  } catch (err) {
-    appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
-  } finally {
-    setRestartBusy(appId, false)
-    setBusy(appId, false)
-  }
-}
-
-function startPolling() {
-  if (pollTimer) return
-  pollTimer = setInterval(() => {
-    refresh()
-  }, 3000)
-}
-
-function stopPolling() {
-  if (!pollTimer) return
-  clearInterval(pollTimer)
-  pollTimer = null
-}
-
 function isAppsPollingRoute(path) {
   const value = String(path || '')
   if (!value.startsWith('/dashboard/apps')) {
@@ -166,6 +48,73 @@ function isAppsPollingRoute(path) {
 export function useAppsPanel() {
   const route = useRoute()
   const router = useRouter()
+
+  function refresh() {
+    const appId = route.params.appId
+    return refreshInstalledApps({ appId, allDescriptions: !stationPanel && !appId })
+  }
+
+  async function toggleRunning(app, nextValue) {
+    const appId = app.app_id
+    const previousValue = Boolean(app.running)
+    patchApp(appId, { running: Boolean(nextValue) })
+    setBusy(appId, true)
+
+    try {
+      let operation = null
+      if (nextValue) {
+        operation = await startApp(appId)
+      } else {
+        operation = await stopApp(appId)
+      }
+      if (operation?.operation_id) {
+        await waitForAppOperation(operation.operation_id)
+      }
+      await refresh()
+    } catch (err) {
+      patchApp(appId, { running: previousValue })
+      appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
+    } finally {
+      setBusy(appId, false)
+    }
+  }
+
+  async function toggleAutostart(app, nextValue) {
+    const appId = app.app_id
+    const previousValue = Boolean(app.autostart)
+    patchApp(appId, { autostart: Boolean(nextValue) })
+    setBusy(appId, true)
+
+    try {
+      await setAutostart(appId, nextValue)
+      await refresh()
+    } catch (err) {
+      patchApp(appId, { autostart: previousValue })
+      appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
+    } finally {
+      setBusy(appId, false)
+    }
+  }
+
+  async function restartSingleApp(app) {
+    const appId = app?.app_id
+    if (!appId) return
+
+    setBusy(appId, true)
+    setRestartBusy(appId, true)
+    try {
+      const operation = await restartApp(appId)
+      if (operation?.operation_id) {
+        await waitForAppOperation(operation.operation_id)
+      }
+      await refresh()
+    } catch (err) {
+      appState.appsError = String(err?.message || err || i18n.global.t('errors.operationFailed'))
+    } finally {
+      setRestartBusy(appId, false)
+      setBusy(appId, false)
+    }
+  }
 
   const storedSortOption = localStorage.getItem('APPS_SORT_OPTION') || 'name'
   const storedSortDesc = localStorage.getItem('APPS_SORT_DESC')
@@ -204,6 +153,12 @@ export function useAppsPanel() {
   const restartBusyById = computed(() => appState.restartBusyById)
   const bulkActionPending = ref('')
   const searchText = ref('')
+  const boardToolsOpen = ref(false)
+  const boardApps = computed(() => {
+    const query = searchText.value.trim().toLowerCase()
+    if (!query) return apps.value
+    return apps.value.filter(app => [app.name, app.app_id].some(value => String(value || '').toLowerCase().includes(query)))
+  })
   const storedCompactMode = localStorage.getItem(APPS_COMPACT_MODE_STORAGE_KEY)
   const compactMode = ref(storedCompactMode === null ? true : storedCompactMode === '1')
   const highlightedAppId = ref('')
@@ -255,20 +210,19 @@ export function useAppsPanel() {
     },
   })
 
-  onMounted(() => {
+  let pollTimer = null
+  function syncPolling() {
+    clearInterval(pollTimer)
+    if (document.hidden || !isAppsPollingRoute(route.path)) return
     refresh()
+    pollTimer = setInterval(() => {
+      if (!document.hidden && !appState.appsLoading) refresh()
+    }, 3000)
+  }
 
-    watch(
-      () => route.path,
-      (path) => {
-        if (isAppsPollingRoute(path)) {
-          startPolling()
-          return
-        }
-        stopPolling()
-      },
-      { immediate: true },
-    )
+  onMounted(() => {
+    syncPolling()
+    document.addEventListener('visibilitychange', syncPolling)
 
     if (isAppsPollingRoute(route.path) && String(route.query?.openUpload || '') === '1') {
       uploadModal.openUploadModal()
@@ -281,7 +235,8 @@ export function useAppsPanel() {
   })
 
   onUnmounted(() => {
-    stopPolling()
+    clearInterval(pollTimer)
+    document.removeEventListener('visibilitychange', syncPolling)
     document.removeEventListener('pointerdown', handlePointerDown)
     if (highlightTimer) {
       clearTimeout(highlightTimer)
@@ -289,14 +244,16 @@ export function useAppsPanel() {
     }
   })
 
-  watch(
-    () => searchText.value,
-    (next) => {
-      const hasKeyword = Boolean(String(next || '').trim())
-      searchDropdownVisible.value = hasKeyword
-      activeSearchIndex.value = hasKeyword && searchResults.value.length ? 0 : -1
-    },
-  )
+  if (!stationPanel) {
+    watch(
+      () => searchText.value,
+      (next) => {
+        const hasKeyword = Boolean(String(next || '').trim())
+        searchDropdownVisible.value = hasKeyword
+        activeSearchIndex.value = hasKeyword && searchResults.value.length ? 0 : -1
+      },
+    )
+  }
 
   watch(
     () => compactMode.value,
@@ -474,7 +431,7 @@ export function useAppsPanel() {
   }
 
   return {
-    apps,
+    apps, boardApps, boardToolsOpen, runningCount: runningAppCount,
     loading,
     error,
     busyById,

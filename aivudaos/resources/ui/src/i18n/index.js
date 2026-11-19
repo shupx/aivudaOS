@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { LOCALE_KEY } from '../state/preferenceKeys'
 import enUS from './locales/en-US'
 import zhCN from './locales/zh-CN'
 
@@ -13,7 +14,7 @@ export function normalizeLocale(locale) {
 
 const i18n = createI18n({
   legacy: false,
-  locale: normalizeLocale(localStorage.getItem('aivuda_ui_locale') || 'en-US'),
+  locale: normalizeLocale(localStorage.getItem(LOCALE_KEY) || 'en-US'),
   fallbackLocale: 'en-US',
   messages: {
     'zh-CN': zhCN,

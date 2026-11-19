@@ -1,0 +1,6 @@
+<resources>
+    <string name="station">Aivuda Station</string>
+    <string name="error">Operation failed</string>
+    <string name="endpoint">AivudaOS server address</string>
+    <string name="invalid_server">Enter a server IP address or an HTTP(S) URL.</string>
+</resources>

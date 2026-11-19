@@ -22,6 +22,14 @@ aivudaos/resources/ui/.vite-temp/
 *.db-wal
 *.db-shm
 
+# Android packages and local signing keys
+*.apk
+!/android/apk/aivuda-station.apk
+*.idsig
+*.keystore
+*.jks
+*.p12
+
 # Env / secrets
 .env
 .env.*

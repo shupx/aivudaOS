@@ -1,4 +1,5 @@
 <script setup>
+import { stationPanel } from '../stationPanel'
 import { useI18n } from 'vue-i18n'
 import SwitchToggle from '../components/apps/SwitchToggle.vue'
 import { useSystemSettingsPage } from '../composables/useSystemSettingsPage'
@@ -77,7 +78,7 @@ const osTextDrafts = useDeferredFieldDrafts({
 </script>
 
 <template>
-  <section>
+  <section class="settings-page">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <NText style="font-size: 20px; font-weight: 600;">{{ t('systemSettings.title') }}</NText>
       <NButton secondary size="small" :loading="loading || saving" @click="load">
@@ -308,7 +309,7 @@ const osTextDrafts = useDeferredFieldDrafts({
         <div class="field">
           <label for="apt-sources-text">{{ t('systemSettings.aptSourcesEditorLabel') }}</label>
           <div class="apt-editor-shell">
-            <pre ref="aptEditorHighlightRef" class="apt-editor-highlight"><span
+            <pre v-if="!stationPanel" ref="aptEditorHighlightRef" class="apt-editor-highlight"><span
               v-for="line in aptSourceLines"
               :key="line.key"
               :class="line.comment ? 'apt-line-comment' : 'apt-line-normal'"

@@ -45,7 +45,7 @@ router.beforeEach((to) => {
     return '/dashboard/apps'
   }
   if (to.path !== '/login' && !isAuthed) {
-    return '/login'
+    return to.path === '/dashboard/store' ? { path: '/login', query: { next: 'store' } } : '/login'
   }
   return true
 })

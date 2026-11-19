@@ -431,7 +431,7 @@ export function useAppDetailPage() {
   function startLogPolling() {
     if (logTimer) return
     logTimer = setInterval(() => {
-      loadLogs()
+      if (!document.hidden) loadLogs()
     }, 2000)
   }
 

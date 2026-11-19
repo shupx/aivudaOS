@@ -27,6 +27,7 @@ export default {
     languageOptionEn: 'English',
   },
   login: {
+    chooseServer: '设置服务器地址',
     subtitle: '登录系统控制台',
     username: '用户名',
     password: '密码',
@@ -49,6 +50,13 @@ export default {
     lastSync: '最近同步',
   },
   apps: {
+    boardTitle: '应用控制',
+    boardCount: '{running} / {total} 运行中',
+    boardSearch: '查找应用',
+    boardTools: '工具',
+    boardStop: '停止',
+    boardConfig: '参数',
+    boardBusy: '处理中…',
     title: '应用菜单',
     restartAutostart: '重启自启动应用',
     startAutostart: '启动所有自启动应用',

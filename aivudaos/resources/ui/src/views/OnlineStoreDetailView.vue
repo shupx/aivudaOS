@@ -46,7 +46,7 @@ const {
 </script>
 
 <template>
-  <section>
+  <section class="release-page">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <NSpace align="center">
         <NButton quaternary circle @click="backToStore" :title="t('store.backToStore')">
@@ -92,7 +92,7 @@ const {
                 @click="downloadAndInstallVersion(version.version)"
               >
                 <template #icon><NIcon><Download /></NIcon></template>
-                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <span class="release-install-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                   {{ t('store.downloadAndInstall') }}
                 </span>
               </NButton>

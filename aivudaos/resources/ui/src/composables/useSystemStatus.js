@@ -1,5 +1,6 @@
-import { computed } from 'vue'
-import { appState } from '../state/appState'
+import { computed, onMounted } from 'vue'
+import { refreshInstalledApps } from '../state/installedApps'
+import { appState, runningAppCount } from '../state/appState'
 import { fetchAivudaosServiceStatus } from '../services/core/config'
 
 let versionLoadPromise = null
@@ -21,13 +22,13 @@ async function ensureAivudaosVersionLoaded() {
 
 export function useSystemStatus() {
   void ensureAivudaosVersionLoaded()
+  onMounted(refreshInstalledApps)
 
   const user = computed(() => appState.user)
   const role = computed(() => appState.role)
   const aivudaosVersion = computed(() => appState.aivudaosVersion)
   const gatewayOnline = computed(() => appState.gatewayOnline)
   const totalApps = computed(() => appState.apps.length)
-  const runningApps = computed(() => appState.apps.filter((item) => Boolean(item.running)).length)
   const autostartApps = computed(() => appState.apps.filter((item) => Boolean(item.autostart)).length)
   const lastSyncAt = computed(() => appState.lastSyncAt)
 
@@ -37,7 +38,7 @@ export function useSystemStatus() {
     aivudaosVersion,
     gatewayOnline,
     totalApps,
-    runningApps,
+    runningApps: runningAppCount,
     autostartApps,
     lastSyncAt,
   }

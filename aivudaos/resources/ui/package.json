@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:h16": "vite build --mode h16 --config vite.h16.config.js",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,7 +18,10 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "@vitejs/plugin-legacy": "^7.2.1",
     "@vitejs/plugin-vue": "^6.0.2",
+    "resize-observer-polyfill": "^1.5.1",
+    "terser": "^5.51.2",
     "vite": "^7.3.1"
   }
 }

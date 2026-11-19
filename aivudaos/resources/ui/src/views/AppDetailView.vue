@@ -74,7 +74,7 @@ const {
 </script>
 
 <template>
-  <section>
+  <section class="app-detail-page">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <NSpace align="center">
         <NButton quaternary circle @click="backToList" :title="t('appDetail.backToList')">

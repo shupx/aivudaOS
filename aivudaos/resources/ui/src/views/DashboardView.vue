@@ -215,7 +215,7 @@ function onSidebarDragEnd(event) {
       :show-trigger="false"
       content-style="display: flex; flex-direction: column; position: relative; overflow-x: hidden;"
     >
-      <div style="height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+      <div class="sidebar-brand" style="height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
         <NText depth="1" style="font-size: 18px; font-weight: 600" v-if="isSidebarExpanded">AivudaOS</NText>
         <NText depth="1" style="font-size: 18px; font-weight: 600" v-else-if="isSidebarIconOnly">AOS</NText>
       </div>
@@ -273,7 +273,7 @@ function onSidebarDragEnd(event) {
     </NLayoutSider>
     <NLayout :style="isDarkMode ? '' : 'background-color: #f4f7f9;'">
       <NLayoutContent position="absolute" style="top: 0; bottom: 0; background-color: transparent;">
-        <div style="padding: 24px; min-height: 100%; box-sizing: border-box; position: relative;">
+        <div class="dashboard-page" :class="{ 'sidebar-hidden': isSidebarHidden }" style="padding: 24px; min-height: 100%; box-sizing: border-box; position: relative;">
           <div
             v-if="isSidebarHidden"
             class="dashboard-sidebar-hidden-toggle"
