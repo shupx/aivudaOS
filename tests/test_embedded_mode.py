@@ -134,6 +134,7 @@ class EmbeddedModeTests(unittest.TestCase):
 
             ui_caddy = workspace / "generated" / "example.ui.caddy"
             self.assertIn("/example/ui", ui_caddy.read_text())
+            self.assertIn("header Cache-Control no-store", ui_caddy.read_text())
             self.assertIn(str(custom_route), caddyfile.read_text())
             self.assertIn(str(ui_caddy), caddyfile.read_text())
             reload_caddy.assert_called_once_with(

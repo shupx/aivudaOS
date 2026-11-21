@@ -16,7 +16,8 @@ export function useAppBuiltInUiPage() {
     if (!appId.value) return ''
     const base = buildAppBuiltInUiEntryUrl(appId.value)
     const separator = base.includes('?') ? '&' : '?'
-    return `${base}${separator}_ts=${reloadTick.value}`
+    // Each opening must bypass entry documents cached by older gateways.
+    return `${base}${separator}_ts=${Date.now()}-${reloadTick.value}`
   })
 
   function onFrameLoad() {
