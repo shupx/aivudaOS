@@ -4,7 +4,7 @@ import SwitchToggle from '../components/apps/SwitchToggle.vue'
 import { useSystemSettingsPage } from '../composables/useSystemSettingsPage'
 import { useDeferredFieldDrafts } from '../composables/useDeferredFieldDrafts'
 import {
-  NCard, NSpace, NButton, NText, NAlert, NIcon, NGrid, NGi, NTag, NModal, NInput, NInputNumber, NCheckbox, NSelect, NDataTable
+  NCard, NSpace, NButton, NText, NAlert, NIcon, NGrid, NGi, NTag, NModal, NInput, NCheckbox, NSelect, NDataTable
 } from 'naive-ui'
 import { RefreshCw, Download, Play, Square, Trash2, RotateCcw } from 'lucide-vue-next'
 
@@ -58,7 +58,7 @@ const {
   requestWriteAptSources,
   requestRestoreAptSources,
   submitAptAction,
-  ros2Detected, savedDomain, domainDraft, domainReadonly, domainRows, saveDomain,
+  ros2Detected, savedDomain, domainRows, domainSettingsLink,
   environmentRows,
   environmentSaving,
   addEnvironmentRow,
@@ -217,11 +217,10 @@ const osTextDrafts = useDeferredFieldDrafts({
         <NCard :title="t('appConfigCenter.systemTitle')">
           <h3>{{ t('systemSettings.rosDomain') }}</h3>
           <NSpace align="center">
-            <label for="ros-domain-input">{{ t('systemSettings.domainDefault') }}</label>
-            <NInputNumber v-model:value="domainDraft" :input-props="{ id: 'ros-domain-input' }"
-              :min="0" :max="232" :precision="0" :disabled="loading || saving || domainReadonly" />
-            <NButton size="small" type="primary" :disabled="loading || saving || domainReadonly || domainDraft === savedDomain || domainDraft === null"
-              @click="saveDomain">{{ t('systemSettings.saveDomain') }}</NButton>
+            <NText>{{ t('systemSettings.domainDefault') }} <strong>{{ savedDomain ?? '—' }}</strong></NText>
+            <RouterLink :to="domainSettingsLink" custom v-slot="{ href, navigate }">
+              <NButton tag="a" :href="href" size="small" @click="navigate">{{ t('systemSettings.editDomains') }}</NButton>
+            </RouterLink>
           </NSpace>
           <p><NText depth="3">{{ t('systemSettings.domainHint') }}</NText></p>
           <div class="table-wrap">
@@ -232,7 +231,7 @@ const osTextDrafts = useDeferredFieldDrafts({
                   <td :title="row.appId">{{ row.name }}</td><td>{{ row.domain ?? '—' }}</td>
                   <td>{{ t('systemSettings.domainSources.' + row.source) }} <code v-if="row.path">{{ row.path }}</code></td>
                 </tr>
-                <tr v-if="!domainRows.length"><td colspan="3">{{ t('apps.noInstalledApps') }}</td></tr>
+                <tr v-if="!domainRows.length"><td colspan="3">{{ t('systemSettings.noDomainFields') }}</td></tr>
               </tbody>
             </table>
           </div>

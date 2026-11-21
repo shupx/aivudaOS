@@ -332,6 +332,8 @@ or service processes. The fixture includes a detached child ignoring SIGTERM.
 
 ## ROS 2 Domain
 
+系统设置的只读摘要和配置中心的专用编辑区使用同一套字段发现规则。应用参数可通过配置路径、schema 说明或 `x-ros-domain` 标记发现，详见应用管理文档。
+
 ROS 2 主机通过 `ROS_VERSION=2`、PATH 上的 `ros2` 或 `/opt/ros/*/bin/ros2` 识别。系统参数 `sys.ros2_default_domain_id` 存放在 `config/sys.yaml`，可通过现有系统参数 API 读写并随系统参数导入、导出。首次初始化时优先使用已有的 `runtime_environment.ROS_DOMAIN_ID`，其次使用服务环境中的值，均未设置时为 0。后续启动环境使用系统参数，应用入口可覆盖该值。更新会刷新 systemd 单元，现有进程继续使用启动时的环境。
 
 ## App 额外环境变量

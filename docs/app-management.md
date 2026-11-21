@@ -125,7 +125,8 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 配置说明：
 
 - `config/os.yaml`：系统运行参数（如 `runtime_process_manager`、`runtime_systemd_scope`、`avahi_hostname`），不参与磁吸。
-- ROS 2 主机在系统设置的「系统参数」中管理全局 Domain ID（0–232）。应用列表使用激活版本的配置，并列出覆盖值及其字段路径。缺省值和表示继承的 `-1` 使用全局值。表格展示启动配置，正在运行的进程需在下次启动时取得新的默认值。
+- ROS 2 主机在系统设置中只读汇总全局默认值和应用实际声明的 Domain 参数。点击「前往配置参数修改」可在配置中心的「ROS 2 通信域参数」中保存全局值或应用字段。磁吸绑定字段的修改会同步到列出的绑定项。应用下次启动时使用新的配置。
+- 新安装包可使用任意命名空间的 `domain_id`、`ros_domain_id`、数值型 `domain` 等字段。自定义字段可在 JSON Schema 中添加 `"x-ros-domain": true`，或在标题、说明中指明 `ROS_DOMAIN_ID`。页面读取激活版本的 schema、默认配置和当前配置，显示原字段路径。未声明 Domain 的应用不会生成占位行。
 - `config/sys.yaml`：公用业务参数（支持增删改），参与磁吸；默认包含 `role.id=1`。active app 的 schema 中若声明 `sys.*` 参数（如 `sys.robot_type`、`sys.aaa.bbb`），磁吸重算会在缺失时自动补齐到 System Parameters，并保留对应 schema 以便 UI 展示类型/范围/描述。这些自动补齐的 system parameters 不会因为 app 卸载、删除或切换 active 版本而自动删除。
 
 ```

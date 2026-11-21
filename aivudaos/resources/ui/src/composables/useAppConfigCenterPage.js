@@ -13,6 +13,7 @@ import {
 import { fetchConfigExportMeta, fetchSysConfig, resolveAppStoreBaseUrl, updateSysConfig } from '../services/core/config'
 import { downloadStorePackageForInstall, fetchStoreAppDetail, fetchStoreIndex, MAX_IN_MEMORY_INSTALL_BYTES } from '../services/core/store'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
+import { appDomainRows, GLOBAL_DOMAIN_PATH, ROS_DOMAIN_SECTION } from '../services/core/rosDomains'
 import { copyText } from '../services/core/clipboard'
 import {
   buildConfigExportFilename,
@@ -311,8 +312,63 @@ export function useAppConfigCenterPage() {
     return result
   })
 
+  const ros2Detected = ref(false)
+  const domainSaving = ref(false)
+  const domainRows = computed(() => {
+    if (!ros2Detected.value) return []
+    const global = systemRows.value.find(row => row.path === GLOBAL_DOMAIN_PATH)
+    const fields = appDomainRows(appItems.value, global?.value).map(field => ({
+      ...field, scope: 'app', appName: field.name, appVersion: appVersionByApp.value[field.appId], needRestart: field.schemaObj.need_restart,
+    }))
+    if (global) fields.unshift({ ...global, appName: t('systemSettings.domainDefault') })
+    for (const field of fields) {
+      const paths = field.scope === 'sys' ? sysReadonlyPaths.value : readonlyPathsByApp.value[field.appId] || []
+      field.readonly = field.schemaObj?.readOnly || paths.some(path => path === field.path || field.path.startsWith(path + '.'))
+      if (field.readonly && !field.schemaObj?.readOnly) {
+        field.magnet = magnets.value.find(group => group.path === field.path && group.bindings?.some(binding =>
+          binding.path === field.path && (field.scope === 'sys' ? binding.kind === 'sys' : binding.app_id === field.appId)))
+      }
+    }
+    return fields
+  })
+  const domainPaths = computed(() => new Set(domainRows.value.map(cellErrorKey)))
+  const ordinarySystemRows = computed(() => systemRows.value.filter(row => !domainPaths.value.has(cellErrorKey(row))))
+
+  async function saveDomainValue(row, text) {
+    if (domainSaving.value || (row.readonly && !row.magnet)) return false
+    const schema = row.schemaObj || {}
+    const min = Math.max(row.scope === 'sys' ? 0 : -1, schema.minimum ?? -1)
+    const max = Math.min(232, schema.maximum ?? 232)
+    const number = Number(text)
+    const value = row.type === 'string' ? String(text) : number
+    if (!/^-?\d+$/.test(String(text)) || !Number.isSafeInteger(number) ||
+        number < min || number > max || (schema.enum && !schema.enum.includes(value))) {
+      error.value = t('systemSettings.domainInvalid', { min, max })
+      return false
+    }
+    domainSaving.value = true
+    try {
+      if (row.magnet) {
+        setMagnetValue(row.magnet, value)
+        return await saveMagnetChanges(row.magnet)
+      }
+      return await applyValue(row, value)
+    } finally {
+      domainSaving.value = false
+    }
+  }
+
+  watch([ros2Detected, () => route.hash], async ([enabled, hash]) => {
+    if (enabled && hash === '#' + ROS_DOMAIN_SECTION) {
+      await nextTick()
+      const section = document.getElementById(ROS_DOMAIN_SECTION)
+      section?.focus({ preventScroll: true })
+      section?.scrollIntoView({ block: 'start' })
+    }
+  }, { flush: 'post' })
+
   const appTreeRows = computed(() => {
-    const tree = buildAppParamTree(rows.value)
+    const tree = buildAppParamTree(rows.value.filter(row => !domainPaths.value.has(cellErrorKey(row))))
     ensureGroupCollapsedState(tree)
     return flattenTreeForDisplay(tree, collapsedGroups.value)
   })
@@ -372,6 +428,7 @@ export function useAppConfigCenterPage() {
 
       applyMagnetSnapshot(data || {})
 
+      ros2Detected.value = Boolean(sysData?.ros2_detected)
       sysDraftData.value = deepClone(sysData?.data || {})
       sysOriginalData.value = deepClone(sysData?.data || {})
       sysVersion.value = Number(sysData?.version || 0)
@@ -442,7 +499,7 @@ export function useAppConfigCenterPage() {
       return nestedGet(sysDraftData.value || {}, row.path)
     }
     const appData = draftByApp.value[row.appId] || {}
-    return nestedGet(appData, row.path)
+    return nestedGet(appData, row.segments || row.path)
   }
 
   function getCellError(row) {
@@ -761,6 +818,9 @@ export function useAppConfigCenterPage() {
         sysOriginalData.value = deepClone(nextData)
         await loadAllConfigs()
         success.value = t('appConfigCenter.autoSyncSuccess')
+        if (resp.runtime_environment_refresh_errors?.length) {
+          error.value = t('systemSettings.environmentRefreshFailed', { errors: resp.runtime_environment_refresh_errors.join('; ') })
+        }
       } catch (err) {
         sysDraftData.value = beforeData
         error.value = String(err?.message || err || t('appConfigCenter.saveFailed'))
@@ -771,7 +831,7 @@ export function useAppConfigCenterPage() {
 
     const beforeAppData = deepClone(draftByApp.value[row.appId] || {})
     const appData = deepClone(draftByApp.value[row.appId] || {})
-    nestedSet(appData, row.path, nextValue)
+    nestedSet(appData, row.segments || row.path, nextValue)
     draftByApp.value = {
       ...draftByApp.value,
       [row.appId]: appData,
@@ -2236,7 +2296,8 @@ export function useAppConfigCenterPage() {
     setSelectedAppId,
     rows,
     appTreeRows,
-    systemRows,
+    systemRows: ordinarySystemRows,
+    ros2Detected, domainRows, domainSaving, saveDomainValue,
     magnets,
     magnetConflicts,
     magnetSaving,
@@ -2970,10 +3031,10 @@ function schemaFormErrorMessage(code, t) {
 
 function nestedGet(data, dottedPath) {
   if (!dottedPath) return data
-  const segments = String(dottedPath).split('.')
+  const segments = Array.isArray(dottedPath) ? dottedPath : String(dottedPath).split('.')
   let cursor = data
   for (const segment of segments) {
-    if (!isRecord(cursor) || !(segment in cursor)) {
+    if (!cursor || typeof cursor !== 'object' || !Object.hasOwn(cursor, segment)) {
       return undefined
     }
     cursor = cursor[segment]
@@ -2995,7 +3056,7 @@ function hasNestedPath(data, dottedPath) {
 }
 
 function nestedSet(data, dottedPath, value) {
-  const segments = String(dottedPath || '').split('.').filter(Boolean)
+  const segments = Array.isArray(dottedPath) ? dottedPath : String(dottedPath || '').split('.').filter(Boolean)
   if (!segments.length) {
     return
   }
@@ -3003,8 +3064,8 @@ function nestedSet(data, dottedPath, value) {
   let cursor = data
   for (let index = 0; index < segments.length - 1; index += 1) {
     const key = segments[index]
-    if (!isRecord(cursor[key])) {
-      cursor[key] = {}
+    if (!Object.hasOwn(cursor, key) || (!isRecord(cursor[key]) && !Array.isArray(cursor[key]))) {
+      cursor[key] = typeof segments[index + 1] === 'number' ? [] : {}
     }
     cursor = cursor[key]
   }

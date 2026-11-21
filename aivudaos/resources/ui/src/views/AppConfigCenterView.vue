@@ -7,6 +7,7 @@ import { useResizableConfigTable } from '../composables/useResizableConfigTable'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 import ParameterValueInput from '../components/app-config-center/ParameterValueInput.vue'
+import { ROS_DOMAIN_SECTION } from '../services/core/rosDomains'
 import { parameterHistoryKey } from '../services/core/parameterValueHistory'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
@@ -44,6 +45,7 @@ const {
   selectedAppId,
   appTreeRows,
   systemRows,
+  ros2Detected, domainRows, domainSaving, saveDomainValue,
   magnets,
   magnetConflicts,
   magnetCollapsed,
@@ -203,6 +205,12 @@ const {
   setInteractiveMaskInput,
 } = useAppConfigCenterPage()
 
+const domainDrafts = useDeferredFieldDrafts({
+  buildKey: row => JSON.stringify([row.appId, row.segments || row.path, row.appVersion]),
+  getCommittedValue: row => String(getCellValue(row) ?? row.value ?? ''),
+  commitDraftValue: saveDomainValue,
+})
+
 const systemTextDrafts = useDeferredFieldDrafts({
   buildKey: systemRowDraftKey,
   getCommittedValue: (row) => displayValue(row),
@@ -275,6 +283,34 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         :value-to-inline-text="valueToInlineText"
       />
     </div>
+
+    <article v-if="ros2Detected" :id="ROS_DOMAIN_SECTION" tabindex="-1"
+      class="actions-panel config-center-section config-center-shell" style="scroll-margin-top: 6rem">
+      <header class="log-header"><h3>{{ t('systemSettings.domainSection') }}</h3></header>
+      <p>{{ t('systemSettings.domainHint') }}</p>
+      <div class="table-wrap">
+        <table class="config-table compact" style="width: 100%">
+          <thead><tr>
+            <th>{{ t('systemSettings.domainApp') }}</th><th>{{ t('appConfigCenter.colPath') }}</th>
+            <th>Domain ID</th><th>{{ t('appConfigCenter.colAction') }}</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="row in domainRows" :key="JSON.stringify([row.appId, row.segments || row.path])">
+              <td>{{ row.appName }}</td><td class="mono-cell">{{ row.path }}</td>
+              <td>
+                <input class="input" type="number" step="1" :aria-label="row.appName + ' ' + row.path"
+                  :value="domainDrafts.getDraftValue(row)" :disabled="domainSaving || (row.readonly && !row.magnet)"
+                  @input="domainDrafts.setDraftValue(row, $event.target.value)"
+                  @keyup.enter="domainDrafts.commitDraft(row)">
+                <small v-if="row.magnet">{{ t('systemSettings.domainShared') }} · {{ getMagnetBindingsText(row.magnet.bindings) }}</small>
+              </td>
+              <td><NButton size="small" :disabled="loading || domainSaving || (row.readonly && !row.magnet) || !domainDrafts.hasDraft(row)"
+                @click="domainDrafts.commitDraft(row)">{{ t('systemSettings.saveDomain') }}</NButton></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
 
     <article class="actions-panel config-center-section config-center-shell">
       <header class="log-header">

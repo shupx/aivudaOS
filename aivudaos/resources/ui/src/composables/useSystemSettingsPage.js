@@ -2,7 +2,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { fetchActiveAppConfigs } from '../services/core/apps'
-import { appDomainRows } from '../services/core/rosDomains'
+import { appDomainRows, ROS_DOMAIN_SECTION } from '../services/core/rosDomains'
 import { logout } from '../services/core/auth'
 import {
   buildCaddyLocalCaDownloadUrl,
@@ -11,7 +11,6 @@ import {
   fetchAivudaosServiceStatus,
   fetchOsConfig,
   fetchSysConfig,
-  updateSysConfig,
   fetchSudoNopasswdSetting,
   restoreAptSourcesBackup,
   setAivudaosServiceAutostart,
@@ -47,10 +46,8 @@ export function useSystemSettingsPage() {
   const sysConfig = ref(null)
   const ros2Detected = computed(() => Boolean(sysConfig.value?.ros2_detected))
   const savedDomain = computed(() => sysConfig.value?.data?.sys?.ros2_default_domain_id ?? null)
-  const domainDraft = ref(null)
   const domainApps = ref([])
   const domainRows = computed(() => appDomainRows(domainApps.value, savedDomain.value))
-  const domainReadonly = computed(() => sysConfig.value?.readonly_paths?.includes('sys.ros2_default_domain_id'))
   const environmentRows = ref([])
   const environmentSaving = ref(false)
   
@@ -103,7 +100,6 @@ export function useSystemSettingsPage() {
         fetchSysConfig(),
       ])
       sysConfig.value = sysData
-      domainDraft.value = savedDomain.value
       username.value = String(data?.username || '')
       enabled.value = Boolean(data?.enabled)
       serviceInstalled.value = Boolean(serviceData?.installed)
@@ -122,34 +118,6 @@ export function useSystemSettingsPage() {
       error.value = String(err?.message || err || t('systemSettings.loadFailed'))
     } finally {
       loading.value = false
-    }
-  }
-
-  async function saveDomain() {
-    const value = domainDraft.value
-    if (saving.value || loading.value || domainReadonly.value || !ros2Detected.value) return
-    if (!Number.isInteger(value) || value < 0 || value > 232) {
-      error.value = t('systemSettings.domainRange')
-      return
-    }
-    const current = sysConfig.value
-    saving.value = true
-    error.value = ''
-    success.value = ''
-    successLinks.value = []
-    try {
-      const data = { ...current.data, sys: { ...current.data.sys, ros2_default_domain_id: value } }
-      const result = await updateSysConfig(data, current.version)
-      sysConfig.value = await fetchSysConfig()
-      domainDraft.value = savedDomain.value
-      success.value = t('systemSettings.domainSaved')
-      if (result.runtime_environment_refresh_errors?.length) {
-        error.value = t('systemSettings.environmentRefreshFailed', { errors: result.runtime_environment_refresh_errors.join('; ') })
-      }
-    } catch (err) {
-      error.value = String(err?.message || t('systemSettings.osSaveFailed'))
-    } finally {
-      saving.value = false
     }
   }
 
@@ -231,7 +199,6 @@ export function useSystemSettingsPage() {
       }
       const data = await updateSudoNopasswdSetting(pendingToggleValue.value, sudoPassword.value)
       sysConfig.value = sysData
-      domainDraft.value = savedDomain.value
       username.value = String(data?.username || username.value || '')
       enabled.value = Boolean(data?.enabled)
       success.value = t('systemSettings.saveSuccess')
@@ -654,7 +621,7 @@ export function useSystemSettingsPage() {
     requestWriteAptSources,
     requestRestoreAptSources,
     submitAptAction,
-    ros2Detected, savedDomain, domainDraft, domainReadonly, domainRows, saveDomain,
+    ros2Detected, savedDomain, domainRows, domainSettingsLink: { path: '/dashboard/apps/configs', hash: `#${ROS_DOMAIN_SECTION}` },
     environmentRows,
     environmentSaving,
     addEnvironmentRow,
