@@ -58,6 +58,7 @@ const {
   requestWriteAptSources,
   requestRestoreAptSources,
   submitAptAction,
+  ros2Detected, savedDomain, domainRows, domainSettingsLink,
   environmentRows,
   environmentSaving,
   addEnvironmentRow,
@@ -208,6 +209,31 @@ const osTextDrafts = useDeferredFieldDrafts({
                 @update:model-value="toggleServiceAutostart"
               />
             </div>
+          </div>
+        </NCard>
+      </NGi>
+
+      <NGi v-if="ros2Detected">
+        <NCard :title="t('appConfigCenter.systemTitle')">
+          <h3>{{ t('systemSettings.rosDomain') }}</h3>
+          <NSpace align="center">
+            <NText>{{ t('systemSettings.domainDefault') }} <strong>{{ savedDomain ?? '—' }}</strong></NText>
+            <RouterLink :to="domainSettingsLink" custom v-slot="{ href, navigate }">
+              <NButton tag="a" :href="href" size="small" @click="navigate">{{ t('systemSettings.editDomains') }}</NButton>
+            </RouterLink>
+          </NSpace>
+          <p><NText depth="3">{{ t('systemSettings.domainHint') }}</NText></p>
+          <div class="table-wrap">
+            <table class="config-table compact" style="width: 100%">
+              <thead><tr><th>{{ t('systemSettings.domainApp') }}</th><th>Domain ID</th><th>{{ t('systemSettings.domainSource') }}</th></tr></thead>
+              <tbody>
+                <tr v-for="row in domainRows" :key="row.appId + ':' + row.path">
+                  <td :title="row.appId">{{ row.name }}</td><td>{{ row.domain ?? '—' }}</td>
+                  <td>{{ t('systemSettings.domainSources.' + row.source) }} <code v-if="row.path">{{ row.path }}</code></td>
+                </tr>
+                <tr v-if="!domainRows.length"><td colspan="3">{{ t('systemSettings.noDomainFields') }}</td></tr>
+              </tbody>
+            </table>
           </div>
         </NCard>
       </NGi>

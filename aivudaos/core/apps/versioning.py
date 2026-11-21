@@ -2,12 +2,28 @@ from __future__ import annotations
 
 import os
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional
+from threading import Lock
+from typing import Iterator, List, Optional
+from uuid import uuid4
 
 from aivudaos.core.db.connection import db_conn
-from aivudaos.core.errors import NotFoundError
+from aivudaos.core.errors import NotFoundError, PackageFormatError
 from aivudaos.core.paths import APPS_DIR, APP_RUNTIME_DATA_DIR
+
+
+_active_link_lock = Lock()
+
+
+def _replace_active_link(link: Path, target: str) -> None:
+    pending = link.with_name(".active-" + uuid4().hex)
+    pending.symlink_to(target)
+    try:
+        pending.replace(link)
+    except BaseException:
+        pending.unlink(missing_ok=True)
+        raise
 
 
 class VersioningService:
@@ -58,18 +74,37 @@ class VersioningService:
             ).fetchall()
         return [row["version"] for row in rows]
 
+    def _active_target(self, app_id: str, version: str) -> str:
+        directory = self.version_dir(app_id, version)
+        if not directory.exists():
+            raise NotFoundError(f"Version {version} is not installed for {app_id}")
+        return str(directory.relative_to(self.app_dir(app_id)))
+
     def activate_version(self, app_id: str, version: str) -> None:
         """Point the 'active' symlink to the specified version."""
-        ver_dir = self.version_dir(app_id, version)
-        if not ver_dir.exists():
-            raise NotFoundError(f"Version {version} is not installed for {app_id}")
+        with _active_link_lock:
+            _replace_active_link(self.active_link(app_id), self._active_target(app_id, version))
 
+    @contextmanager
+    def activate_candidate(self, app_id: str, version: str) -> Iterator[None]:
+        """Restore the previous target if publication fails and this link is still active."""
         link = self.active_link(app_id)
-        relative_target = Path("versions") / version
-
-        if link.is_symlink() or link.exists():
-            link.unlink()
-        link.symlink_to(relative_target)
+        with _active_link_lock:
+            if link.exists() and not link.is_symlink():
+                raise PackageFormatError(f"Active version is not a symlink: {link}")
+            previous = os.readlink(link) if link.is_symlink() else None
+            candidate = self._active_target(app_id, version)
+            _replace_active_link(link, candidate)
+        try:
+            yield
+        except BaseException:
+            with _active_link_lock:
+                if candidate != previous and link.is_symlink() and os.readlink(link) == candidate:
+                    if previous is None:
+                        link.unlink()
+                    else:
+                        _replace_active_link(link, previous)
+            raise
 
     def prepare_version_dir(self, app_id: str, version: str) -> Path:
         """Create and return the version directory for installation."""

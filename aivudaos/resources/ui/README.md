@@ -75,3 +75,18 @@ Online Store 导航图标右上角显示可更新的已安装 App 数量（超�
 版本比较按数字段及 SemVer 预发布规则进行，忽略构建元数据；未知格式或缺失版本不会触发更新提醒。当前商店索引没有设备兼容性字段，提示依据已发布版本，不额外推断设备兼容性。业务逻辑位于 `useStoreUpdates.js` 和 `services/core/storeUpdates.js`，中英文词条位于 `i18n/locales/`。
 
 验证：在 aivudaOS 目录运行 `node --test tests/test_store_updates_ui.mjs`，在 UI 目录运行 `npm run build`。
+
+## ROS 2 系统参数
+
+系统设置仅在服务端识别到 ROS 2 时显示 Domain ID。系统设置显示只读摘要，可直接跳转到配置中心的「ROS 2 通信域参数」区编辑全局值和应用声明的 Domain 字段。没有保存配置时，包内提供的域值显示为默认值；域在数组中时，父级只读绑定同样生效。非 ROS 的文本标识（例如身份提供方 UUID）仍使用普通文本编辑器。
+
+免密 sudo 开关以服务端确认的状态为准：密码错误或取消时保留旧状态，保存成功后更新开关并关闭弹窗。浏览器回归使用模拟 API，不修改真实 sudo 设置；在 ACEswarm 开发环境构建 UI 后，从 aivudaOS 根目录运行 `node --test tests/browser/test_sudo_settings.mjs`（使用已安装的 Chrome 可设 `PLAYWRIGHT_CHANNEL=chrome`）。
+
+## 导入与日志恢复
+
+- 全局 Domain 配置已保存、但有 systemd unit 刷新失败时，导入结果会显示失败详情。先修正相应应用的配置或写入权限，再刷新 unit；无需重复导入已经写入的应用参数。
+- 应用详情的「清空显示」只向服务端请求末尾偏移，不下载历史日志，也不删除文件。若获取偏移失败，下一次轮询从上次已知的偏移恢复，而不是跳过断线期间的输出。构建 UI 后可运行 `node --test tests/browser/test_app_log_recovery.mjs` 验证。
+
+## 设备网卡配置
+
+声明 `x-device-ipv4` 的配置组可以选择网卡和源 IPv4。通过普通参数或磁吸区更换网卡、目的地址时，对应的可编辑源地址会恢复为 `auto`，由其他磁吸组管理的源地址保留原值。已保存的离线选项不妨碍修改其他参数；配置可保存不代表网络当前可用。

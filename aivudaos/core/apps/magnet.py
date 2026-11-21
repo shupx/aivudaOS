@@ -3,20 +3,34 @@ from __future__ import annotations
 import json
 import time
 from copy import deepcopy
-from pathlib import Path
+from dataclasses import dataclass
+from functools import cached_property
+from threading import Lock
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
 from aivudaos.core.apps.config_validation import validate_config_data
+from aivudaos.core.apps.device_network import NetworkSnapshot
+from aivudaos.core.apps.network_schema import device_ipv4_fields
 from aivudaos.core.apps.versioning import VersioningService
 from aivudaos.core.config.filelock import atomic_write_text, get_lock
 from aivudaos.core.config.models import VersionedConfig
-from aivudaos.core.config.ros_domain import is_ros_domain_field
+from aivudaos.core.config.ros_domain import contains_ros_domain_field
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.db.connection import db_conn
 from aivudaos.core.errors import ConfigVersionConflictError, InvalidConfigError, NotFoundError
 from aivudaos.core.paths import MAGNET_CONFIG_PATH
+
+
+@dataclass
+class _AppDefinition:
+    schema: Dict[str, Any]
+    defaults: Dict[str, Any]
+
+    @cached_property
+    def leaves(self) -> Dict[str, Dict[str, Any]]:
+        return _flatten_schema_leaves(self.schema)
 
 
 class MagnetService:
@@ -25,6 +39,7 @@ class MagnetService:
     def __init__(self, config_service: ConfigService, versioning_service: VersioningService) -> None:
         self._config = config_service
         self._versioning = versioning_service
+        self._write_lock = Lock()  # Serialize registry changes and their dependent app writes.
 
     def list_groups(self) -> Dict[str, Any]:
         cfg = self._read_registry()
@@ -38,23 +53,7 @@ class MagnetService:
         }
 
     def readonly_paths_for_app(self, app_id: str, app_version: str) -> Set[str]:
-        groups = self.list_groups().get("items") or []
-        readonly: Set[str] = set()
-        for group in groups:
-            if not isinstance(group, dict):
-                continue
-            for binding in group.get("bindings") or []:
-                if not isinstance(binding, dict):
-                    continue
-                if (
-                    binding.get("kind") == "app"
-                    and binding.get("app_id") == app_id
-                    and binding.get("app_version") == app_version
-                ):
-                    path = str(binding.get("path") or "").strip()
-                    if path:
-                        readonly.add(path)
-        return readonly
+        return app_binding_paths(self.list_groups()["items"]).get((app_id, app_version), set())
 
     def readonly_paths_for_sys(self) -> Set[str]:
         groups = self.list_groups().get("items") or []
@@ -95,16 +94,21 @@ class MagnetService:
                 blocked.append(path)
         return blocked
 
-    def recompute(self, updated_by: str = "system") -> Dict[str, Any]:
+    def recompute(self, updated_by: str = "system", *, network: Optional[NetworkSnapshot] = None) -> Dict[str, Any]:
+        with self._write_lock:
+            return self._recompute(updated_by, network or NetworkSnapshot())
+
+    def _recompute(self, updated_by: str, network: NetworkSnapshot) -> Dict[str, Any]:
         current = self._read_registry()
-        self._ensure_sys_parameters_for_app_sys_paths(updated_by)
+        definitions = {key: self._app_definition(*key) for key in self._list_active_apps()}
+        self._ensure_sys_parameters_for_app_sys_paths(updated_by, definitions)
         previous_groups = {
             str(g.get("path")): g
             for g in (current.data.get("groups") or [])
             if isinstance(g, dict) and g.get("path")
         }
 
-        discovered = self._collect_candidates()
+        discovered = self._collect_candidates(definitions)
         next_groups: List[Dict[str, Any]] = []
         conflicts: List[Dict[str, Any]] = []
 
@@ -130,7 +134,8 @@ class MagnetService:
             # valid, rather than failing activation or partially applying a group.
             try:
                 for entry in entries:
-                    validate_config_data(value, entry.get("schema"))
+                    _require_non_domain_values(entry["domain_path"], entry.get("schema"), value)
+                    validate_config_data(value, entry.get("schema"), previous_data=entry.get("saved_value"), network=network)
             except InvalidConfigError as exc:
                 conflicts.append({
                     "path": path,
@@ -151,8 +156,9 @@ class MagnetService:
                 }
             )
 
+        bound_paths = app_binding_paths(next_groups)
         for group in next_groups:
-            self._apply_group_value(group, updated_by)
+            self._apply_group_value(group, updated_by, bound_paths, network, definitions)
 
         updated = self._write_registry(
             {
@@ -177,7 +183,17 @@ class MagnetService:
         expected_version: int,
         updated_by: str,
     ) -> Dict[str, Any]:
+        with self._write_lock:
+            return self._update_group_value(group_id, value, expected_version, updated_by)
+
+    def _update_group_value(
+        self, group_id: str, value: Any, expected_version: int, updated_by: str,
+    ) -> Dict[str, Any]:
         current = self._read_registry()
+        if expected_version != current.version:
+            raise ConfigVersionConflictError(
+                f"Magnet config version conflict, expected {expected_version}, current {current.version}"
+            )
         groups = list(current.data.get("groups") or [])
 
         target_index = -1
@@ -199,9 +215,7 @@ class MagnetService:
         target["value"] = value
         groups[target_index] = target
 
-        for group in groups:
-            if isinstance(group, dict):
-                self._apply_group_value(group, updated_by)
+        self._apply_group_value(target, updated_by, app_binding_paths(groups), NetworkSnapshot())
 
         updated = self._write_registry(
             {
@@ -218,27 +232,29 @@ class MagnetService:
             "version": updated.version,
         }
 
-    def _ensure_sys_parameters_for_app_sys_paths(self, updated_by: str) -> None:
+    def _app_definition(self, app_id: str, version: str, *, need_defaults: bool = True) -> _AppDefinition:
+        manifest = self._get_manifest(app_id, version)
+        defaults = self._config.get_app_default_config(
+            app_id, version, fallback=manifest.get("default_config") or {},
+        ) if need_defaults else {}
+        return _AppDefinition(manifest.get("config_schema") or {}, defaults)
+
+    def _ensure_sys_parameters_for_app_sys_paths(self, updated_by: str, definitions: Dict[Tuple[str, str], _AppDefinition]) -> None:
         sys_cfg = self._config.get_sys_config()
         sys_data = deepcopy(sys_cfg.data)
         sys_schema_map = _read_sys_schema_map(sys_data)
         changed = False
 
-        for app_id, app_version in self._list_active_apps():
+        for (app_id, app_version), definition in definitions.items():
             app_cfg = self._config.get_app_config(app_id, app_version)
-            manifest = self._get_manifest(app_id, app_version)
-            schema = manifest.get("config_schema") or {}
-            defaults = self._config.get_app_default_config(
-                app_id,
-                app_version,
-                fallback=manifest.get("default_config") or {},
-            )
+            defaults = definition.defaults
             current_data = app_cfg.data if app_cfg.version > 0 else {}
 
-            for path, leaf_schema in _flatten_schema_leaves(schema).items():
+            for path, leaf_schema in definition.leaves.items():
                 if not path.startswith("sys."):
                     continue
-                if is_ros_domain_field(path, leaf_schema, _nested_get(current_data, path) if _nested_has(current_data, path) else _nested_get(defaults, path)):
+                domain_path = _domain_field_path(path, current_data, defaults)
+                if _app_leaf_contains_domain(domain_path, leaf_schema, _nested_get(current_data, path), _nested_get(defaults, path)):
                     continue
 
                 if not _nested_has(sys_data, path):
@@ -281,7 +297,7 @@ class MagnetService:
 
         return entries[0].get("value")
 
-    def _collect_candidates(self) -> Dict[str, List[Dict[str, Any]]]:
+    def _collect_candidates(self, definitions: Dict[Tuple[str, str], _AppDefinition]) -> Dict[str, List[Dict[str, Any]]]:
         discovered: Dict[str, List[Dict[str, Any]]] = {}
 
         sys_cfg = self._config.get_sys_config().data
@@ -289,33 +305,31 @@ class MagnetService:
         for path in _flatten_leaf_paths(sys_cfg):
             value = _nested_get(sys_cfg, path)
             schema = sys_schema_map.get(path)
-            if is_ros_domain_field(path, schema, value):
+            domain_path = _domain_field_path(path, sys_cfg)
+            if contains_ros_domain_field(domain_path, schema, value):
                 continue
             inferred_type = _extract_schema_type(schema) or _infer_type_name(value)
             discovered.setdefault(path, []).append(
                 {
                     "kind": "sys",
                     "path": path,
+                    "domain_path": domain_path,
+                    "saved_value": value,
                     "value": value,
                     "schema": schema,
                     "type_name": inferred_type,
                 }
             )
 
-        for app_id, app_version in self._list_active_apps():
+        for (app_id, app_version), definition in definitions.items():
             app_cfg = self._config.get_app_config(app_id, app_version)
-            manifest = self._get_manifest(app_id, app_version)
-            schema = manifest.get("config_schema") or {}
-            defaults = self._config.get_app_default_config(
-                app_id,
-                app_version,
-                fallback=manifest.get("default_config") or {},
-            )
+            defaults = definition.defaults
             source = app_cfg.data if app_cfg.version > 0 else defaults
 
-            for path, leaf_schema in _flatten_schema_leaves(schema).items():
+            for path, leaf_schema in definition.leaves.items():
                 value = _nested_get(source, path)
-                if is_ros_domain_field(path, leaf_schema, value):
+                domain_path = _domain_field_path(path, source, defaults)
+                if _app_leaf_contains_domain(domain_path, leaf_schema, value, _nested_get(defaults, path)):
                     continue
                 inferred_type = _extract_schema_type(leaf_schema) or _infer_type_name(value)
                 discovered.setdefault(path, []).append(
@@ -324,6 +338,8 @@ class MagnetService:
                         "app_id": app_id,
                         "app_version": app_version,
                         "path": path,
+                        "domain_path": domain_path,
+                        "saved_value": value if app_cfg.version > 0 else None,
                         "schema": leaf_schema,
                         "value": value,
                         "type_name": inferred_type,
@@ -332,64 +348,55 @@ class MagnetService:
 
         return discovered
 
-    def _apply_group_value(self, group: Dict[str, Any], updated_by: str) -> None:
-        path = str(group.get("path") or "").strip()
+    def _apply_group_value(
+        self, group: Dict[str, Any], updated_by: str,
+        bound_paths: Dict[Tuple[str, str], Set[str]], network: NetworkSnapshot,
+        definitions: Optional[Dict[Tuple[str, str], _AppDefinition]] = None,
+    ) -> None:
         value = group.get("value")
-        if not path:
-            return
-
+        app_updates = []
+        sys_update = None
         for binding in group.get("bindings") or []:
-            if not isinstance(binding, dict):
+            if not isinstance(binding, dict) or not binding.get("path"):
                 continue
-            kind = str(binding.get("kind") or "")
-            target_path = str(binding.get("path") or "").strip()
-            if not target_path:
-                continue
-
-            if kind == "sys":
+            path = binding["path"]
+            if binding.get("kind") == "sys":
                 cfg = self._config.get_sys_config()
-                sys_data = dict(cfg.data)
-                _nested_set(sys_data, target_path, value)
-                self._config.update_sys_config(
-                    sys_data,
-                    expected_version=cfg.version,
-                    username=updated_by,
-                )
+                _require_non_domain_values(_domain_field_path(path, cfg.data), _read_sys_schema_map(cfg.data).get(path),
+                                           _nested_get(cfg.data, path), value)
+                if not _nested_has(cfg.data, path) or _nested_get(cfg.data, path) != value:
+                    data = deepcopy(cfg.data)
+                    _nested_set(data, path, value)
+                    sys_update = (data, cfg.version)
                 continue
+            if binding.get("kind") != "app":
+                continue
+            app_id, version = binding.get("app_id"), binding.get("app_version")
+            if not app_id or not version:
+                continue
+            cfg = self._config.get_app_config(app_id, version)
+            definition = (definitions[(app_id, version)] if definitions is not None
+                          else self._app_definition(app_id, version, need_defaults=not cfg.version))
+            schema = definition.schema
+            before = cfg.data if cfg.version else definition.defaults
+            leaf_schema = _nested_get(schema, "properties." + path.replace(".", ".properties."))
+            _require_non_domain_values(_domain_field_path(path, before), leaf_schema, _nested_get(before, path), value)
+            if _nested_has(before, path) and _nested_get(before, path) == value:
+                continue  # Recompute must not clear an intentionally selected source address.
+            data = deepcopy(before)
+            _nested_set(data, path, value)
+            _reset_network_source(data, schema, path, bound_paths[(app_id, version)])
+            validate_config_data(
+                data, schema, previous_data=cfg.data if cfg.version > 0 else None,
+                network=network, context=f"magnet {app_id}@{version}",
+            )
+            app_updates.append((app_id, version, data, cfg.version))
 
-            if kind == "app":
-                app_id = str(binding.get("app_id") or "").strip()
-                app_version = str(binding.get("app_version") or "").strip()
-                if not app_id or not app_version:
-                    continue
-
-                cfg = self._config.get_app_config(app_id, app_version)
-                data = dict(cfg.data)
-                if cfg.version == 0:
-                    manifest = self._get_manifest(app_id, app_version)
-                    data = self._config.get_app_default_config(
-                        app_id,
-                        app_version,
-                        fallback=manifest.get("default_config") or {},
-                    )
-
-                _nested_set(data, target_path, value)
-
-                manifest = self._get_manifest(app_id, app_version)
-                schema = manifest.get("config_schema") or {}
-                validate_config_data(
-                    data,
-                    schema,
-                    context=f"magnet {app_id}@{app_version}",
-                )
-
-                self._config.update_app_config(
-                    app_id,
-                    app_version,
-                    data,
-                    expected_version=cfg.version,
-                    updated_by=updated_by,
-                )
+        # Validate all recipients before a rejected edit can modify the first app.
+        if sys_update is not None:
+            self._config.update_sys_config(*sys_update, username=updated_by)
+        for app_id, version, data, revision in app_updates:
+            self._config.update_app_config(app_id, version, data, revision, updated_by=updated_by)
 
     def _read_registry(self) -> VersionedConfig:
         path = MAGNET_CONFIG_PATH
@@ -487,6 +494,30 @@ class MagnetService:
         if not row or not row["manifest"]:
             raise NotFoundError(f"Manifest not found: {app_id}@{app_version}")
         return json.loads(str(row["manifest"]))
+
+
+def _require_non_domain_values(path: str, schema: Any, *values: Any) -> None:
+    if any(contains_ros_domain_field(path, schema, value) for value in values):
+        raise InvalidConfigError(f"Cannot synchronize ROS domain parameters at {path}")
+
+
+def _domain_field_path(path: str, *sources: dict) -> str:
+    parent, _, key = path.rpartition(".")
+    if key == "value":  # name/value or key/value environment records
+        for data in sources:
+            record = _nested_get(data, parent) if parent else data
+            if isinstance(record, dict):
+                label = record.get("name") or record.get("key")
+                if isinstance(label, str):
+                    return parent + "." + label if parent else label
+    return path
+
+
+def _app_leaf_contains_domain(path: str, schema: dict, value: Any, default: Any) -> bool:
+    if contains_ros_domain_field(path, schema, value if value is not None else default):
+        return True
+    # An emptied array may still contain domains in the package configuration.
+    return isinstance(default, list) and default != value and contains_ros_domain_field(path, schema, default)
 
 
 def _flatten_schema_leaves(schema: Any, parent: str = "") -> Dict[str, Dict[str, Any]]:
@@ -603,6 +634,32 @@ def _infer_type_name(value: Any) -> str:
     if isinstance(value, dict):
         return "object"
     return "unknown"
+
+
+def app_binding_paths(groups: List[Dict[str, Any]]) -> Dict[Tuple[str, str], Set[str]]:
+    paths: Dict[Tuple[str, str], Set[str]] = {}
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        for binding in group.get("bindings") or []:
+            if not isinstance(binding, dict) or binding.get("kind") != "app":
+                continue
+            key = (binding.get("app_id"), binding.get("app_version"))
+            path = str(binding.get("path") or "").strip()
+            if path and all(key):
+                paths.setdefault(key, set()).add(path)
+    return paths
+
+
+def _reset_network_source(data: Dict[str, Any], schema: Dict[str, Any], path: str, bound: Set[str]) -> None:
+    group, _, field = path.partition(".")
+    props = schema.get("properties")
+    fields = device_ipv4_fields(props.get(group)) if isinstance(props, dict) else None
+    if fields is None:
+        return
+    nic, addr, dest = fields
+    if field in (nic, dest) and group not in bound and f"{group}.{addr}" not in bound:
+        data[group][addr] = "auto"
 
 
 def _binding_of(item: Dict[str, Any]) -> Dict[str, Any]:

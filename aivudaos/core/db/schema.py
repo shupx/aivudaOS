@@ -26,6 +26,7 @@ def init_db() -> None:
                 running INTEGER NOT NULL DEFAULT 0,
                 autostart INTEGER NOT NULL DEFAULT 0,
                 pid INTEGER,
+                process_identity TEXT,
                 last_started_at INTEGER,
                 last_stopped_at INTEGER
             )
@@ -36,6 +37,10 @@ def init_db() -> None:
             "CREATE TABLE IF NOT EXISTS app_share ("
             "id INTEGER PRIMARY KEY, digest TEXT NOT NULL, expires INTEGER NOT NULL)"
         )
+
+        # Older PID-only rows cannot establish ownership of a current process.
+        if not any(row[1] == "process_identity" for row in conn.execute("PRAGMA table_info(app_runtime)")):
+            conn.execute("ALTER TABLE app_runtime ADD COLUMN process_identity TEXT")
 
         # Migration: add manifest column to existing databases
         try:

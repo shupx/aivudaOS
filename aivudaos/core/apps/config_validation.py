@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
+from aivudaos.core.apps.device_network import NetworkSnapshot
 from aivudaos.core.errors import InvalidConfigError
 
 
@@ -28,15 +29,19 @@ SUPPORTED_SCHEMA_KEYS = {
 }
 
 
-def validate_config_data(data: Any, schema: Optional[Dict[str, Any]], *, context: str = "config") -> None:
+def validate_config_data(
+    data: Any, schema: Optional[Dict[str, Any]], *, context: str = "config",
+    previous_data: Any = None, network: Optional[NetworkSnapshot] = None,
+) -> None:
+    """previous_data is the trusted saved config, not the incoming payload."""
     if schema is None:
         return
     if not isinstance(schema, dict):
         raise InvalidConfigError(f"{context} schema must be an object")
-    _validate_value(data, schema, path="$")
+    _validate_value(data, schema, "$", previous_data, network or NetworkSnapshot())
 
 
-def _validate_value(value: Any, schema: Dict[str, Any], *, path: str) -> None:
+def _validate_value(value: Any, schema: Dict[str, Any], path: str, previous: Any, network: NetworkSnapshot) -> None:
     expected_type = schema.get("type")
     if expected_type is not None:
         _validate_type(value, expected_type, path)
@@ -44,19 +49,33 @@ def _validate_value(value: Any, schema: Dict[str, Any], *, path: str) -> None:
     if "enum" in schema:
         enum_values = schema.get("enum")
         if isinstance(enum_values, list) and value not in enum_values:
-            raise InvalidConfigError(f"{path} must be one of {enum_values}")
+            # A saved choice at this exact path survives unplugging. New
+            # choices outside the packaged snapshot must exist on the device.
+            if not _allowed_network_choice(value, previous, schema.get("x-device-choice"), network):
+                raise InvalidConfigError(f"{path} must be one of {enum_values}")
 
     _validate_value_constraints(value, schema, path)
 
     if isinstance(value, dict):
-        _validate_object(value, schema, path)
+        _validate_object(value, schema, path, previous, network)
         return
 
     if isinstance(value, list):
-        _validate_array(value, schema, path)
+        _validate_array(value, schema, path, previous, network)
 
 
-def _validate_object(value: Dict[str, Any], schema: Dict[str, Any], path: str) -> None:
+def _allowed_network_choice(value: Any, previous: Any, provider: Any, network: NetworkSnapshot) -> bool:
+    if not isinstance(value, str) or provider not in ("interface", "address"):
+        return False
+    if value == previous:
+        return True
+    if provider == "interface":
+        return value in network.cards
+    return any(value in card["addresses"] for card in network.cards.values())
+
+
+def _validate_object(value: Dict[str, Any], schema: Dict[str, Any], path: str,
+                     previous: Any, network: NetworkSnapshot) -> None:
     required = schema.get("required") or []
     if isinstance(required, list):
         for key in required:
@@ -70,7 +89,8 @@ def _validate_object(value: Dict[str, Any], schema: Dict[str, Any], path: str) -
                 continue
             if not isinstance(child_schema, dict):
                 continue
-            _validate_value(value[key], child_schema, path=f"{path}.{key}")
+            saved = previous.get(key) if isinstance(previous, dict) else None
+            _validate_value(value[key], child_schema, f"{path}.{key}", saved, network)
 
     additional = schema.get("additionalProperties", True)
     if additional is False and isinstance(properties, dict):
@@ -79,7 +99,8 @@ def _validate_object(value: Dict[str, Any], schema: Dict[str, Any], path: str) -
             raise InvalidConfigError(f"{path} has unknown keys: {', '.join(unknown)}")
 
 
-def _validate_array(value: List[Any], schema: Dict[str, Any], path: str) -> None:
+def _validate_array(value: List[Any], schema: Dict[str, Any], path: str,
+                    previous: Any, network: NetworkSnapshot) -> None:
     min_items = schema.get("minItems")
     if isinstance(min_items, int) and len(value) < min_items:
         raise InvalidConfigError(f"{path} must have at least {min_items} items")
@@ -91,7 +112,8 @@ def _validate_array(value: List[Any], schema: Dict[str, Any], path: str) -> None
     items_schema = schema.get("items")
     if isinstance(items_schema, dict):
         for idx, item in enumerate(value):
-            _validate_value(item, items_schema, path=f"{path}[{idx}]")
+            saved = previous[idx] if isinstance(previous, list) and idx < len(previous) else None
+            _validate_value(item, items_schema, f"{path}[{idx}]", saved, network)
 
 
 def _validate_value_constraints(value: Any, schema: Dict[str, Any], path: str) -> None:
