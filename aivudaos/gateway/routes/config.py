@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from aivudaos import __version__ as aivudaos_version
 from aivudaos.core.auth.models import SessionInfo
 from aivudaos.core.auth.service import AuthService
+from aivudaos.core.config.ros_domain import configured_domain, has_ros2
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.errors import AuthenticationError, ConfigVersionConflictError
 from aivudaos.core.errors import InvalidConfigError, NotFoundError
@@ -290,6 +291,7 @@ async def get_config(token: str) -> Dict[str, Any]:
     cfg = config.get_sys_config()
     magnets = magnet.list_groups()
     return {
+        "ros2_detected": has_ros2(),
         "data": cfg.data,
         "version": cfg.version,
         "updated_at": cfg.updated_at,
@@ -322,24 +324,22 @@ async def put_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, Any]
             },
         )
 
-    result = None
-    for _ in range(5):
-        current_for_write = config.get_sys_config()
-        try:
-            result = config.update_sys_config(
-                payload.data,
-                current_for_write.version,
-                user.username,
-            )
-            break
-        except ConfigVersionConflictError:
-            continue
-
-    if result is None:
-        raise HTTPException(status_code=409, detail="Config version conflict")
+    try:
+        config.update_sys_config(payload.data, payload.version, user.username)
+    except ConfigVersionConflictError:
+        raise HTTPException(status_code=409, detail="System parameters changed. Refresh and try again.")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     magnet.recompute(updated_by=user.username)
-    return {"ok": True, "version": result.version}
+    refresh_errors = []
+    result = config.get_sys_config()
+    if has_ros2() and configured_domain(current.data) != configured_domain(result.data):
+        try:
+            refresh_errors = get_runtime_service().refresh_runtime_environment()
+        except (RuntimeError, OSError) as exc:
+            refresh_errors = [str(exc)]
+    return {"ok": True, "version": result.version, "runtime_environment_refresh_errors": refresh_errors}
 
 
 @router.get("/os")

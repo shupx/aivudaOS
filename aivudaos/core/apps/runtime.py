@@ -20,6 +20,7 @@ from aivudaos.core.apps.models import AppManifest, AppRuntimeState
 from aivudaos.core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from aivudaos.core.apps.systemd_runtime import SystemdRuntimeBackend
 from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.config.ros_domain import configured_domain, has_ros2
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.db.connection import db_conn
 from aivudaos.core.errors import (
@@ -1200,7 +1201,7 @@ class RuntimeService:
     def _build_runtime_env(self) -> Dict[str, str]:
         from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT, validate_runtime_environment
 
-        return {
+        environment = {
             "PYTHONUNBUFFERED": "1",
             "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
             "TERM": "xterm-256color",
@@ -1211,6 +1212,11 @@ class RuntimeService:
                 self._config.get_os_setting("runtime_environment", DEFAULT_RUNTIME_ENVIRONMENT)
             ),
         }
+        if has_ros2():
+            domain = configured_domain(self._config.get_sys_config().data)
+            if domain is not None:
+                environment["ROS_DOMAIN_ID"] = str(domain)
+        return environment
 
     def refresh_runtime_environment(self) -> List[str]:
         """Refresh persisted units; running processes receive changes on restart."""

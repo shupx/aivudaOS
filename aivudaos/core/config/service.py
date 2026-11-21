@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import shutil
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from aivudaos.core.config.avahi import AvahiService
 from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
 from aivudaos.core.config.filelock import atomic_write_text, get_lock
 from aivudaos.core.config.models import UserRecord, UsersConfig, VersionedConfig
+from aivudaos.core.config.ros_domain import configured_domain, has_ros2, populate_default_domain
 from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT, validate_runtime_environment
 from aivudaos.core.errors import ConfigVersionConflictError
 from aivudaos.core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
@@ -89,6 +91,10 @@ class ConfigService:
     def update_sys_config(
         self, data: Dict[str, Any], expected_version: int, username: str
     ) -> VersionedConfig:
+        if configured_domain(data) is None and has_ros2():
+            # Removing the explicit default restores the legacy environment or ROS default.
+            data = deepcopy(data)
+            populate_default_domain(data, self.get_os_setting("runtime_environment", {}))
         return self._write_versioned(SYS_CONFIG_PATH, data, expected_version, username)
 
     # --- Per-App Config ---

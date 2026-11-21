@@ -74,3 +74,7 @@ Online Store 导航图标右上角显示可更新的已安装 App 数量（超�
 版本比较按数字段及 SemVer 预发布规则进行，忽略构建元数据；未知格式或缺失版本不会触发更新提醒。当前商店索引没有设备兼容性字段，提示依据已发布版本，不额外推断设备兼容性。业务逻辑位于 `useStoreUpdates.js` 和 `services/core/storeUpdates.js`，中英文词条位于 `i18n/locales/`。
 
 验证：在 aivudaOS 目录运行 `node --test tests/test_store_updates_ui.mjs`，在 UI 目录运行 `npm run build`。
+
+## ROS 2 系统参数
+
+系统设置仅在服务端识别到 ROS 2 时显示 Domain ID。可在这里保存全局启动默认值，逐个查看各应用激活版本的配置覆盖。

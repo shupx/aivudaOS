@@ -1,6 +1,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { fetchActiveAppConfigs } from '../services/core/apps'
+import { appDomainRows } from '../services/core/rosDomains'
 import { logout } from '../services/core/auth'
 import {
   buildCaddyLocalCaDownloadUrl,
@@ -8,6 +10,8 @@ import {
   fetchAptSourcesList,
   fetchAivudaosServiceStatus,
   fetchOsConfig,
+  fetchSysConfig,
+  updateSysConfig,
   fetchSudoNopasswdSetting,
   restoreAptSourcesBackup,
   setAivudaosServiceAutostart,
@@ -40,6 +44,13 @@ export function useSystemSettingsPage() {
   const osOriginalData = ref({})
   const osVersion = ref(0)
   const osCellErrors = ref({})
+  const sysConfig = ref(null)
+  const ros2Detected = computed(() => Boolean(sysConfig.value?.ros2_detected))
+  const savedDomain = computed(() => sysConfig.value?.data?.sys?.ros2_default_domain_id ?? null)
+  const domainDraft = ref(null)
+  const domainApps = ref([])
+  const domainRows = computed(() => appDomainRows(domainApps.value, savedDomain.value))
+  const domainReadonly = computed(() => sysConfig.value?.readonly_paths?.includes('sys.ros2_default_domain_id'))
   const environmentRows = ref([])
   const environmentSaving = ref(false)
   
@@ -85,11 +96,14 @@ export function useSystemSettingsPage() {
     success.value = ''
     successLinks.value = []
     try {
-      const [data, osData, serviceData] = await Promise.all([
+      const [data, osData, serviceData, sysData] = await Promise.all([
         fetchSudoNopasswdSetting(),
         fetchOsConfig(),
         fetchAivudaosServiceStatus(),
+        fetchSysConfig(),
       ])
+      sysConfig.value = sysData
+      domainDraft.value = savedDomain.value
       username.value = String(data?.username || '')
       enabled.value = Boolean(data?.enabled)
       serviceInstalled.value = Boolean(serviceData?.installed)
@@ -98,13 +112,44 @@ export function useSystemSettingsPage() {
       osDraftData.value = deepClone(osData?.data || {})
       osOriginalData.value = deepClone(osData?.data || {})
       environmentRows.value = Object.entries(osData?.data?.runtime_environment ?? { ROS_LOCALHOST_ONLY: '1' })
+        .filter(([name]) => !ros2Detected.value || name !== 'ROS_DOMAIN_ID')
         .map(([name, value]) => ({ name, value: String(value) }))
       osVersion.value = Number(osData?.version || 0)
       osCellErrors.value = {}
+      domainApps.value = []
+      if (ros2Detected.value) domainApps.value = (await fetchActiveAppConfigs()).items
     } catch (err) {
       error.value = String(err?.message || err || t('systemSettings.loadFailed'))
     } finally {
       loading.value = false
+    }
+  }
+
+  async function saveDomain() {
+    const value = domainDraft.value
+    if (saving.value || loading.value || domainReadonly.value || !ros2Detected.value) return
+    if (!Number.isInteger(value) || value < 0 || value > 232) {
+      error.value = t('systemSettings.domainRange')
+      return
+    }
+    const current = sysConfig.value
+    saving.value = true
+    error.value = ''
+    success.value = ''
+    successLinks.value = []
+    try {
+      const data = { ...current.data, sys: { ...current.data.sys, ros2_default_domain_id: value } }
+      const result = await updateSysConfig(data, current.version)
+      sysConfig.value = await fetchSysConfig()
+      domainDraft.value = savedDomain.value
+      success.value = t('systemSettings.domainSaved')
+      if (result.runtime_environment_refresh_errors?.length) {
+        error.value = t('systemSettings.environmentRefreshFailed', { errors: result.runtime_environment_refresh_errors.join('; ') })
+      }
+    } catch (err) {
+      error.value = String(err?.message || t('systemSettings.osSaveFailed'))
+    } finally {
+      saving.value = false
     }
   }
 
@@ -123,6 +168,10 @@ export function useSystemSettingsPage() {
     successLinks.value = []
     const names = new Set()
     for (const row of environmentRows.value) {
+      if (ros2Detected.value && row.name === 'ROS_DOMAIN_ID') {
+        error.value = t('systemSettings.domainManaged')
+        return
+      }
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name) || row.name.startsWith('AIVUDA_') ||
           names.has(row.name) || /[\0\r\n]/.test(row.value)) {
         error.value = t('systemSettings.environmentInvalid')
@@ -135,6 +184,9 @@ export function useSystemSettingsPage() {
     try {
       const nextData = deepClone(osDraftData.value)
       nextData.runtime_environment = Object.fromEntries(environmentRows.value.map(row => [row.name, row.value]))
+      if (ros2Detected.value && osOriginalData.value.runtime_environment?.ROS_DOMAIN_ID !== undefined) {
+        nextData.runtime_environment.ROS_DOMAIN_ID = osOriginalData.value.runtime_environment.ROS_DOMAIN_ID
+      }
       const resp = await updateOsConfig(nextData, osVersion.value)
       osDraftData.value = deepClone(nextData)
       osOriginalData.value = deepClone(nextData)
@@ -178,6 +230,8 @@ export function useSystemSettingsPage() {
         return
       }
       const data = await updateSudoNopasswdSetting(pendingToggleValue.value, sudoPassword.value)
+      sysConfig.value = sysData
+      domainDraft.value = savedDomain.value
       username.value = String(data?.username || username.value || '')
       enabled.value = Boolean(data?.enabled)
       success.value = t('systemSettings.saveSuccess')
@@ -600,6 +654,7 @@ export function useSystemSettingsPage() {
     requestWriteAptSources,
     requestRestoreAptSources,
     submitAptAction,
+    ros2Detected, savedDomain, domainDraft, domainReadonly, domainRows, saveDomain,
     environmentRows,
     environmentSaving,
     addEnvironmentRow,

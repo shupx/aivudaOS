@@ -330,6 +330,10 @@ Regression checks: `python -m unittest discover -s tests`, plus ACEswarm's
 workspace and verifies normal/system quit, SIGTERM and SIGKILL leave no fixture
 or service processes. The fixture includes a detached child ignoring SIGTERM.
 
+## ROS 2 Domain
+
+ROS 2 主机通过 `ROS_VERSION=2`、PATH 上的 `ros2` 或 `/opt/ros/*/bin/ros2` 识别。系统参数 `sys.ros2_default_domain_id` 存放在 `config/sys.yaml`，可通过现有系统参数 API 读写并随系统参数导入、导出。首次初始化时优先使用已有的 `runtime_environment.ROS_DOMAIN_ID`，其次使用服务环境中的值，均未设置时为 0。后续启动环境使用系统参数，应用入口可覆盖该值。更新会刷新 systemd 单元，现有进程继续使用启动时的环境。
+
 ## App 额外环境变量
 
 系统设置页面最下方提供变量名/值表格，支持增加、删除、修改并统一保存。配置保存在 `os.yaml` 的 `runtime_environment` 字符串映射中；新建配置及旧配置缺少该字段时默认加入 `ROS_LOCALHOST_ONLY: "1"`。显式保存 `{}` 可删除所有额外变量，重启不会重新填充。
@@ -339,7 +343,7 @@ or service processes. The fixture includes a detached child ignoring SIGTERM.
 ```yaml
 runtime_environment:
   ROS_LOCALHOST_ONLY: "1"
-  ROS_DOMAIN_ID: "10"
+  PYTHONFAULTHANDLER: "1"
 ```
 
 所有 app 的启动、重启、自启动和 systemd unit 重建均读取这份配置。额外变量覆盖继承环境和默认日志变量，内部 `AIVUDA_*` 路径变量保留。变量名必须匹配 `[A-Za-z_][A-Za-z0-9_]*`，不允许 `AIVUDA_*`；值必须为不含 NUL/换行的字符串，空字符串有效。systemd 会转义引号、反斜杠和百分号，保持变量的字面值。
