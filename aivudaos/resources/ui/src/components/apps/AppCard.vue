@@ -1,8 +1,8 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { buildApiPath } from '../../services/core/api'
+import { buildAppIconUrl } from '../../services/core/apps'
 import {
   NCard,
   NSpace,
@@ -29,7 +29,6 @@ const props = defineProps({
 
 const emit = defineEmits(['toggle-running', 'toggle-autostart', 'toggle-favorite', 'restart-app'])
 const router = useRouter()
-const iconLoadFailed = ref(false)
 const { t } = useI18n()
 
 const description = computed(() => props.app.description || t('appCard.noDescription'))
@@ -38,19 +37,7 @@ const hasBuiltInUi = computed(() => Boolean(props.app.has_builtin_ui))
 const builtInUiHref = computed(() => `/dashboard/apps/${encodeURIComponent(props.app.app_id)}/ui`)
 const configButtonTitle = computed(() => t('appCard.openConfig', { name: appDisplayName.value }))
 const favoriteTitle = computed(() => props.favorite ? t('appCard.unfavorite') : t('appCard.favorite'))
-const iconSrc = computed(() => {
-  if (iconLoadFailed.value) {
-    return '/app-default-icon.png'
-  }
-  return buildApiPath(`/api/apps/${encodeURIComponent(props.app.app_id)}/icon`)
-})
-
-watch(
-  () => props.app.app_id,
-  () => {
-    iconLoadFailed.value = false
-  },
-)
+const iconSrc = computed(() => buildAppIconUrl(props.app))
 
 function onRunningChange(nextValue) {
   emit('toggle-running', props.app, nextValue)
@@ -96,10 +83,6 @@ function onBuiltInUiClick(event) {
   event.preventDefault()
   goBuiltInUi()
 }
-
-function onIconError() {
-  iconLoadFailed.value = true
-}
 </script>
 
 <template>
@@ -128,10 +111,10 @@ function onIconError() {
     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-right: 26px;">
       <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
         <NAvatar
+          :key="iconSrc"
           :src="iconSrc"
           :size="compact ? 36 : 40"
           fallback-src="/app-default-icon.png"
-          @error="onIconError"
           style="flex-shrink: 0; background-color: #f8fafc; border: 1px solid #e2e8f0;"
         />
         <div style="min-width: 0; display: flex; flex-direction: column;">

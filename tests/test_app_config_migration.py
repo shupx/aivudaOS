@@ -1,3 +1,4 @@
+import hashlib
 import io
 import asyncio
 import json
@@ -133,15 +134,18 @@ class MigrationFlowTests(unittest.TestCase):
         self.schema = object_schema({"port": {"type": "integer", "minimum": 1, "maximum": 100},
                                      "keep": {"type": "string"}}, additionalProperties=False)
 
-    def package(self, version, defaults=None, schema=None):
+    def package(self, version, defaults=None, schema=None, icon=None):
         defaults = defaults if defaults is not None else {"port": 10, "keep": "default"}
         schema = schema if schema is not None else self.schema
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w") as archive:
             archive.writestr("manifest.yaml", yaml.safe_dump({
                 "app_id": "demo", "version": version, "run": {"entrypoint": "start.sh"},
+                **({"icon": "icon.svg"} if icon is not None else {}),
                 "default_config_path": "defaults.yaml", "config_schema_path": "schema.yaml",
             }))
+            if icon is not None:
+                archive.writestr("icon.svg", icon)
             archive.writestr("defaults.yaml", yaml.safe_dump(defaults))
             archive.writestr("schema.yaml", yaml.safe_dump(schema))
             archive.writestr("start.sh", "#!/bin/sh\nexit 0\n")
@@ -153,6 +157,15 @@ class MigrationFlowTests(unittest.TestCase):
     def update(self, version, data):
         cfg = self.config.get_app_config("demo", version)
         return self.config.update_app_config("demo", version, data, cfg.version)
+
+    def test_same_version_overwrite_refreshes_icon_revision(self):
+        for color in ("red", "tan", "red"):
+            icon = ('<svg xmlns="http://www.w3.org/2000/svg"><path fill="%s"/></svg>' % color).encode()
+            self.installer.install_from_upload(self.package("1", icon=icon), "demo.zip", overwrite=True)
+            self.assertEqual(self.runtime.get_app_icon_path("demo").read_bytes(), icon)
+            item, = self.runtime.get_installed_list()
+            self.assertEqual(item["active_version"], "1")
+            self.assertEqual(item["icon_revision"], hashlib.sha256(icon).hexdigest())
 
     def test_install_upgrade_and_switch_back_inherit_current_values(self):
         first = self.install("1")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -32,6 +34,25 @@ from aivudaos.core.paths import SHELL_HELPERS_DIR
 from aivudaos.core.paths import SYSTEMD_RUNTIME_DIR
 from aivudaos.core.paths import UI_DEFAULT_ICON_PATH
 from aivudaos.core.paths import UI_FALLBACK_ICON_PATH
+
+
+@lru_cache(maxsize=256)
+def _cached_icon_digest(path: Path, inode: int, ctime_ns: int, size: int) -> str:
+    # The stat fields invalidate the digest when an installer replaces the same path.
+    digest = hashlib.sha256()
+    with path.open("rb") as icon:
+        for chunk in iter(lambda: icon.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _icon_revision(path: Path) -> Optional[str]:
+    try:
+        stat = path.stat()
+        return _cached_icon_digest(path, stat.st_ino, stat.st_ctime_ns, stat.st_size)
+    except OSError:
+        # An overwrite can briefly remove the active file between polls.
+        return None
 
 
 class RuntimeService:
@@ -280,6 +301,7 @@ class RuntimeService:
                     "install_path": str(self._versioning.active_link(aid)),
                     "status": row["status"],
                     "installed_at": row["installed_at"],
+                    "icon_revision": _icon_revision(self._resolve_app_icon(install_path, manifest)),
                     "running": runtime_state.running,
                     "autostart": runtime_state.autostart,
                     "pid": runtime_state.pid,
@@ -1217,19 +1239,19 @@ class RuntimeService:
 
     def get_app_icon_path(self, app_id: str) -> Path:
         install_path = self._versioning.active_install_path(app_id)
-        if install_path is not None:
-            try:
-                manifest = self._get_manifest(app_id)
-            except AppNotInstalledError:
-                manifest = None
+        try:
+            manifest = self._get_manifest(app_id) if install_path is not None else None
+        except AppNotInstalledError:
+            manifest = None
+        return self._resolve_app_icon(install_path, manifest)
 
-            if manifest and manifest.icon:
-                icon_path = self._resolve_manifest_relative_file(
-                    install_path,
-                    manifest.icon,
-                )
-                if icon_path is not None:
-                    return icon_path
+    def _resolve_app_icon(
+        self, install_path: Optional[Path], manifest: Optional[AppManifest],
+    ) -> Path:
+        if install_path is not None and manifest and manifest.icon:
+            icon_path = self._resolve_manifest_relative_file(install_path, manifest.icon)
+            if icon_path is not None:
+                return icon_path
 
         if UI_DEFAULT_ICON_PATH.exists() and UI_DEFAULT_ICON_PATH.is_file():
             return UI_DEFAULT_ICON_PATH

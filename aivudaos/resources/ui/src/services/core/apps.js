@@ -1,9 +1,14 @@
-import { buildAuthUrl, request } from './api'
+import { buildApiPath, buildAuthUrl, request } from './api'
 import i18n from '../../i18n'
 
 export async function fetchInstalledApps() {
   const data = await request('/api/apps/installed', { auth: true })
   return data?.items || []
+}
+
+export function buildAppIconUrl(app) {
+  const path = buildApiPath(`/api/apps/${encodeURIComponent(app.app_id)}/icon`)
+  return app.icon_revision ? `${path}?v=${encodeURIComponent(app.icon_revision)}` : path
 }
 
 export function buildAppBuiltInUiEntryUrl(appId) {
