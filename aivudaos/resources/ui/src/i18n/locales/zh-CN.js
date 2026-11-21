@@ -295,7 +295,7 @@ export default {
     logTitle: '日志',
     loadingLogs: '读取中...',
     pullLatest: '增量拉取最新',
-    clearAndReload: '清空并重读',
+    clearLogView: '清空显示',
     noLogOutput: '暂无输出',
     actionsTitle: '应用操作',
     statusPrefix: '状态：{status}',

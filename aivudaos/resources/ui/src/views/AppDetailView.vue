@@ -23,7 +23,7 @@ const {
   logBusy,
   logError,
   loadLogs,
-  clearAndReloadLogs,
+  clearLogView,
   actionBusy,
   actionError,
   actionMessage,
@@ -115,9 +115,9 @@ const {
             <template #icon><NIcon><Download /></NIcon></template>
             <span class="app-detail-log-action-label">{{ t('appDetail.pullLatest') }}</span>
           </NButton>
-          <NButton class="app-detail-log-action-btn" size="small" @click="clearAndReloadLogs">
-            <template #icon><NIcon><RefreshCw /></NIcon></template>
-            <span class="app-detail-log-action-label">{{ t('appDetail.clearAndReload') }}</span>
+          <NButton class="app-detail-log-action-btn" size="small" @click="clearLogView">
+            <template #icon><NIcon><Trash2 /></NIcon></template>
+            <span class="app-detail-log-action-label">{{ t('appDetail.clearLogView') }}</span>
           </NButton>
         </NSpace>
       </template>

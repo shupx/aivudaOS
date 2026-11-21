@@ -295,7 +295,7 @@ export default {
     logTitle: 'Log',
     loadingLogs: 'Loading...',
     pullLatest: 'Incremental Pull Latest',
-    clearAndReload: 'Clear and Reload',
+    clearLogView: 'Clear view',
     noLogOutput: 'No output yet',
     actionsTitle: 'App Actions',
     statusPrefix: 'Status: {status}',
