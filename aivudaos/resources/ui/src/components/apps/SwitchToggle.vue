@@ -1,5 +1,5 @@
 <script setup>
-defineProps({
+const props = defineProps({
   modelValue: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
 })
@@ -7,7 +7,10 @@ defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 function onChange(event) {
-  emit('update:modelValue', event.target.checked)
+  const requested = event.target.checked
+  // The parent may require confirmation before accepting a change.
+  event.target.checked = props.modelValue
+  emit('update:modelValue', requested)
 }
 </script>
 

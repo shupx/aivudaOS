@@ -45,7 +45,7 @@ const {
   selectedAppId,
   appTreeRows,
   systemRows,
-  ros2Detected, domainRows, domainSaving, saveDomainValue,
+  showDomainSection, domainRows, domainSaving, domainDrafts,
   magnets,
   magnetConflicts,
   magnetCollapsed,
@@ -144,6 +144,7 @@ const {
   importOverwriteMagnets,
   importBusy,
   importErrorMessage,
+  importRefreshWarning,
   importSuccessMessage,
   importStoreConnectivityHelpVisible,
   importActionMessage,
@@ -204,12 +205,6 @@ const {
   setInteractiveInput,
   setInteractiveMaskInput,
 } = useAppConfigCenterPage()
-
-const domainDrafts = useDeferredFieldDrafts({
-  buildKey: row => JSON.stringify([row.appId, row.segments || row.path, row.appVersion]),
-  getCommittedValue: row => String(getCellValue(row) ?? row.value ?? ''),
-  commitDraftValue: saveDomainValue,
-})
 
 const systemTextDrafts = useDeferredFieldDrafts({
   buildKey: systemRowDraftKey,
@@ -284,7 +279,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
       />
     </div>
 
-    <article v-if="ros2Detected" :id="ROS_DOMAIN_SECTION" tabindex="-1"
+    <article v-if="showDomainSection" :id="ROS_DOMAIN_SECTION" tabindex="-1"
       class="actions-panel config-center-section config-center-shell" style="scroll-margin-top: 6rem">
       <header class="log-header"><h3>{{ t('systemSettings.domainSection') }}</h3></header>
       <p>{{ t('systemSettings.domainHint') }}</p>
@@ -292,19 +287,28 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         <table class="config-table compact" style="width: 100%">
           <thead><tr>
             <th>{{ t('systemSettings.domainApp') }}</th><th>{{ t('appConfigCenter.colPath') }}</th>
-            <th>Domain ID</th><th>{{ t('appConfigCenter.colAction') }}</th>
+            <th>{{ t('systemSettings.domainId') }}</th><th>{{ t('appConfigCenter.colAction') }}</th>
           </tr></thead>
           <tbody>
             <tr v-for="row in domainRows" :key="JSON.stringify([row.appId, row.segments || row.path])">
               <td>{{ row.appName }}</td><td class="mono-cell">{{ row.path }}</td>
               <td>
-                <input class="input" type="number" step="1" :aria-label="row.appName + ' ' + row.path"
-                  :value="domainDrafts.getDraftValue(row)" :disabled="domainSaving || (row.readonly && !row.magnet)"
+                <select v-if="row.domainChoices" class="input" :aria-label="row.appName + ' ' + row.path"
+                  :value="domainDrafts.getDraftValue(row)" :disabled="domainSaving || row.readonly"
+                  @change="domainDrafts.setDraftValue(row, $event.target.value)">
+                  <option v-for="(choice, index) in row.domainChoices" :key="index" :value="index">
+                    {{ choice === null ? t('systemSettings.domainSources.inherited') : choice }}
+                  </option>
+                </select>
+                <input v-else class="input" :type="row.type === 'string' || row.nullable ? 'text' : 'number'" inputmode="numeric" step="1"
+                  :aria-label="row.appName + ' ' + row.path"
+                  :placeholder="row.nullable ? t('systemSettings.domainBlankInherits') : ''"
+                  :value="domainDrafts.getDraftValue(row)" :disabled="domainSaving || row.readonly"
                   @input="domainDrafts.setDraftValue(row, $event.target.value)"
                   @keyup.enter="domainDrafts.commitDraft(row)">
-                <small v-if="row.magnet">{{ t('systemSettings.domainShared') }} · {{ getMagnetBindingsText(row.magnet.bindings) }}</small>
+                <small v-if="row.source === 'inherited'">{{ t('systemSettings.domainSources.inherited') }} ({{ row.domain ?? '—' }})</small>
               </td>
-              <td><NButton size="small" :disabled="loading || domainSaving || (row.readonly && !row.magnet) || !domainDrafts.hasDraft(row)"
+              <td><NButton size="small" :disabled="loading || domainSaving || row.readonly || !domainDrafts.hasDraft(row)"
                 @click="domainDrafts.commitDraft(row)">{{ t('systemSettings.saveDomain') }}</NButton></td>
             </tr>
           </tbody>
@@ -802,6 +806,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           </div>
         </div>
 
+        <NAlert v-if="importRefreshWarning" type="warning" style="margin-top: 12px;">{{ importRefreshWarning }}</NAlert>
         <NAlert v-if="importErrorMessage" type="error" style="margin-top: 12px;">
           <div>{{ importErrorMessage }}</div>
           <div v-if="importStoreConnectivityHelpVisible" class="config-import-store-help">

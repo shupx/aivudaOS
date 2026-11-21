@@ -116,6 +116,8 @@ export default {
     domainManaged: 'Edit ROS_DOMAIN_ID under Config Parameters → ROS 2 Domain Parameters.',
     domainSources: { packageDefault: 'Package default', inherited: 'Launch default', override: 'App configuration', invalid: 'Invalid configuration' },
     domainSection: 'ROS 2 Domain Parameters',
+    domainId: 'Domain ID',
+    domainBlankInherits: 'Leave blank to inherit',
     editDomains: 'Edit domain parameters',
     noDomainFields: 'No installed app declares a ROS 2 domain.',
     saveDomain: 'Save',
@@ -368,6 +370,7 @@ export default {
     noConstraint: 'No equal constraints for this app',
   },
   appConfigCenter: {
+    advancedSettings: 'Advanced settings',
     title: 'Config Parameters Center',
     backToApps: 'Back to App List',
     autoSyncSuccess: 'Parameters are synced and applied automatically',

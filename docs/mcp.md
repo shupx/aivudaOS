@@ -78,7 +78,7 @@ MCP 进程内，客户端身份和 ASGI 传输仍按请求隔离；浏览器登�
 指定的服务器本地路径。超限文件使用原 HTTP API，或提高字节上限；base64
 以及 JSON/multipart 包装也占用字节额度。
 
-目前提供 47 个工具，覆盖 46 个 HTTP 操作和 1 个 WebSocket 操作。
+工具从业务路由生成，覆盖 HTTP 和 WebSocket 操作。
 `login` 接收 `body: {"username": "...", "password": "..."}`；之后传入 `token`，
 或通过 MCP HTTP Bearer 请求头传递。原有 `aivudaos_status`、`list_installed_apps`、`get_app_status`、
 `get_config`、`queue_config_import` 名称保留。
@@ -93,8 +93,8 @@ timeout_seconds（1–60，默认20），返回 events 数组和 timed_out。每
 
 ## 完整工具清单
 
-目前共 47 个工具，按用途分组如下。具体参数、类型和必填项以 `tools/list`
-返回的 `inputSchema` 为准；新增后端路由后，工具列表会随之更新。
+下表按用途列出工具。调用 `tools/list` 可获取当前实例的完整清单；每个工具的
+`inputSchema` 给出参数、类型和必填项。
 
 | 用途 | Tools |
 |---|---|
@@ -107,7 +107,7 @@ timeout_seconds（1–60，默认20），返回 events 数组和 timed_out。每
 | 证书 | `download_caddy_local_ca_root`、`download_caddy_local_ca_root_head` |
 | 应用信息与日志 | `list_installed_apps`、`get_active_configs`、`get_app_status`、`get_app_icon`、`get_logs` |
 | 应用运行控制 | `start_app`、`stop_app`、`restart_app`、`set_autostart` |
-| 批量运行控制 | `start_autostart_apps`、`restart_autostart_apps`、`stop_all_apps` |
+| 批量运行控制 | `start_autostart_apps`、`restart_autostart_apps`、`restart_running_apps`、`stop_all_apps` |
 | 安装与版本管理 | `upload_app`、`list_versions`、`switch_version`、`update_this_version`、`upgrade_app`、`uninstall_app` |
 | 应用配置 | `get_app_config`、`put_app_config` |
 | 异步操作与交互 | `get_operation`、`cancel_operation`、`stream_operation_events`、`operation_interactive_ws` |
@@ -118,6 +118,6 @@ timeout_seconds（1–60，默认20），返回 events 数组和 timed_out。每
 PYTHONPATH=. python3 -m unittest discover -s tests -p 'test_mcp*.py' -v
 ```
 
-`test_mcp_gateway.py` 在存在 ACEswarm 开发 Caddy 二进制时启动隔离后端及
+`test_mcp_gateway.py` 在存在 ACEswarm 开发 Caddy 二进制（或显式设置 `AIVUDAOS_TEST_CADDY`）时启动隔离后端及
 Caddy，使用包内模板验证 HTTP 和 HTTPS、CA 证书信任、同源 Origin、登录、
 Bearer 调用及退出端口释放；不安装 CA 到系统信任库。

@@ -13,7 +13,8 @@ import {
 import { fetchConfigExportMeta, fetchSysConfig, resolveAppStoreBaseUrl, updateSysConfig } from '../services/core/config'
 import { downloadStorePackageForInstall, fetchStoreAppDetail, fetchStoreIndex, MAX_IN_MEMORY_INSTALL_BYTES } from '../services/core/store'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
-import { appDomainRows, GLOBAL_DOMAIN_PATH, ROS_DOMAIN_SECTION } from '../services/core/rosDomains'
+import { useDeferredFieldDrafts } from './useDeferredFieldDrafts'
+import { appDomainRows, GLOBAL_DOMAIN_PATH, isDomainReadonly, parseDomainInput, ROS_DOMAIN_SECTION } from '../services/core/rosDomains'
 import { copyText } from '../services/core/clipboard'
 import {
   buildConfigExportFilename,
@@ -21,6 +22,8 @@ import {
   deepClone as cloneTransferValue,
   flattenConfigLeaves,
   isValueEqual as isTransferValueEqual,
+  getConfigValue as nestedGet,
+  setConfigValue as nestedSet,
   nestedGet as transferNestedGet,
   nestedSet as transferNestedSet,
   parseConfigImportDocument,
@@ -132,6 +135,7 @@ export function useAppConfigCenterPage() {
   const importOverwriteMagnets = ref(false)
   const importBusy = ref(false)
   const importErrorMessage = ref('')
+  const importRefreshWarning = ref('')
   const importSuccessMessage = ref('')
   const importActionMessage = ref('')
   const importAutostartRows = ref([])
@@ -313,6 +317,7 @@ export function useAppConfigCenterPage() {
   })
 
   const ros2Detected = ref(false)
+  const showDomainSection = computed(() => ros2Detected.value && !selectedAppId.value)
   const domainSaving = ref(false)
   const domainRows = computed(() => {
     if (!ros2Detected.value) return []
@@ -322,11 +327,11 @@ export function useAppConfigCenterPage() {
     }))
     if (global) fields.unshift({ ...global, appName: t('systemSettings.domainDefault') })
     for (const field of fields) {
-      const paths = field.scope === 'sys' ? sysReadonlyPaths.value : readonlyPathsByApp.value[field.appId] || []
-      field.readonly = field.schemaObj?.readOnly || paths.some(path => path === field.path || field.path.startsWith(path + '.'))
-      if (field.readonly && !field.schemaObj?.readOnly) {
-        field.magnet = magnets.value.find(group => group.path === field.path && group.bindings?.some(binding =>
-          binding.path === field.path && (field.scope === 'sys' ? binding.kind === 'sys' : binding.app_id === field.appId)))
+      const bindings = field.scope === 'sys' ? sysReadonlyPaths.value : readonlyPathsByApp.value[field.appId]
+      field.readonly = isDomainReadonly(field, bindings)
+      field.nullable = parseDomainInput(field, null).valid
+      if (Array.isArray(field.schemaObj?.enum)) {
+        field.domainChoices = field.schemaObj.enum.filter(value => parseDomainInput(field, value).valid)
       }
     }
     return fields
@@ -334,31 +339,28 @@ export function useAppConfigCenterPage() {
   const domainPaths = computed(() => new Set(domainRows.value.map(cellErrorKey)))
   const ordinarySystemRows = computed(() => systemRows.value.filter(row => !domainPaths.value.has(cellErrorKey(row))))
 
+  const domainDrafts = useDeferredFieldDrafts({
+    buildKey: row => JSON.stringify([row.scope, row.appId, row.segments || row.path, row.appVersion]),
+    getCommittedValue: row => row.domainChoices ? String(row.domainChoices.indexOf(row.value)) : String(row.value ?? ''),
+    commitDraftValue: (row, draft) => saveDomainValue(row, row.domainChoices ? row.domainChoices[Number(draft)] : draft),
+  })
+
   async function saveDomainValue(row, text) {
-    if (domainSaving.value || (row.readonly && !row.magnet)) return false
-    const schema = row.schemaObj || {}
-    const min = Math.max(row.scope === 'sys' ? 0 : -1, schema.minimum ?? -1)
-    const max = Math.min(232, schema.maximum ?? 232)
-    const number = Number(text)
-    const value = row.type === 'string' ? String(text) : number
-    if (!/^-?\d+$/.test(String(text)) || !Number.isSafeInteger(number) ||
-        number < min || number > max || (schema.enum && !schema.enum.includes(value))) {
+    if (domainSaving.value || row.readonly) return false
+    const { valid, value, min, max } = parseDomainInput(row, text)
+    if (!valid) {
       error.value = t('systemSettings.domainInvalid', { min, max })
       return false
     }
     domainSaving.value = true
     try {
-      if (row.magnet) {
-        setMagnetValue(row.magnet, value)
-        return await saveMagnetChanges(row.magnet)
-      }
       return await applyValue(row, value)
     } finally {
       domainSaving.value = false
     }
   }
 
-  watch([ros2Detected, () => route.hash], async ([enabled, hash]) => {
+  watch([showDomainSection, () => route.hash], async ([enabled, hash]) => {
     if (enabled && hash === '#' + ROS_DOMAIN_SECTION) {
       await nextTick()
       const section = document.getElementById(ROS_DOMAIN_SECTION)
@@ -753,7 +755,7 @@ export function useAppConfigCenterPage() {
     if (!Number.isInteger(index) || !Array.isArray(row.enumValues) || index < 0 || index >= row.enumValues.length) {
       return
     }
-    await applyValue(row, deepClone(row.enumValues[index]))
+    return applyValue(row, deepClone(row.enumValues[index]))
   }
 
   async function onSystemEnumChange(row, indexText) {
@@ -832,6 +834,13 @@ export function useAppConfigCenterPage() {
     const beforeAppData = deepClone(draftByApp.value[row.appId] || {})
     const appData = deepClone(draftByApp.value[row.appId] || {})
     nestedSet(appData, row.segments || row.path, nextValue)
+    const sibling = row.schemaObj?.resetAutoSibling
+    if (typeof sibling === 'string' && sibling) {
+      const siblingPath = [...row.path.split('.').slice(0, -1), sibling].join('.')
+      if (!(readonlyPathsByApp.value[row.appId] || []).includes(siblingPath)) {
+        nestedSet(appData, siblingPath, 'auto')
+      }
+    }
     draftByApp.value = {
       ...draftByApp.value,
       [row.appId]: appData,
@@ -1207,11 +1216,16 @@ export function useAppConfigCenterPage() {
     }
   }
 
-  function openImportModal() {
-    importModalVisible.value = true
+  function clearImportMessages() {
     importErrorMessage.value = ''
+    importRefreshWarning.value = ''
     importSuccessMessage.value = ''
     importActionMessage.value = ''
+  }
+
+  function openImportModal() {
+    importModalVisible.value = true
+    clearImportMessages()
     error.value = ''
     success.value = ''
   }
@@ -1229,9 +1243,7 @@ export function useAppConfigCenterPage() {
     importAutostartOverwriteById.value = {}
     importAutostartCollapsed.value = false
     importAutostartCondensed.value = true
-    importErrorMessage.value = ''
-    importSuccessMessage.value = ''
-    importActionMessage.value = ''
+    clearImportMessages()
     missingAppOptions.value = {}
     missingAppBusy.value = {}
     missingAppProgress.value = {}
@@ -1242,11 +1254,9 @@ export function useAppConfigCenterPage() {
     const file = fileList?.[0] || null
     if (!file) return
     importFileName.value = file.name || ''
-    importErrorMessage.value = ''
-    importSuccessMessage.value = ''
+    clearImportMessages()
     error.value = ''
     success.value = ''
-    importActionMessage.value = ''
     try {
       const text = await file.text()
       importDocument.value = parseConfigImportDocument(text)
@@ -1656,11 +1666,9 @@ export function useAppConfigCenterPage() {
     }
 
     importBusy.value = true
-    importErrorMessage.value = ''
-    importSuccessMessage.value = ''
+    clearImportMessages()
     error.value = ''
     success.value = ''
-    importActionMessage.value = ''
     try {
       const magnetRows = selectedRows.filter((row) => row.isMagnet)
       const directRows = selectedRows.filter((row) => !row.isMagnet)
@@ -1673,8 +1681,7 @@ export function useAppConfigCenterPage() {
       await applyImportAutostartRows(selectedAutostartRows)
       await loadAllConfigs()
       rebuildImportPreview()
-      importSuccessMessage.value = t('appConfigCenter.importApplySuccess')
-      importActionMessage.value = importSuccessMessage.value
+      if (!importRefreshWarning.value) importSuccessMessage.value = t('appConfigCenter.importApplySuccess')
     } catch (err) {
       importErrorMessage.value = String(err?.message || err || t('appConfigCenter.importApplyFailed'))
     } finally {
@@ -1690,6 +1697,9 @@ export function useAppConfigCenterPage() {
         transferNestedSet(nextSys, row.path, row.importValue)
       }
       const resp = await updateSysConfig(nextSys, Number(sysVersion.value || 0))
+      if (resp?.runtime_environment_refresh_errors?.length) {
+        importRefreshWarning.value = t('systemSettings.environmentRefreshFailed', { errors: resp.runtime_environment_refresh_errors.join('; ') })
+      }
       sysVersion.value = Number(resp?.version || sysVersion.value || 0)
       sysDraftData.value = cloneTransferValue(nextSys)
       sysOriginalData.value = cloneTransferValue(nextSys)
@@ -1768,9 +1778,7 @@ export function useAppConfigCenterPage() {
       ...missingAppBusy.value,
       [appId]: true,
     }
-    importErrorMessage.value = ''
-    importSuccessMessage.value = ''
-    importActionMessage.value = ''
+    clearImportMessages()
     error.value = ''
     try {
       const options = missingAppOptions.value[appId] || {}
@@ -1825,9 +1833,7 @@ export function useAppConfigCenterPage() {
   async function installAllMissingImportApps() {
     if (installAllMissingAppsBusy.value) return
     installAllMissingAppsBusy.value = true
-    importErrorMessage.value = ''
-    importSuccessMessage.value = ''
-    importActionMessage.value = ''
+    clearImportMessages()
     error.value = ''
     try {
       const installTargets = missingImportApps.value.filter((app) => (
@@ -1973,11 +1979,12 @@ export function useAppConfigCenterPage() {
   function ensureGroupCollapsedState(appGroups) {
     const next = { ...collapsedGroups.value }
     const nextTouched = { ...touchedGroups.value }
-    const defaultCollapsed = shouldDefaultCollapseGroups(selectedAppId.value, appGroups)
+    const collapseAll = shouldDefaultCollapseGroups(selectedAppId.value, appGroups)
     let changed = false
 
     for (const appGroup of appGroups) {
       for (const node of collectGroupNodes(appGroup.nodes)) {
+        const defaultCollapsed = collapseAll || node.fullPath === 'advanced'
         if (!Object.prototype.hasOwnProperty.call(next, node.id)) {
           next[node.id] = defaultCollapsed
           nextTouched[node.id] = false
@@ -2297,7 +2304,7 @@ export function useAppConfigCenterPage() {
     rows,
     appTreeRows,
     systemRows: ordinarySystemRows,
-    ros2Detected, domainRows, domainSaving, saveDomainValue,
+    showDomainSection, domainRows, domainSaving, domainDrafts,
     magnets,
     magnetConflicts,
     magnetSaving,
@@ -2401,6 +2408,7 @@ export function useAppConfigCenterPage() {
     importOverwriteMagnets,
     importBusy,
     importErrorMessage,
+    importRefreshWarning,
     importSuccessMessage,
     importStoreConnectivityHelpVisible,
     importActionMessage,
@@ -3029,18 +3037,6 @@ function schemaFormErrorMessage(code, t) {
   return t('appConfigCenter.systemSchemaInvalid')
 }
 
-function nestedGet(data, dottedPath) {
-  if (!dottedPath) return data
-  const segments = Array.isArray(dottedPath) ? dottedPath : String(dottedPath).split('.')
-  let cursor = data
-  for (const segment of segments) {
-    if (!cursor || typeof cursor !== 'object' || !Object.hasOwn(cursor, segment)) {
-      return undefined
-    }
-    cursor = cursor[segment]
-  }
-  return cursor
-}
 
 function hasNestedPath(data, dottedPath) {
   if (!dottedPath) return false
@@ -3055,23 +3051,6 @@ function hasNestedPath(data, dottedPath) {
   return true
 }
 
-function nestedSet(data, dottedPath, value) {
-  const segments = Array.isArray(dottedPath) ? dottedPath : String(dottedPath || '').split('.').filter(Boolean)
-  if (!segments.length) {
-    return
-  }
-
-  let cursor = data
-  for (let index = 0; index < segments.length - 1; index += 1) {
-    const key = segments[index]
-    if (!Object.hasOwn(cursor, key) || (!isRecord(cursor[key]) && !Array.isArray(cursor[key]))) {
-      cursor[key] = typeof segments[index + 1] === 'number' ? [] : {}
-    }
-    cursor = cursor[key]
-  }
-
-  cursor[segments[segments.length - 1]] = value
-}
 
 function nestedDelete(data, dottedPath) {
   const segments = String(dottedPath || '').split('.').filter(Boolean)

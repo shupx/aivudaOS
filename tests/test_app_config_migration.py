@@ -4,12 +4,14 @@ import asyncio
 import json
 import tempfile
 import unittest
-import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import yaml
+
+from package_fixture import app_package
 
 import aivudaos.core.apps.installer as installer_module
 import aivudaos.core.apps.versioning as versioning_module
@@ -23,7 +25,7 @@ from aivudaos.core.apps.versioning import VersioningService
 from aivudaos.core.config.app_migration import migrate_app_parameters
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.db.schema import init_db
-from aivudaos.core.errors import AppRuntimeError
+from aivudaos.core.errors import AppRuntimeError, InvalidConfigError, OperationCanceledError, PackageFormatError
 
 
 def object_schema(properties, **kwargs):
@@ -134,22 +136,15 @@ class MigrationFlowTests(unittest.TestCase):
         self.schema = object_schema({"port": {"type": "integer", "minimum": 1, "maximum": 100},
                                      "keep": {"type": "string"}}, additionalProperties=False)
 
-    def package(self, version, defaults=None, schema=None, icon=None):
+    def package(self, version, defaults=None, schema=None, icon=None, hook=None, app_id="demo"):
         defaults = defaults if defaults is not None else {"port": 10, "keep": "default"}
         schema = schema if schema is not None else self.schema
-        output = io.BytesIO()
-        with zipfile.ZipFile(output, "w") as archive:
-            archive.writestr("manifest.yaml", yaml.safe_dump({
-                "app_id": "demo", "version": version, "run": {"entrypoint": "start.sh"},
-                **({"icon": "icon.svg"} if icon is not None else {}),
-                "default_config_path": "defaults.yaml", "config_schema_path": "schema.yaml",
-            }))
-            if icon is not None:
-                archive.writestr("icon.svg", icon)
-            archive.writestr("defaults.yaml", yaml.safe_dump(defaults))
-            archive.writestr("schema.yaml", yaml.safe_dump(schema))
-            archive.writestr("start.sh", "#!/bin/sh\nexit 0\n")
-        return output.getvalue()
+        manifest, files = {}, {}
+        for key, name, content in (("pre_install", "pre.sh", hook), ("icon", "icon.svg", icon)):
+            if content is not None:
+                manifest[key] = name
+                files[name] = content
+        return app_package(app_id, version, defaults, schema, manifest=manifest, files=files)
 
     def install(self, version, **kwargs):
         return self.installer.install_from_upload(self.package(version), "demo.zip", **kwargs)
@@ -157,6 +152,158 @@ class MigrationFlowTests(unittest.TestCase):
     def update(self, version, data):
         cfg = self.config.get_app_config("demo", version)
         return self.config.update_app_config("demo", version, data, cfg.version)
+
+    def installed_state(self):
+        with connection_module.db_conn() as conn:
+            tables = tuple([tuple(row) for row in conn.execute("SELECT * FROM " + table + " ORDER BY rowid")]
+                           for table in ("app_installation", "app_runtime"))
+        files = {}
+        for folder in ("apps", "config", "runtime"):
+            for path in (self.root / folder).rglob("*"):
+                if path.is_symlink():
+                    files[path.relative_to(self.root)] = ("link", path.resolve())
+                elif path.is_file():
+                    files[path.relative_to(self.root)] = ("file", path.read_bytes(), path.stat().st_mode)
+        self.assertFalse(list(self.root.rglob(".install-backup-*")))
+        return tables, files
+
+    def test_rejects_invalid_upload_and_manifest_components_before_modifying_state(self):
+        self.install("1")
+        before = self.installed_state()
+        outside = self.root / "untouched.zip"
+        outside.write_bytes(b"unchanged")
+        for invalid in ("", ".", "..", "a/b", "a\\b", str(outside), None, 1):
+            for field in ("filename", "app_id", "version"):
+                with self.subTest(field=field, invalid=invalid):
+                    package = self.package(invalid if field == "version" else "1",
+                                           app_id=invalid if field == "app_id" else "demo")
+                    with self.assertRaisesRegex(PackageFormatError, "single path component"):
+                        self.installer.install_from_upload(package, invalid if field == "filename" else "demo.zip", overwrite=True)
+        self.assertEqual(outside.read_bytes(), b"unchanged")
+        self.assertEqual(self.installed_state(), before)
+
+    def test_rejects_linked_storage_parents_without_touching_their_destination(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        sentinel = outside / "original"
+        sentinel.write_bytes(b"original")
+        for relative in ("apps/demo", "apps/demo/versions", "runtime/demo", "config/apps/demo"):
+            with self.subTest(relative=relative):
+                link = self.root / relative
+                link.parent.mkdir(parents=True, exist_ok=True)
+                link.symlink_to(outside)
+                with self.assertRaisesRegex(PackageFormatError, "Unsafe install path"):
+                    self.install("1")
+                self.assertEqual(list(outside.iterdir()), [sentinel])
+                self.assertEqual(sentinel.read_bytes(), b"original")
+                self.assertTrue(link.is_symlink())
+                self.assertEqual(self.versioning.list_versions("demo"), [])
+                link.unlink()
+
+    def test_failed_migration_preserves_preexisting_legacy_config_without_creating_a_copy(self):
+        legacy = self.config.app_legacy_config_path("demo", "1")
+        legacy.parent.mkdir(parents=True)
+        legacy.write_bytes(b"# user comment\n_version: 7\nport: 23\nkeep: original\n")
+        before = self.installed_state()
+        def reject_after_defaults(*args, **kwargs):
+            self.assertTrue(self.config.app_default_config_path("demo", "1").is_file())
+            raise OSError("active config write failed")
+        with patch.object(self.config, "update_app_config", side_effect=reject_after_defaults):
+            with self.assertRaisesRegex(OSError, "active config write failed"):
+                self.installer.install_from_upload(self.package("1", {"port": 9, "keep": "x", "added": True},
+                                                               object_schema({})), "demo.zip")
+        self.assertEqual(self.installed_state(), before)
+
+    def test_overwrite_hook_failure_preserves_runnable_tree_and_runtime_data(self):
+        import aivudaos.core.apps.script_hooks as hooks
+        self.install("1")
+        self.update("1", {"port": 88, "keep": "custom"})
+        (self.versioning.ensure_version_runtime_data_dir("demo", "1") / "state").write_bytes(b"state")
+        before = self.installed_state()
+        hook = "#!/bin/sh\npwd\ntouch candidate-only\nexit 17\n"
+        logs = self.root / "logs"
+        with patch.object(hooks, "OS_LOG_DIR", logs), patch.object(self.installer._script_hooks, "_log_path", logs / "hook.log"):
+            with self.assertRaisesRegex(PackageFormatError, "exit_code=17") as raised:
+                self.installer.install_from_upload(self.package("1", hook=hook), "demo.zip", overwrite=True)
+        self.assertEqual(raised.exception.__cause__.output.strip(), str(self.versioning.version_dir("demo", "1")))
+        self.assertEqual(self.installed_state(), before)
+
+    def test_reload_failure_restores_first_install_upgrade_and_inactive_overwrite(self):
+        caddy = self.installer._caddy
+        for target, expected_active in (("1", None), ("2", "1"), ("1", "2")):
+            with self.subTest(target=target, previous=expected_active):
+                # The retry must observe the restored DB *and* files; otherwise
+                # it would write the rejected version back into global imports.
+                seen = []
+                def reload():
+                    active = self.versioning.active_version("demo")
+                    seen.append(active)
+                    if active:
+                        self.assertTrue((self.versioning.active_install_path("demo") / "start.sh").is_file())
+                        self.assertIn(active, self.versioning.list_versions("demo"))
+                    if len(seen) == 1:
+                        raise InvalidConfigError("reload rejected")
+                caddy.sync_and_reload.side_effect = reload
+                before = self.installed_state()
+                with self.assertRaisesRegex(PackageFormatError, "reload rejected"):
+                    self.installer.install_from_upload(self.package(target, icon=b"candidate"), "demo.zip", overwrite=True)
+                self.assertEqual(seen, [target, expected_active])
+                self.assertEqual(self.installed_state(), before)
+                caddy.sync_and_reload.side_effect = None
+                self.install(target, overwrite=True)  # Retry without manual cleanup.
+
+    def test_atomic_activation_failure_and_late_cancellation_preserve_target(self):
+        self.install("1")
+        self.update("1", {"port": 86, "keep": "custom"})
+        before = self.installed_state()
+
+        def fail_replace(candidate, active):
+            self.assertEqual(candidate.parent, active.parent)
+            self.assertEqual(candidate.resolve(), self.versioning.version_dir("demo", "2"))
+            self.assertEqual(active.resolve(), self.versioning.version_dir("demo", "1"))
+            raise OSError("symlink failed")
+
+        with patch.object(Path, "replace", fail_replace):
+            with self.assertRaisesRegex(OSError, "symlink failed"):
+                self.install("2")
+        self.assertEqual(self.installed_state(), before)
+        cancel = []
+        with self.assertRaises(OperationCanceledError):
+            self.install("2", event_cb=lambda _, event: cancel.append(event["phase"]) if event.get("phase") == "activate" else None,
+                         cancel_requested=lambda: bool(cancel))
+        self.assertEqual(self.installed_state(), before)
+
+    def test_failed_magnet_publication_rolls_back_partial_shared_yaml_writes(self):
+        schema = object_schema({"shared": {"type": "integer"}, "sys": object_schema({"created": {"type": "string"}})})
+        self.installer.install_from_upload(self.package("1", {"shared": 9}, schema, app_id="peer"), "peer.zip")
+        with patch.object(config_module, "SYS_CONFIG_PATH", self.root / "config/sys.yaml"), \
+                patch.object(magnet_module, "MAGNET_CONFIG_PATH", self.root / "config/magnets.yaml"):
+            magnet = MagnetService(self.config, self.versioning)
+            self.installer._magnet = magnet
+            write_registry = magnet._write_registry
+            before = self.installed_state()
+            def fail_after_registry(*args, **kwargs):
+                write_registry(*args, **kwargs)
+                self.assertEqual(self.config.get_app_config("peer", "1").data["shared"], 2)
+                self.assertEqual(self.config.get_sys_config().data["sys"]["created"], "candidate")
+                raise RuntimeError("magnet publication failed")
+            with patch.object(magnet, "_write_registry", side_effect=fail_after_registry):
+                with self.assertRaisesRegex(RuntimeError, "magnet publication failed"):
+                    self.installer.install_from_upload(self.package("1", {"shared": 2, "sys": {"created": "candidate"}}, schema), "demo.zip")
+            self.assertEqual(self.installed_state(), before)
+
+    def test_rollback_does_not_revert_a_later_independent_config_edit(self):
+        self.install("1")
+        self.update("1", {"port": 99, "keep": "old"})
+        schema = object_schema({"port": {"type": "integer", "maximum": 20}, "keep": {"type": "string"}})
+        def edit_after_migration(_kind, event):
+            if event.get("phase") == "activate":
+                with ThreadPoolExecutor(1) as worker:
+                    worker.submit(self.update, "1", {"port": 12, "keep": "intervening edit"}).result()
+                raise RuntimeError("late failure")
+        with self.assertRaisesRegex(RuntimeError, "late failure"):
+            self.installer.install_from_upload(self.package("1", schema=schema), "demo.zip", overwrite=True, event_cb=edit_after_migration)
+        self.assertEqual(self.config.get_app_config("demo", "1").data, {"port": 12, "keep": "intervening edit"})
 
     def test_same_version_overwrite_refreshes_icon_revision(self):
         for color in ("red", "tan", "red"):

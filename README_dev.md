@@ -252,8 +252,8 @@ MCP 在 FastAPI 主进程中提供 `/aivuda_os/mcp`，随 AivudaOS 服务一起�
 入口。ACEswarm 使用 `http://127.0.0.1:28790/aivuda_os/mcp`（端口可配置）。
 无需 `aivudaos-mcp` 命令、独立 MCP 端口或额外代理；旧客户端地址需要更新。
 
-根据业务 API 路由生成 46 个 HTTP 工具及 1 个交互 WebSocket 工具，保留原有
-5 个工具名。MCP 和静态 UI 不参与工具生成。内部传输通过 ASGI 调用同一应用
+根据业务 API 路由生成 HTTP 和交互 WebSocket 工具，工具数量和参数以 `tools/list`
+为准，保留原有工具名。MCP 和静态 UI 不参与工具生成。内部传输通过 ASGI 调用同一应用
 的 API，保留认证、参数校验、middleware、异步任务、文件、SSE 和 WebSocket。
 同步 MCP 调度在工作线程中执行，API 请求在服务事件循环中运行，不回连 Caddy。
 
@@ -332,9 +332,9 @@ or service processes. The fixture includes a detached child ignoring SIGTERM.
 
 ## ROS 2 Domain
 
-系统设置的只读摘要和配置中心的专用编辑区使用同一套字段发现规则。应用参数可通过配置路径、schema 说明或 `x-ros-domain` 标记发现，详见应用管理文档。
+系统设置的只读摘要和配置中心的专用编辑区使用同一套字段发现规则（前后端一致：`rosDomains.js` 与 `ros_domain.is_ros_domain_field`）。所有 ROS 2 Domain 类参数均排除在磁吸（MagnetService）之外，确保每个算法可独立配置自己的通信域（或通过 `-1` 继承全局默认 `sys.ros2_default_domain_id`）。应用参数可通过配置路径、schema 说明或 `x-ros-domain` 标记发现，详见应用管理文档。
 
-ROS 2 主机通过 `ROS_VERSION=2`、PATH 上的 `ros2` 或 `/opt/ros/*/bin/ros2` 识别。系统参数 `sys.ros2_default_domain_id` 存放在 `config/sys.yaml`，可通过现有系统参数 API 读写并随系统参数导入、导出。首次初始化时优先使用已有的 `runtime_environment.ROS_DOMAIN_ID`，其次使用服务环境中的值，均未设置时为 0。后续启动环境使用系统参数，应用入口可覆盖该值。更新会刷新 systemd 单元，现有进程继续使用启动时的环境。
+ROS 2 主机通过 `ROS_VERSION=2`、PATH 上的 `ros2` 或 `/opt/ros/*/bin/ros2` 识别。系统参数 `sys.ros2_default_domain_id` 存放在 `config/sys.yaml`，可通过现有系统参数 API 读写并随系统参数导入、导出。升级时先保留合法的全局值（旧字符串如 `"7"` 转为整数），再依次尝试 `runtime_environment.ROS_DOMAIN_ID`、服务进程的 `ROS_DOMAIN_ID`；跳过空值和越界值，都无效才使用 0。后续启动环境使用系统参数，应用入口可覆盖该值。更新会刷新 systemd 单元，现有进程继续使用启动时的环境。
 
 ## App 额外环境变量
 
@@ -350,7 +350,7 @@ runtime_environment:
 
 所有 app 的启动、重启、自启动和 systemd unit 重建均读取这份配置。额外变量覆盖继承环境和默认日志变量，内部 `AIVUDA_*` 路径变量保留。变量名必须匹配 `[A-Za-z_][A-Za-z0-9_]*`，不允许 `AIVUDA_*`；值必须为不含 NUL/换行的字符串，空字符串有效。systemd 会转义引号、反斜杠和百分号，保持变量的字面值。
 
-保存后自动刷新 app systemd unit 并 daemon-reload；不会自动重启运行中的 app，它们在下一次启动/重启时获得新值。API 返回 `runtime_environment_refresh_errors`，若部分 unit 刷新失败，UI 会说明配置已保存并显示失败原因。Popen 删除额外变量后恢复继承 AivudaOS 进程环境；该功能不修改 AivudaOS 自身或 app 安装/卸载脚本的环境。
+保存后在工作线程刷新 app systemd unit，每轮共用一份环境配置，最后统一执行一次 daemon-reload；不会自动重启运行中的 app，它们在下一次启动/重启时获得新值。API 返回 `runtime_environment_refresh_errors`，若部分 unit 刷新失败，UI 会说明配置已保存并显示失败原因。Popen 删除额外变量后恢复继承 AivudaOS 进程环境；该功能不修改 AivudaOS 自身或 app 安装/卸载脚本的环境。
 
 验证：`../.venv/bin/python -m unittest discover -s tests -v`；UI 在 `aivudaos/resources/ui` 执行 `npm run build`。
 
@@ -380,3 +380,19 @@ npm run build
 ```
 
 详见 [App 管理](docs/app-management.md)。
+
+### 验证核心生命周期
+
+`tests/test_app_lifecycle_gateway.py` 使用临时工作区、独立的 Caddy 管理 socket 和真实 Popen 子进程，验证从 HTTP 上传、仅应用参数导入、安装失败回滚、重复启动、读日志、停止到切换和卸载的完整路径。它分别让升级和同版本覆盖的 Caddy 重载失败，再检查旧路由、旧参数和旧程序仍可用。若未使用 ACEswarm 默认的开发 Caddy，可指定已有二进制：
+
+```bash
+AIVUDAOS_TEST_CADDY=/absolute/path/to/caddy python3 -m unittest discover -s tests
+node --test tests/test_*.mjs
+npm --prefix aivudaos/resources/ui run build
+# 需已安装 Playwright 及其 Chromium；使用系统 Chrome 时可设 PLAYWRIGHT_CHANNEL=chrome
+node --test tests/browser/*.mjs
+```
+
+未提供 Caddy 时，缺少该二进制的开发环境会跳过真实网关集成测试；其余后端测试仍可运行。
+
+配置中心的目标机 IPv4 动态选择器及包内 schema 约定见 [应用管理](docs/app-management.md#设备网卡和源地址选项)。

@@ -126,9 +126,12 @@ class SystemdRuntimeBackend:
     def restart(self, app_id: str, scope: str) -> None:
         self._run_systemctl(scope, ["restart", self.unit_name(app_id)], check=True)
 
-    def set_enabled(self, app_id: str, scope: str, enabled: bool) -> None:
+    def set_enabled(self, app_id: str, scope: str, enabled: bool, *, defer_reload: bool = False) -> None:
         action = "enable" if enabled else "disable"
-        self._run_systemctl(scope, [action, self.unit_name(app_id)], check=True)
+        args = [action, self.unit_name(app_id)]
+        if defer_reload:
+            args.insert(0, "--no-reload")
+        self._run_systemctl(scope, args, check=True)
 
     def get_state(self, app_id: str, scope: str) -> SystemdState:
         unit_name = self.unit_name(app_id)

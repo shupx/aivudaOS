@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 import shutil
-import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -15,6 +14,7 @@ from aivudaos.core.config.filelock import atomic_write_text, get_lock
 from aivudaos.core.config.models import UserRecord, UsersConfig, VersionedConfig
 from aivudaos.core.config.ros_domain import configured_domain, has_ros2, populate_default_domain
 from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT, validate_runtime_environment
+from aivudaos.core.config.versioned_yaml import load_revision, write_revision
 from aivudaos.core.errors import ConfigVersionConflictError
 from aivudaos.core.paths import APP_CONFIG_DIR, OS_CONFIG_PATH, SYS_CONFIG_PATH, USERS_CONFIG_PATH
 from aivudaos.core.paths import embedded_mode
@@ -91,10 +91,11 @@ class ConfigService:
     def update_sys_config(
         self, data: Dict[str, Any], expected_version: int, username: str
     ) -> VersionedConfig:
-        if configured_domain(data) is None and has_ros2():
-            # Removing the explicit default restores the legacy environment or ROS default.
+        domain = configured_domain(data)  # New writes must use an integer, not a legacy string.
+        if has_ros2():
             data = deepcopy(data)
-            populate_default_domain(data, self.get_os_setting("runtime_environment", {}))
+            environment = self.get_os_setting("runtime_environment", {}) if domain is None else {}
+            populate_default_domain(data, environment)
         return self._write_versioned(SYS_CONFIG_PATH, data, expected_version, username)
 
     # --- Per-App Config ---
@@ -261,13 +262,7 @@ class ConfigService:
         with lock:
             if not path.exists():
                 return VersionedConfig(data={}, version=0)
-            raw = yaml.safe_load(path.read_text("utf-8")) or {}
-        version = raw.pop("_version", 0)
-        updated_at = raw.pop("_updated_at", None)
-        updated_by = raw.pop("_updated_by", None)
-        return VersionedConfig(
-            data=raw, version=version, updated_at=updated_at, updated_by=updated_by
-        )
+            return load_revision(path)
 
     def _write_versioned(
         self,
@@ -278,33 +273,14 @@ class ConfigService:
     ) -> VersionedConfig:
         lock = get_lock(path)
         with lock:
-            if path.exists():
-                current_raw = yaml.safe_load(path.read_text("utf-8")) or {}
-                current_version = current_raw.get("_version", 0)
-            else:
-                current_version = 0
+            current_version = load_revision(path).version if path.exists() else 0
 
             if expected_version != current_version:
                 raise ConfigVersionConflictError(
                     f"Expected version {expected_version}, current is {current_version}"
                 )
 
-            new_version = current_version + 1
-            now = int(time.time())
-            to_write = {
-                "_version": new_version,
-                "_updated_at": now,
-                "_updated_by": updated_by,
-                **data,
-            }
-            atomic_write_text(
-                path,
-                yaml.dump(to_write, default_flow_style=False, allow_unicode=True),
-            )
-
-        return VersionedConfig(
-            data=data, version=new_version, updated_at=now, updated_by=updated_by
-        )
+            return write_revision(path, data, current_version + 1, updated_by)
 
     def _rollback_os_config_after_hostname_sync_failure(
         self,
@@ -356,14 +332,4 @@ class ConfigService:
         if path.exists() and not overwrite:
             return
 
-        now = int(time.time())
-        to_write = {
-            "_version": 1,
-            "_updated_at": now,
-            "_updated_by": "system",
-            **dict(default_data),
-        }
-        atomic_write_text(
-            path,
-            yaml.dump(to_write, default_flow_style=False, allow_unicode=True),
-        )
+        write_revision(path, default_data, 1, "system")

@@ -66,7 +66,6 @@ export function useAppDetailPage() {
 
   let logTimer = null
   let logGeneration = 0
-  let seekLogEnd = false
 
   function normalizeOutputText(value) {
     return String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -289,19 +288,14 @@ export function useAppDetailPage() {
     }
   }
 
-  async function loadLogs() {
+  async function loadLogs(fromEnd = false) {
     if (!app.value || logBusy.value) return
     const generation = logGeneration
     logBusy.value = true
     try {
-      const data = await fetchAppLogs(app.value.app_id, logOffset.value, seekLogEnd ? 1024 : 65536)
+      const data = await fetchAppLogs(app.value.app_id, logOffset.value, 65536, fromEnd)
       if (generation !== logGeneration) return
       logError.value = ''
-      if (seekLogEnd) {
-        logOffset.value = data.size
-        seekLogEnd = false
-        return
-      }
       if (data.reset) {
         logText.value = ''
       }
@@ -323,12 +317,11 @@ export function useAppDetailPage() {
 
   function resetLogView(fromEnd = false) {
     logGeneration += 1
-    seekLogEnd = fromEnd
     logBusy.value = false
     logText.value = ''
-    logOffset.value = 0
+    if (!fromEnd) logOffset.value = 0
     logError.value = ''
-    loadLogs()
+    loadLogs(fromEnd)
   }
 
   function goToManualUpload() {

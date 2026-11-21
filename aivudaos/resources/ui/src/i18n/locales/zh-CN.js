@@ -116,6 +116,8 @@ export default {
     domainManaged: '请在配置参数的「ROS 2 通信域参数」中修改 ROS_DOMAIN_ID。',
     domainSources: { packageDefault: '安装包默认值', inherited: '继承启动环境', override: '应用配置', invalid: '配置无效' },
     domainSection: 'ROS 2 通信域参数',
+    domainId: '通信域 ID',
+    domainBlankInherits: '留空以继承启动环境',
     editDomains: '前往配置参数修改',
     noDomainFields: '已安装应用均未声明 ROS 2 通信域。',
     saveDomain: '保存',
@@ -368,6 +370,7 @@ export default {
     noConstraint: '当前应用没有等值约束',
   },
   appConfigCenter: {
+    advancedSettings: '高级设置',
     title: '配置参数中心',
     backToApps: '返回应用列表',
     autoSyncSuccess: '参数已自动同步生效',

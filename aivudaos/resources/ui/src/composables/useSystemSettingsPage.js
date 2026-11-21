@@ -198,7 +198,6 @@ export function useSystemSettingsPage() {
         return
       }
       const data = await updateSudoNopasswdSetting(pendingToggleValue.value, sudoPassword.value)
-      sysConfig.value = sysData
       username.value = String(data?.username || username.value || '')
       enabled.value = Boolean(data?.enabled)
       success.value = t('systemSettings.saveSuccess')
