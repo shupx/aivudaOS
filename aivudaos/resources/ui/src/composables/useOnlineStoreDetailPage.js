@@ -81,7 +81,7 @@ export function useOnlineStoreDetailPage() {
           .map((item) => ({
             ...item,
             updated_at_display: formatStoreUpdatedAt(item?.updated_at),
-            artifact_size_display: formatStorePackageSize(item?.artifact_size),
+            artifact_size_display: item.artifact_size == null ? '—' : formatStorePackageSize(item.artifact_size),
           }))
         : []
     } catch (err) {

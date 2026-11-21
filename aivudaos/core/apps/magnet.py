@@ -12,6 +12,7 @@ from aivudaos.core.apps.config_validation import validate_config_data
 from aivudaos.core.apps.versioning import VersioningService
 from aivudaos.core.config.filelock import atomic_write_text, get_lock
 from aivudaos.core.config.models import VersionedConfig
+from aivudaos.core.config.ros_domain import is_ros_domain_field
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.db.connection import db_conn
 from aivudaos.core.errors import ConfigVersionConflictError, InvalidConfigError, NotFoundError
@@ -237,6 +238,8 @@ class MagnetService:
             for path, leaf_schema in _flatten_schema_leaves(schema).items():
                 if not path.startswith("sys."):
                     continue
+                if is_ros_domain_field(path, leaf_schema, _nested_get(current_data, path) if _nested_has(current_data, path) else _nested_get(defaults, path)):
+                    continue
 
                 if not _nested_has(sys_data, path):
                     if _nested_has(current_data, path):
@@ -286,6 +289,8 @@ class MagnetService:
         for path in _flatten_leaf_paths(sys_cfg):
             value = _nested_get(sys_cfg, path)
             schema = sys_schema_map.get(path)
+            if is_ros_domain_field(path, schema, value):
+                continue
             inferred_type = _extract_schema_type(schema) or _infer_type_name(value)
             discovered.setdefault(path, []).append(
                 {
@@ -310,6 +315,8 @@ class MagnetService:
 
             for path, leaf_schema in _flatten_schema_leaves(schema).items():
                 value = _nested_get(source, path)
+                if is_ros_domain_field(path, leaf_schema, value):
+                    continue
                 inferred_type = _extract_schema_type(leaf_schema) or _infer_type_name(value)
                 discovered.setdefault(path, []).append(
                     {

@@ -32,6 +32,11 @@ def init_db() -> None:
             """
         )
 
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS app_share ("
+            "id INTEGER PRIMARY KEY, digest TEXT NOT NULL, expires INTEGER NOT NULL)"
+        )
+
         # Migration: add manifest column to existing databases
         try:
             conn.execute(

@@ -304,6 +304,7 @@ agent 无 token 时先使用默认 `admin / admin123` 自动登录，主进程�
 ## 在线应用商店接入
 
 - UI 左侧菜单新增“在线应用商店”，位置在“应用菜单”下方。
+- 来源设备通过已登录的管理页面创建一小时有效的只读共享地址。该地址提供同样的 store API，目录来自安装数据库，下载时按版本目录生成 tar。
 - 商店默认地址为 `http://127.0.0.1:28791`；自定义地址由前端页面输入并保存在当前浏览器本地存储（localStorage，key: `aivuda_ui_appstore_base_url`）。
 - 前端按“商店地址 + /aivuda_app_store/store/...”拼接调用 store API（列表、详情、下载链接、下载文件）。
 - 下载流程：先下载应用包到用户浏览器本机；安装流程：再将该包按本地上传接口 `POST /aivuda_os/api/apps/upload` 传给 AivudaOS 安装。

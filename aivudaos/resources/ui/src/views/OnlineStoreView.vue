@@ -12,6 +12,7 @@ const {
   error,
   addressError,
   savingAddress,
+  shareAddress, shareError, creatingShare, shareCopied, createShare, copyShare,
   storeAddress,
   searchText,
   updateCount,
@@ -70,8 +71,19 @@ const sortOptions = computed(() => [
           </div>
           <NText depth="3" style="font-size: 13px; margin-top: 4px;">
             {{ t('store.addressConnectionHint') }}
-            <a href="https://pypi.org/project/aivudaappstore/" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">https://pypi.org/project/aivudaappstore/</a>
+
           </NText>
+          <NSpace align="center">
+            <NButton secondary size="small" :loading="creatingShare" @click="createShare">
+              {{ t('store.shareInstalled') }}
+            </NButton>
+            <NText depth="3">{{ t('store.shareHint') }}</NText>
+          </NSpace>
+          <NSpace v-if="shareAddress" vertical>
+            <NInput :value="shareAddress" readonly :aria-label="t('store.shareInstalled')" />
+            <NButton size="small" @click="copyShare">{{ t(shareCopied ? 'store.copied' : 'store.copyShare') }}</NButton>
+          </NSpace>
+          <NAlert v-if="shareError" type="error">{{ shareError }}</NAlert>
           <NAlert v-if="addressError" type="error" style="margin-top: 8px;">{{ addressError }}</NAlert>
 
           <NAlert v-if="showAddressManualCheckHint" type="info" style="margin-top: 8px;">
