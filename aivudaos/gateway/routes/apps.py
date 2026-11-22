@@ -7,12 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
-from starlette.concurrency import run_in_threadpool
 
-from aivudaos.core.apps.config_validation import validate_config_data
-from aivudaos.core.apps.device_network import NetworkSnapshot
-from aivudaos.core.apps.magnet import app_binding_paths
-from aivudaos.core.apps.network_choices import app_config_schema
+from aivudaos.core.apps.config_validation import normalize_config_schema, validate_config_data
 from aivudaos.core.auth.models import SessionInfo
 from aivudaos.core.auth.service import AuthService
 from aivudaos.core.db.connection import db_conn
@@ -207,17 +203,10 @@ async def get_installed(token: str) -> Dict[str, Any]:
 @router.get("/configs/active")
 async def get_active_configs(token: str) -> Dict[str, Any]:
     _require_auth(token)
-    return await run_in_threadpool(_active_configs)
-
-
-def _active_configs() -> Dict[str, Any]:
     runtime = get_runtime_service()
     config = get_config_service()
     magnet = get_magnet_service()
-    network = NetworkSnapshot()
     items: List[Dict[str, Any]] = []
-    magnets = magnet.list_groups()
-    bound_paths = app_binding_paths(magnets.get("items") or [])
 
     for app in runtime.get_installed_list():
         app_id = str(app.get("app_id") or "")
@@ -233,8 +222,8 @@ def _active_configs() -> Dict[str, Any]:
             app_version,
             fallback=(manifest.get("default_config") if isinstance(manifest, dict) else {}),
         )
+        normalized_schema = normalize_config_schema(schema)
         data = dict(cfg.data) if cfg.version > 0 else dict(default_config or {})
-        normalized_schema = app_config_schema(schema or {}, data, network)
 
         items.append(
             {
@@ -250,10 +239,13 @@ def _active_configs() -> Dict[str, Any]:
                 "schema": schema or {},
                 "normalized_schema": normalized_schema,
                 "constraints": _get_constraints_for_app(app_id),
-                "readonly_paths": sorted(bound_paths.get((app_id, app_version), ())),
+                "readonly_paths": sorted(
+                    magnet.readonly_paths_for_app(app_id, app_version)
+                ),
             }
         )
 
+    magnets = magnet.list_groups()
     return {
         "items": items,
         "magnets": magnets.get("items") or [],
@@ -286,12 +278,11 @@ async def get_logs(
     token: str,
     offset: int = 0,
     limit: int = 65536,
-    from_end: bool = False,
 ) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     try:
-        return runtime.read_logs(app_id, offset=offset, limit=limit, from_end=from_end)
+        return runtime.read_logs(app_id, offset=offset, limit=limit)
     except AppNotInstalledError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except AppRuntimeError as e:
@@ -806,7 +797,7 @@ async def get_app_config(app_id: str, token: str, app_version: Optional[str] = N
     data = dict(cfg.data) if cfg.version > 0 else default_config
 
     constraints = _get_constraints_for_app(app_id)
-    normalized_schema = await run_in_threadpool(app_config_schema, manifest.get("config_schema") or {}, data)
+    normalized_schema = normalize_config_schema(manifest.get("config_schema") or {})
     readonly_paths = sorted(magnet.readonly_paths_for_app(app_id, target_version))
     return {
         "app_id": app_id,
@@ -843,13 +834,8 @@ async def put_app_config(
 
     manifest = _get_manifest_from_db(app_id, target_version)
     schema = manifest.get("config_schema") or {}
-    current_cfg = config.get_app_config(app_id, target_version)
-    network = NetworkSnapshot()
     try:
-        await run_in_threadpool(
-            validate_config_data, payload.data, schema, context=f"api {app_id}@{target_version}", network=network,
-            previous_data=current_cfg.data if current_cfg.version > 0 else None,
-        )
+        validate_config_data(payload.data, schema, context=f"api {app_id}@{target_version}")
     except InvalidConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -867,9 +853,13 @@ async def put_app_config(
             },
         )
 
-    current_data = current_cfg.data if current_cfg.version > 0 else config.get_app_default_config(
-        app_id, target_version, fallback=manifest.get("default_config") or {},
+    current_cfg = config.get_app_config(app_id, target_version)
+    default_config = config.get_app_default_config(
+        app_id,
+        target_version,
+        fallback=manifest.get("default_config") or {},
     )
+    current_data = current_cfg.data if current_cfg.version > 0 else default_config
     blocked_paths = magnet.blocked_paths_for_app_update(
         app_id=app_id,
         app_version=target_version,
@@ -898,7 +888,7 @@ async def put_app_config(
             status_code=409, detail="App config version conflict"
         )
 
-    await run_in_threadpool(magnet.recompute, updated_by=session.username, network=network)
+    magnet.recompute(updated_by=session.username)
     return {"ok": True, "version": result.version, "app_version": target_version}
 
 

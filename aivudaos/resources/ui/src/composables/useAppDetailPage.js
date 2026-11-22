@@ -65,7 +65,6 @@ export function useAppDetailPage() {
   const uninstallPurge = ref(true)
 
   let logTimer = null
-  let logGeneration = 0
 
   function normalizeOutputText(value) {
     return String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -288,14 +287,11 @@ export function useAppDetailPage() {
     }
   }
 
-  async function loadLogs(fromEnd = false) {
+  async function loadLogs() {
     if (!app.value || logBusy.value) return
-    const generation = logGeneration
     logBusy.value = true
     try {
-      const data = await fetchAppLogs(app.value.app_id, logOffset.value, 65536, fromEnd)
-      if (generation !== logGeneration) return
-      logError.value = ''
+      const data = await fetchAppLogs(app.value.app_id, logOffset.value, 65536)
       if (data.reset) {
         logText.value = ''
       }
@@ -306,22 +302,19 @@ export function useAppDetailPage() {
         }
       }
       logOffset.value = Number(data.next_offset || 0)
+      logError.value = ''
     } catch (err) {
-      if (generation === logGeneration) {
-        logError.value = String(err?.message || err || t('appDetail.readLogsFailed'))
-      }
+      logError.value = String(err?.message || err || t('appDetail.readLogsFailed'))
     } finally {
-      if (generation === logGeneration) logBusy.value = false
+      logBusy.value = false
     }
   }
 
-  function resetLogView(fromEnd = false) {
-    logGeneration += 1
-    logBusy.value = false
+  function clearAndReloadLogs() {
     logText.value = ''
-    if (!fromEnd) logOffset.value = 0
+    logOffset.value = 0
     logError.value = ''
-    loadLogs(fromEnd)
+    loadLogs()
   }
 
   function goToManualUpload() {
@@ -348,7 +341,7 @@ export function useAppDetailPage() {
       actionWarning.value = formatConfigMigrationWarnings(result, t)
       await refresh()
       await loadVersions(app.value.app_id)
-      resetLogView()
+      clearAndReloadLogs()
       actionMessage.value = t('appDetail.switchSuccess')
     } catch (err) {
       actionError.value = String(err?.message || err || t('appDetail.switchFailed'))
@@ -458,7 +451,7 @@ export function useAppDetailPage() {
       clearActionStatus()
       uninstallVersionOnly.value = true
       uninstallPurge.value = true
-      resetLogView()
+      clearAndReloadLogs()
       loadVersions(String(appId || ''))
     },
     { immediate: true },
@@ -552,7 +545,7 @@ export function useAppDetailPage() {
     logBusy,
     logError,
     loadLogs,
-    clearLogView: () => resetLogView(true),
+    clearAndReloadLogs,
     actionBusy,
     actionError,
     actionMessage,

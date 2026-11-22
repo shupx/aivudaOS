@@ -2,8 +2,6 @@
 
 aivudaOS is a lightweight OS on swarm robot's onboard computer. It offers a graphical panel which allows you to interact with the onboard system and manage the APPs.
 
-To install an app from another aivudaOS device, open **Online App Store** on the source and choose **Share installed apps**. Paste the sharing link into the destination device’s store address, select a version, and choose **Download and Install**. [Device sharing details](docs/app-management.md#从另一台-aivudaos-安装应用)
-
 ## Install 
 
 Choose one method to install:

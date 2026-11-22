@@ -12,31 +12,21 @@ import sys
 import time
 
 
-def process_stat(path):
-    # The parenthesized process name may contain ')' or non-UTF-8 bytes.
-    fields = path.read_bytes().rsplit(b')', 1)[1].split()
-    if fields[0] != b'Z':
-        return int(fields[1]), int(fields[2]), fields[19].decode('ascii')
-    return None
-
-
 def processes():
     result = {}
     for path in Path('/proc').glob('[0-9]*/stat'):
         try:
-            stat = process_stat(path)
-            if stat is not None:
-                result[int(path.parent.name)] = stat
+            fields = path.read_text().rsplit(')', 1)[1].split()
+            if fields[0] != 'Z':
+                result[int(path.parent.name)] = (int(fields[1]), int(fields[2]), fields[19])
         except (OSError, ValueError, IndexError):
             continue
     return result
 
 
-def remember(tree, root, stamp, table=None):
-    if table is None:
-        table = processes()
-    root_owned = root in table and table[root][2] == stamp
-    if root_owned:
+def remember(tree, root, stamp):
+    table = processes()
+    if root in table and table[root][2] == stamp:
         tree[root] = stamp
     # Keep descendants already observed even after they are reparented.
     changed = True
@@ -44,6 +34,7 @@ def remember(tree, root, stamp, table=None):
         changed = False
         for pid, (parent, group, identity) in table.items():
             parent_owned = parent in tree and parent in table and table[parent][2] == tree[parent]
+            root_owned = root in table and table[root][2] == stamp
             if (parent_owned or (root_owned and group == root)) and pid not in tree:
                 tree[pid] = identity
                 changed = True
@@ -89,10 +80,8 @@ def guardian():
     trees = {}
     pending = b''
     while True:
-        if roots:
-            table = processes()
-            for pid, stamp in roots.items():
-                remember(trees[pid], pid, stamp, table)
+        for pid, stamp in roots.items():
+            remember(trees[pid], pid, stamp)
         ready, _, _ = select.select([sys.stdin.buffer], [], [], 0.1)
         if not ready:
             continue

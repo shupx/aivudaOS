@@ -13,7 +13,14 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-from gateway_fixture import CADDY, ROOT, free_port
+ROOT = Path(__file__).resolve().parents[1]
+CADDY = ROOT.parent / "resources/app-gateway/caddy"
+
+
+def free_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 @unittest.skipUnless(CADDY.is_file(), "ACEswarm development Caddy binary is required")
@@ -73,8 +80,7 @@ class MCPGatewayTests(unittest.TestCase):
                                 if time.monotonic() >= deadline:
                                     self.fail((temp / "services.log").read_text())
                                 time.sleep(0.1)
-                        tools = rpc("tools/list")["tools"]
-                        self.assertIn("restart_running_apps", {tool["name"] for tool in tools})
+                        self.assertEqual(len(rpc("tools/list")["tools"]), 47)
                         login = rpc("tools/call", {"name": "login", "arguments": {"body": {
                             "username": "admin", "password": "admin123",
                         }}})

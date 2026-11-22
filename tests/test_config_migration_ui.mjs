@@ -1,28 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { formatConfigMigrationWarnings } from '../aivudaos/resources/ui/src/services/core/configMigration.js'
-import { getConfigValue, setConfigValue, nestedGet, nestedSet } from '../aivudaos/resources/ui/src/services/core/configTransfer.js'
 import en from '../aivudaos/resources/ui/src/i18n/locales/en-US.js'
 import zh from '../aivudaos/resources/ui/src/i18n/locales/zh-CN.js'
-
-test('editor paths preserve array indices and literal keys; imported leaves are copied', () => {
-  const draft = { lanes: [{ keep: true }], '': { mode: 'literal' }, mode: 'normal' }
-  const path = ['lanes', 1, 'ros.domain']
-  const value = { id: 7 }
-  setConfigValue(draft, path, value)
-  assert.equal(getConfigValue(draft, path), value)
-  assert.deepEqual(draft.lanes[0], { keep: true })
-  assert.equal(getConfigValue(draft, '.mode'), 'literal')
-  assert.equal(nestedGet(draft, '.mode'), 'normal')
-
-  const imported = {}
-  nestedSet(imported, path, value)
-  value.id = 8
-  assert.equal(nestedGet(imported, path).id, 7)
-  assert.ok(Array.isArray(imported.lanes))
-  nestedSet(imported, 'lanes.0', 'object leaf')
-  assert.deepEqual(imported.lanes, { 0: 'object leaf' })
-})
 
 for (const [locale, messages] of Object.entries({ en, zh })) {
   const t = (key) => key.split('.').reduce((value, part) => value?.[part], messages)

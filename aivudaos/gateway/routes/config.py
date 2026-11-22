@@ -3,17 +3,15 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
-from starlette.concurrency import run_in_threadpool
 
 from aivudaos import __version__ as aivudaos_version
 from aivudaos.core.auth.models import SessionInfo
 from aivudaos.core.auth.service import AuthService
-from aivudaos.core.config.ros_domain import configured_domain, has_ros2
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.errors import AuthenticationError, ConfigVersionConflictError
 from aivudaos.core.errors import InvalidConfigError, NotFoundError
@@ -292,7 +290,6 @@ async def get_config(token: str) -> Dict[str, Any]:
     cfg = config.get_sys_config()
     magnets = magnet.list_groups()
     return {
-        "ros2_detected": has_ros2(),
         "data": cfg.data,
         "version": cfg.version,
         "updated_at": cfg.updated_at,
@@ -304,14 +301,8 @@ async def get_config(token: str) -> Dict[str, Any]:
     }
 
 
-def _refresh_runtime_environment() -> List[str]:
-    try:
-        return get_runtime_service().refresh_runtime_environment()
-    except (RuntimeError, OSError) as exc:
-        return [str(exc)]
-
-
-def save_system_parameters(data: Dict[str, Any], version: int, token: str) -> Dict[str, Any]:
+@router.put("")
+async def put_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, Any]:
     user = _require_auth(token)
     config: ConfigService = get_config_service()
     magnet = get_magnet_service()
@@ -319,7 +310,7 @@ def save_system_parameters(data: Dict[str, Any], version: int, token: str) -> Di
     current = config.get_sys_config()
     blocked_paths = magnet.blocked_paths_for_sys_update(
         before_data=current.data,
-        after_data=data,
+        after_data=payload.data,
     )
 
     if blocked_paths:
@@ -331,30 +322,24 @@ def save_system_parameters(data: Dict[str, Any], version: int, token: str) -> Di
             },
         )
 
-    try:
-        config.update_sys_config(data, version, user.username)
-    except ConfigVersionConflictError:
-        raise HTTPException(status_code=409, detail="System parameters changed. Refresh and try again.")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    result = None
+    for _ in range(5):
+        current_for_write = config.get_sys_config()
+        try:
+            result = config.update_sys_config(
+                payload.data,
+                current_for_write.version,
+                user.username,
+            )
+            break
+        except ConfigVersionConflictError:
+            continue
+
+    if result is None:
+        raise HTTPException(status_code=409, detail="Config version conflict")
 
     magnet.recompute(updated_by=user.username)
-    refresh_errors = []
-    result = config.get_sys_config()
-    if has_ros2():
-        try:
-            previous_domain = configured_domain(current.data)
-        except ValueError:
-            # The save repaired a legacy value; refresh units built before the repair.
-            previous_domain = None
-        if previous_domain != configured_domain(result.data):
-            refresh_errors = _refresh_runtime_environment()
-    return {"ok": True, "version": result.version, "runtime_environment_refresh_errors": refresh_errors}
-
-
-@router.put("")
-async def put_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, Any]:
-    return await run_in_threadpool(save_system_parameters, payload.data, payload.version, token)
+    return {"ok": True, "version": result.version}
 
 
 @router.get("/os")
@@ -385,7 +370,10 @@ async def put_os_config(payload: ConfigUpdateRequest, token: str) -> Dict[str, A
 
     refresh_errors = []
     if previous.data.get("runtime_environment") != result.data.get("runtime_environment"):
-        refresh_errors = await run_in_threadpool(_refresh_runtime_environment)
+        try:
+            refresh_errors = get_runtime_service().refresh_runtime_environment()
+        except (RuntimeError, OSError) as exc:
+            refresh_errors = [str(exc)]
 
     return {"ok": True, "version": result.version, "runtime_environment_refresh_errors": refresh_errors}
 
@@ -403,8 +391,8 @@ async def update_magnet(group_id: str, payload: MagnetUpdateRequest, token: str)
     magnet = get_magnet_service()
 
     try:
-        result = await run_in_threadpool(
-            magnet.update_group_value, group_id=group_id,
+        result = magnet.update_group_value(
+            group_id=group_id,
             value=payload.value,
             expected_version=payload.version,
             updated_by=user.username,

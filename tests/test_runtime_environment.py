@@ -8,14 +8,13 @@ import unittest
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 from fastapi import HTTPException
 from aivudaos.core.apps.runtime import RuntimeService
 from aivudaos.core import paths
 from aivudaos.core.apps.systemd_runtime import SystemdRuntimeBackend
 from aivudaos.core.config import service as config_module
-from aivudaos.core.errors import AppRuntimeError
 from aivudaos.core.config.runtime_environment import validate_runtime_environment
 from aivudaos.gateway.routes import config as config_routes
 from aivudaos.gateway.schemas import ConfigUpdateRequest
@@ -58,22 +57,16 @@ class RuntimeEnvironmentTests(unittest.TestCase):
     def make_runtime(self, root, environment, systemd):
         config = Mock()
         settings = {'runtime_environment': environment, 'runtime_process_manager': 'systemd' if systemd else 'popen', 'runtime_systemd_scope': 'user'}
-        config.get_os_setting.side_effect = settings.get
-        config.get_os_config.return_value.data = settings
-        config.get_sys_config.return_value.data = {}
+        config.get_os_setting.side_effect = lambda key, default=None: settings.get(key, default)
         versioning = Mock()
         versioning.active_version.return_value = '1.0'
         versioning.active_install_path.return_value = root
         versioning.list_versions.return_value = ['1.0']
         runtime = RuntimeService(versioning, config, Mock())
         runtime._get_manifest = Mock(return_value=SimpleNamespace(name='Example'))
-        runtime.get_runtime_state = Mock(return_value=SimpleNamespace(autostart=False, running=False, pid=None))
+        runtime.get_runtime_state = Mock(return_value=SimpleNamespace(autostart=False, running=False))
         runtime._build_config_env = Mock(return_value={'AIVUDA_APP_ID': 'example'})
-        runtime._build_exec_command = Mock(return_value=[
-            sys.executable, '-c', 'import json, os, sys; '
-            'print(json.dumps({key: os.environ[key] for key in sys.argv[1:] if key in os.environ}))',
-            'ROS_LOCALHOST_ONLY', 'EMPTY', 'TEXT', 'AIVUDA_APP_ID',
-        ])
+        runtime._build_exec_command = Mock(return_value=[sys.executable, '-c', 'import os,json; print(json.dumps(dict(os.environ)))'])
         runtime._decorate_command_for_realtime_logs = lambda command: command
         runtime._app_log_path = Mock(return_value=root / 'app.log')
         runtime._sync_runtime_row = Mock()
@@ -97,7 +90,7 @@ class RuntimeEnvironmentTests(unittest.TestCase):
                 children.append(proc)
                 return proc
 
-            with patch('aivudaos.core.apps.runtime.subprocess.Popen', side_effect=spawn), patch.dict(os.environ, {'ROS_LOCALHOST_ONLY': '0'}):
+            with patch('aivudaos.core.apps.runtime.subprocess.Popen', side_effect=spawn), patch('aivudaos.core.apps.runtime.processes', return_value={}), patch.dict(os.environ, {'ROS_LOCALHOST_ONLY': '0'}):
                 runtime.start('example')
                 self.assertEqual(children[-1].wait(timeout=5), 0)
                 actual = json.loads((root / 'app.log').read_text())
@@ -156,36 +149,10 @@ class RuntimeEnvironmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             runtime = self.make_runtime(Path(folder), {'ROS_LOCALHOST_ONLY': '1'}, True)
             connection = Mock()
-            connection.execute.return_value.fetchall.return_value = [
-                {'app_id': 'example', 'autostart': 1}, {'app_id': 'other', 'autostart': 0},
-            ]
-            runtime._config.get_os_config.return_value.data['avahi_hostname'] = ' Example '
+            connection.execute.return_value.fetchall.return_value = [{'app_id': 'example', 'autostart': 1}]
             with patch('aivudaos.core.apps.runtime.db_conn') as db:
                 db.return_value.__enter__.return_value = connection
                 self.assertEqual(runtime.refresh_runtime_environment(), [])
-            runtime._config.get_os_config.assert_called_once_with()
-            self.assertEqual(runtime._systemd.set_enabled.call_args_list, [
-                call('example', 'user', True, defer_reload=True), call('other', 'user', False, defer_reload=True),
-            ])
-            for unit in runtime._systemd.write_unit.call_args_list:
-                self.assertEqual(unit.kwargs['environment']['ROS_LOCALHOST_ONLY'], '1')
-                self.assertEqual(unit.kwargs['environment']['AIVUDA_OS_AVAHI_HOSTNAME'], 'example')
-            runtime._systemd.daemon_reload.assert_called_once_with('user')
-            runtime._systemd.restart.assert_not_called()
-
-    def test_global_domain_refresh_skips_invalid_app_and_updates_next_unit(self):
-        with tempfile.TemporaryDirectory() as folder:
-            runtime = self.make_runtime(Path(folder), {'ROS_DOMAIN_ID': '3'}, True)
-            runtime._config.get_sys_config.return_value.data = {'sys': {'ros2_default_domain_id': 42}}
-            runtime._build_config_env.side_effect = [AppRuntimeError('invalid app config'), {'AIVUDA_APP_ID': 'good'}]
-            with patch('aivudaos.core.apps.runtime.has_ros2', return_value=True), \
-                 patch('aivudaos.core.apps.runtime.db_conn') as db:
-                db.return_value.__enter__.return_value.execute.return_value.fetchall.return_value = [
-                    {'app_id': 'bad', 'autostart': 0}, {'app_id': 'good', 'autostart': 1},
-                ]
-                self.assertEqual(runtime.refresh_runtime_environment(), ['bad: invalid app config'])
-            runtime._systemd.write_unit.assert_called_once()
-            unit = runtime._systemd.write_unit.call_args.kwargs
-            self.assertEqual((unit['app_id'], unit['environment']['ROS_DOMAIN_ID']), ('good', '42'))
+            self.assertEqual(runtime._systemd.write_unit.call_args.kwargs['environment']['ROS_LOCALHOST_ONLY'], '1')
             runtime._systemd.daemon_reload.assert_called_once_with('user')
             runtime._systemd.restart.assert_not_called()

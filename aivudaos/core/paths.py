@@ -8,7 +8,6 @@ from typing import Dict
 import yaml
 
 from aivudaos.core.config.avahi import AvahiService
-from aivudaos.core.config.ros_domain import ensure_ros_domain
 from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT
 import aivudaos
 
@@ -200,8 +199,6 @@ def _ensure_default_runtime_files() -> None:
             ),
             encoding="utf-8",
         )
-
-    ensure_ros_domain(SYS_CONFIG_PATH, os_raw.get("runtime_environment") or {})
 
     if not MAGNET_CONFIG_PATH.exists():
         MAGNET_CONFIG_PATH.write_text(

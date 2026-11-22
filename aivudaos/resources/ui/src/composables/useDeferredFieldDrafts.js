@@ -55,7 +55,6 @@ export function useDeferredFieldDrafts(options) {
   }
 
   return {
-    hasDraft,
     getDraftValue,
     setDraftValue,
     clearDraftValue,

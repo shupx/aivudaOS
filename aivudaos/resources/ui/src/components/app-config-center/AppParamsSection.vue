@@ -145,7 +145,7 @@ const props = defineProps({
                   <button class="tree-toggle-btn" :title="isGroupCollapsed(item.id) ? t('appConfigCenter.expand') : t('appConfigCenter.collapse')" @click="toggleGroupCollapsed(item.id)">
                     {{ isGroupCollapsed(item.id) ? '+' : '-' }}
                   </button>
-                  <span class="config-group-label" :class="{ 'config-default-changed-label': item.defaultChanged }">{{ item.fullPath === 'advanced' ? t('appConfigCenter.advancedSettings') : item.label }}</span>
+                  <span class="config-group-label" :class="{ 'config-default-changed-label': item.defaultChanged }">{{ item.label }}</span>
                 </div>
               </td>
               <td colspan="6"></td>
@@ -180,11 +180,11 @@ const props = defineProps({
                     :class="{ 'config-default-changed-value': item.defaultChanged }"
                     :disabled="item.row.readonly"
                     :value="enumDrafts.getDraftValue(item.row)"
-                    @change="item.row.schemaObj?.resetAutoSibling ? onEnumChange(item.row, $event.target.value) : enumDrafts.setDraftValue(item.row, $event.target.value)"
+                    @change="enumDrafts.setDraftValue(item.row, $event?.target?.value)"
                     @blur="enumDrafts.commitDraft(item.row)"
                   >
                     <option v-for="(enumItem, idx) in item.row.enumValues" :key="idx" :value="idx">
-                      {{ item.row.schemaObj?.enumLabels?.[idx] ?? valueToInlineText(enumItem) }}
+                      {{ valueToInlineText(enumItem) }}
                     </option>
                   </select>
 

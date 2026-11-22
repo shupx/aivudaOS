@@ -1,6 +1,3 @@
-import { request } from './api'
-import i18n from '../../i18n'
-
 const APPSTORE_API_PREFIX = '/aivuda_app_store'
 export const MAX_IN_MEMORY_INSTALL_BYTES = 200 * 1024 * 1024 // 200MB
 
@@ -118,19 +115,8 @@ export function buildStoreCaddyLocalCaDownloadUrl(baseUrl) {
   return buildStoreUrl(baseUrl, '/store/caddy-local-ca/root.crt')
 }
 
-export async function createDeviceStoreAddress() {
-  const { path } = await request('/api/shared-apps', { method: 'POST', auth: true })
-  return new URL(path, window.location.origin).href
-}
-
-export function isDeviceStoreAddress(baseUrl) {
-  return /\/aivuda_os\/api\/shared-apps\/[^/]+\/?$/.test(baseUrl)
-}
-
 export async function fetchStoreIndex(baseUrl) {
-  const index = await requestStoreJson(baseUrl, '/store/index')
-  if (!Array.isArray(index?.items)) throw new Error(i18n.global.t('store.invalidIndex'))
-  return index
+  return requestStoreJson(baseUrl, '/store/index')
 }
 
 export async function fetchStoreAppDetail(baseUrl, appId) {

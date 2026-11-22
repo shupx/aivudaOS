@@ -9,7 +9,7 @@ from aivudaos.core.db.schema import init_db
 from aivudaos.core.paths import UI_DIST_DIR, ensure_dirs
 from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
 from aivudaos.gateway.deps import get_magnet_service, get_runtime_service
-from aivudaos.gateway.routes import apps, auth, config, shared_store
+from aivudaos.gateway.routes import apps, auth, config
 
 
 logger = logging.getLogger(__name__)
@@ -18,12 +18,17 @@ API_PREFIX = "/aivuda_os"
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AivudaOS", version="1.0.0")
+    # app.add_middleware(
+    #     CORSMiddleware,
+    #     allow_origins=["*"], # dangerous in production, should be restricted to specific origins
+    #     allow_credentials=False, # if true, also need to specify allowed origins and cannot be "*"
+    #     allow_methods=["*"],
+    #     allow_headers=["*"],
+    # )
+
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(config.router, prefix=API_PREFIX)
     app.include_router(apps.router, prefix=API_PREFIX)
-
-    app.include_router(shared_store.router, prefix=API_PREFIX)
-    app.mount(API_PREFIX + "/api/shared-apps", shared_store.shared_store)
 
     from aivudaos.mcp_server import install_mcp
     install_mcp(app)

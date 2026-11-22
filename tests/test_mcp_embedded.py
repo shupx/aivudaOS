@@ -88,9 +88,8 @@ class EmbeddedMCPTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn("mcp-session-id", response.headers)
                 tools = self.rpc("tools/list", http=http).json()["result"]["tools"]
-                names = {tool["name"] for tool in tools}
-                self.assertIn("restart_running_apps", names)
-                self.assertNotIn("mcp", names)
+                self.assertEqual(len(tools), 47)
+                self.assertNotIn("mcp", [tool["name"] for tool in tools])
         self.assertNotIn("/aivuda_os/mcp", self.app.openapi()["paths"])
         self.assertEqual(self.http.get("/aivuda_os/mcp").status_code, 405)
         self.assertEqual(self.http.delete("/aivuda_os/mcp").status_code, 405)
