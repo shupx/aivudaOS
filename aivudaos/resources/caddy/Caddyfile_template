@@ -1,4 +1,6 @@
 (aivudaos_common_route) {
+  @appEndpoint path_regexp ^/[^/]+/(api|ui)(/|$)
+  header @appEndpoint ?Cache-Control no-store
   @api path /aivuda_os/api* /aivuda_os/mcp
 
   route {
@@ -8,8 +10,15 @@
 
     # BEGIN AIVUDA APP IMPORTS
     # END AIVUDA APP IMPORTS
+    respond @appEndpoint 404
 
     handle {
+      header {
+        Cache-Control no-store
+        match {
+          header Content-Type text/html*
+        }
+      }
       encode zstd gzip
       root * ./ui/dist
       try_files {path} /index.html

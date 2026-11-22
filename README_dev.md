@@ -137,6 +137,7 @@ Caddy 托管前端静态文件并反代 `/aivuda_os/api`，其中 HTTP 仅监听
 另外，App 内置 UI（`/{app_id}/ui/`）也由 Caddy 直接托管：
 
 - 后端会根据各 app active 版本的 `manifest.ui_index_path` 自动生成 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/caddy/{app_id}.ui.caddy`
+- 网关在重装前后禁止缓存未注册的应用 UI 和 API 地址。独立部署启动时会迁移默认的旧 Caddy 首页回退配置，保留已有应用导入和 HTTPS 站点。
 - 在安装、卸载、切换版本时会自动重写顶层 Caddyfile 的 import 区块并 reload Caddy
 - 如 manifest 额外声明 `ui_mount_type: qiankun`，AivudaOS 会将其视为可被 PanelHub 自动发现的 qiankun 子应用入口
 

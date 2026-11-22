@@ -96,6 +96,7 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 - 该路径不再由 FastAPI `FileResponse` 提供，而是由 Caddy 静态托管
 - 系统会在 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/caddy/` 自动生成 `{app_id}.ui.caddy`
 - 安装、卸载、切换版本时会自动更新顶层 Caddyfile import 区块并 reload Caddy
+- 网关为应用的 `/<app>/ui/*` 和 `/<app>/api/*` 默认返回 `Cache-Control: no-store`。应用路由未注册时，这些地址返回 404；工作台的深层链接仍可打开首页。旧网关留下的浏览器缓存可通过清除对应站点的页面缓存移除。
 - 设置 `ui_mount_type: qiankun` 后，该入口会继续作为普通 built-in UI 可访问，同时会在 PanelHub 自动发现列表中被标记为可挂载
 
 ### 可选生命周期脚本

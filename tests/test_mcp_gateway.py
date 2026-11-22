@@ -26,6 +26,15 @@ class MCPGatewayTests(unittest.TestCase):
                                AIVUDAOS_WS_ROOT=str(temp / "workspace"), PYTHONPATH=str(ROOT),
                                XDG_DATA_HOME=str(temp / "caddy-data"), XDG_CONFIG_HOME=str(temp / "caddy-config"))
             template = (ROOT / "aivudaos/resources/caddy/Caddyfile_template").read_text()
+            ui = temp / "ui"
+            ui.mkdir()
+            (ui / "index.html").write_text("<html>dashboard</html>")
+            (ui / "bundle.js").write_text("/* versioned dashboard asset */")
+            template = template.replace("root * ./ui/dist", 'root * "{}"'.format(ui))
+            # An existing generated UI snippet can predate the no-store header.
+            template = template.replace("    # END AIVUDA APP IMPORTS",
+                                        '    handle /fixture/ui/app.js {\n      respond "installed"\n    }\n'
+                                        '    # END AIVUDA APP IMPORTS')
             template = template.replace("127.0.0.1:8000", "127.0.0.1:" + str(backend_port))
             template = template.replace(":80 {", "http://127.0.0.1:" + str(http_port) + " {")
             template = template.replace("https://avahihostname-placeholder.local:443", "https://localhost:" + str(https_port))
@@ -73,6 +82,18 @@ class MCPGatewayTests(unittest.TestCase):
                                 if time.monotonic() >= deadline:
                                     self.fail((temp / "services.log").read_text())
                                 time.sleep(0.1)
+                        for path in ("/fixture/api/agents", "/removed/ui/app.js"):
+                            with self.assertRaises(HTTPError) as missing:
+                                urlopen(origin + path, context=tls, timeout=5)
+                            self.assertEqual(missing.exception.code, 404)
+                            self.assertEqual(missing.exception.headers["Cache-Control"], "no-store")
+                        for path, body in (("/fixture/ui/app.js", b"installed"),
+                                           ("/dashboard/apps/fixture/ui", b"<html>dashboard</html>")):
+                            with urlopen(origin + path, context=tls, timeout=5) as response:
+                                self.assertEqual(response.read(), body)
+                                self.assertEqual(response.headers["Cache-Control"], "no-store")
+                        with urlopen(origin + "/bundle.js", context=tls, timeout=5) as asset:
+                            self.assertIsNone(asset.headers.get("Cache-Control"))
                         tools = rpc("tools/list")["tools"]
                         self.assertIn("restart_running_apps", {tool["name"] for tool in tools})
                         login = rpc("tools/call", {"name": "login", "arguments": {"body": {
