@@ -394,6 +394,8 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 新增字段使用目标已有值或默认值；动态键只在目标 schema 明确禁止额外字段时省略。
 类型、枚举、范围、字符串及数组约束不兼容时不猜测转换，逐字段回退，并保留其他合法字段。
 
+新包若将旧域号迁至 `<section>.ros_domain_id`，可在 schema 根节点声明 `x-ros-domain-migration: {section: camera}`。升级时先按旧配置解析生效值，再移除 `ros.domain_id` 并合并默认值。新旧值同时存在时保留新值（含 -1）。QRLand 的旧启动器在新值为 -1 时优先采用已有旧值，因此其迁移声明额外设置 `legacy_when_inheriting: true`。
+
 安装和切换返回：
 
 ```json

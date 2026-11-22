@@ -363,6 +363,8 @@ active 版本参数为来源；覆盖安装时，以被覆盖版本参数为来�
 按来源合法值、目标已有合法值、目标默认值的顺序选择；数组整体选择，不进行猜测类型转换。
 仅明确禁止的额外字段会被省略，允许的动态键继续保留。来源配置不被重写。
 
+目标 schema 可用根节点的 `x-ros-domain-migration.section` 指定接收旧域号的配置节。安装和版本切换在合并默认值前解析原先生效的域号，具体优先级见 [App 管理](docs/app-management.md)。
+
 迁移失败的字段返回 `config_migration_warnings`（path/source/reason/action），操作仍成功。
 缺少无可用值的必填字段时返回 `config_valid=false`，跳过磁吸重算和自动启动；手动启动仍执行
 原有完整校验。schema/default 本身无效的安装包仍按原有包校验拒绝。

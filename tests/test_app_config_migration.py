@@ -33,6 +33,35 @@ def object_schema(properties, **kwargs):
 
 
 class MigrationRulesTests(unittest.TestCase):
+    def test_domain_rename_preserves_effective_value_before_defaults(self):
+        for section in ("camera", "policy", "zenoh"):
+            rule = {"section": section, "legacy_when_inheriting": section == "policy"}
+            field = {"type": "integer", "minimum": -1, "maximum": 232}
+            props = {section: object_schema({"ros_domain_id": field})}
+            if section == "zenoh":
+                props["ros"] = object_schema({"distro": {"type": "string"}}, additionalProperties=False)
+            schema = object_schema(props, additionalProperties=False)
+            schema["x-ros-domain-migration"] = rule
+            defaults = {section: {"ros_domain_id": 0 if section == "policy" else -1}}
+            for current, legacy, expected in [(None, 0, 0), (None, 232, 232), (8, 17, 8),
+                                              (-1, 17, 17 if section == "policy" else -1)]:
+                old = {"ros": {"domain_id": legacy}}
+                if current is not None:
+                    old[section] = {"ros_domain_id": current}
+                expected_data = {section: {"ros_domain_id": expected}}
+                if section == "zenoh":
+                    old["ros"]["distro"] = "auto"
+                    expected_data["ros"] = {"distro": "auto"}
+                for source, target in [(old, {}), ({}, old)]:
+                    with self.subTest(section=section, source=source, target=target):
+                        original = deepcopy((source, target))
+                        data, warnings, valid = migrate_app_parameters(source, target, defaults, schema)
+                        self.assertTrue(valid)
+                        self.assertEqual(warnings, [])
+                        self.assertEqual(data, expected_data)
+                        self.assertEqual((source, target), original)
+                        self.assertEqual(migrate_app_parameters(data, data, defaults, schema)[0], data)
+
     def test_recursive_priority_new_fields_dynamic_keys_and_explicit_empty_values(self):
         schema = object_schema({
             "network": object_schema({"port": {"type": "integer", "maximum": 100}, "host": {"type": "string"}}),

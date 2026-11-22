@@ -9,6 +9,38 @@ from aivudaos.core.errors import InvalidConfigError
 _MISSING = object()
 
 
+def _migrate_ros_domain(data: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve the previous package's domain before merging defaults or dropping retired keys."""
+    rule = schema.get("x-ros-domain-migration")
+    if not isinstance(rule, dict):
+        return data
+    section = rule.get("section")
+    if not isinstance(section, str) or section == "ros":
+        return data
+    settings = data.get(section, {})
+    ros = data.get("ros", {})
+    if not isinstance(settings, dict) or not isinstance(ros, dict):
+        return data
+    current = settings.get("ros_domain_id", _MISSING)
+    legacy = ros.get("domain_id", _MISSING)
+    if legacy is _MISSING and current is _MISSING:
+        return data
+    value = current
+    if current is _MISSING or (current == -1 and rule.get("legacy_when_inheriting") is True):
+        value = legacy if legacy is not _MISSING else current
+    # Some older launchers accepted integral YAML floats as JSON Schema integers.
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    result = {**data, section: {**settings, "ros_domain_id": value}}
+    if legacy is not _MISSING:
+        remaining = {k: v for k, v in ros.items() if k != "domain_id"}
+        if remaining or "ros" in schema.get("properties", {}):
+            result["ros"] = remaining
+        else:
+            del result["ros"]
+    return result
+
+
 def migrate_app_parameters(
     source: Dict[str, Any], target: Dict[str, Any], defaults: Dict[str, Any],
     schema: Dict[str, Any],
@@ -78,7 +110,10 @@ def migrate_app_parameters(
         resolve("skipped")
         return _MISSING
 
-    data = visit([("source", source), ("target", target), ("default", defaults)], schema or {}, "$")
+    schema = schema or {}
+    source = _migrate_ros_domain(source, schema)
+    target = _migrate_ros_domain(target, schema)
+    data = visit([("source", source), ("target", target), ("default", defaults)], schema, "$")
     if data is _MISSING:
         data = {}
     def collect_missing(value: Any, node: Dict[str, Any], path: str) -> None:
