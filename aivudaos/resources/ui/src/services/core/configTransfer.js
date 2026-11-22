@@ -66,29 +66,41 @@ export function flattenConfigLeaves(value, prefix = '') {
     : []
 }
 
-export function nestedGet(data, path) {
-  const parts = String(path || '').split('.').filter(Boolean)
+const partsOf = path => Array.isArray(path) ? path : String(path || '').split('.').filter(Boolean)
+
+export function getConfigValue(data, path) {
+  const parts = Array.isArray(path) ? path : path ? String(path).split('.') : []
   let current = data
   for (const part of parts) {
-    if (!isPlainRecord(current) && !Array.isArray(current)) return undefined
-    if (!Object.prototype.hasOwnProperty.call(current, part)) return undefined
+    if (!current || typeof current !== 'object' || !Object.hasOwn(current, part)) return undefined
     current = current[part]
   }
   return current
 }
 
-export function nestedSet(data, path, value) {
-  const parts = String(path || '').split('.').filter(Boolean)
+export function setConfigValue(data, path, value, preserveArrays = true) {
+  const parts = partsOf(path)
   if (!parts.length) return
   let current = data
   for (let index = 0; index < parts.length - 1; index += 1) {
     const part = parts[index]
-    if (!isPlainRecord(current[part])) {
-      current[part] = {}
+    const child = Object.hasOwn(current, part) ? current[part] : undefined
+    if (!isPlainRecord(child) && !(preserveArrays && Array.isArray(child))) {
+      current[part] = typeof parts[index + 1] === 'number' ? [] : {}
     }
     current = current[part]
   }
-  current[parts[parts.length - 1]] = deepClone(value)
+  current[parts[parts.length - 1]] = value
+}
+
+export function nestedGet(data, path) {
+  return getConfigValue(data, partsOf(path))
+}
+
+export function nestedSet(data, path, value) {
+  // Dotted import paths describe object leaves; an explicit segment list can index arrays.
+  const parts = partsOf(path)
+  if (parts.length) setConfigValue(data, parts, deepClone(value), Array.isArray(path))
 }
 
 export function isValueEqual(left, right) {

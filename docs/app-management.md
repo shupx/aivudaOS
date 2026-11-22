@@ -4,7 +4,7 @@
 
 AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz`、`.tgz`、`.tar`、`.tar.xz`、`.txz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和自启动。
 
-当前 UI 还支持“在线应用商店”入口：从 aivudaAppStore 的 `store` API 查看应用与版本，先下载安装包到浏览器本机，再一键上传到 AivudaOS 安装。
+当前 UI 还支持“在线应用商店”入口：从 aivudaAppStore 或另一台 aivudaOS 的共享地址查看应用与版本，先下载安装包到浏览器本机，再一键上传到 AivudaOS 安装。
 
 当前 UI 新增“配置参数”中心入口（Dashboard 侧边栏），统一管理所有已安装 app 的 **active 版本** 配置。各 app 详情页仅保留跳转到统一参数中心，不再提供分散编辑入口。
 
@@ -116,7 +116,7 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 - 同时通过操作事件流实时回传到前端
 - `pre_install` 支持 PTY 交互模式（可接收 sudo 密码、`y/n` 等输入）
 
-覆盖安装（同版本 `overwrite=true`）时，会先重建该版本目录，再执行 pre_install。
+覆盖安装（同版本 `overwrite=true`）时，安装器暂存旧目录，在最终版本路径执行 `pre_install`，成功发布后才丢弃备份。安装中途报错或取消会撤销本次安装对版本目录、安装记录、活动链接和受管配置的修改；若已尝试更新 Caddy，则按恢复后的活动版本重新生成路由并尝试重载。这不是断电恢复机制，安装脚本自行修改的操作系统文件或外部服务也不在回滚范围内。覆盖运行中的版本前建议先停止应用；安装操作结束前不要同时切换或卸载这个应用。
 
 
 ## 文件系统布局
@@ -125,6 +125,10 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 配置说明：
 
 - `config/os.yaml`：系统运行参数（如 `runtime_process_manager`、`runtime_systemd_scope`、`avahi_hostname`），不参与磁吸。
+- ROS 2 主机在系统设置中只读汇总全局默认值和应用实际声明的 Domain 参数。点击「前往配置参数修改」可在配置中心的「ROS 2 通信域参数」中保存全局值或应用字段。每个算法的 Domain 参数独立管理，不参与磁吸同步。应用下次启动时使用新的配置。
+- 新安装包建议在各自算法命名空间下声明 `ros_domain_id` 或 `domain_id`（例如 `camera.ros_domain_id`、`apriltag.ros_domain_id`、`policy.ros_domain_id`、`fastlio.ros_domain_id`、`zenoh.ros_domain_id`），默认 `-1` 表示继承全局 `sys.ros2_default_domain_id`，`0~232` 为独立覆盖。自定义字段可在 JSON Schema 中添加 `"x-ros-domain": true`，或在标题、说明中指明 `ROS_DOMAIN_ID`。页面读取激活版本的 schema、默认配置和当前配置，显示原字段路径。未声明 Domain 的应用不会生成占位行。
+- 对没有 ROS/DDS 语义的字符串字段，仅凭 `domain_id` 后缀不会把 UUID 等文本改成数字编辑器。数组内声明 Domain 时，磁吸不会复制整个数组；编辑某个元素的 Domain 不应覆盖其他元素。声明为字符串（含可空字符串）的 Domain 仍以 JSON 字符串保存。
+- 升级时，全局 Domain 按 `sys.ros2_default_domain_id`、`os.yaml` 的 `runtime_environment.ROS_DOMAIN_ID`、服务环境变量的顺序取第一个合法值。有效旧数字字符串会转成整数；没有合法来源时使用 `0`。
 - `config/sys.yaml`：公用业务参数（支持增删改），参与磁吸；默认包含 `role.id=1`。active app 的 schema 中若声明 `sys.*` 参数（如 `sys.robot_type`、`sys.aaa.bbb`），磁吸重算会在缺失时自动补齐到 System Parameters，并保留对应 schema 以便 UI 展示类型/范围/描述。这些自动补齐的 system parameters 不会因为 app 卸载、删除或切换 active 版本而自动删除。
 
 ```
@@ -237,6 +241,10 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 - 批量操作会为每个 app 创建独立 operation 并并行执行
 - 操作状态通过 `GET /api/apps/operations/{operation_id}` 和 `GET /api/apps/operations/{operation_id}/events` 查询
 
+### 日志读取
+
+`GET /api/apps/{app_id}/logs?from_end=true` 只返回当前文件末尾的位置（`next_offset`），`chunk` 为空，不读取或截断日志内容。需要从此刻开始跟随输出时，在下次请求中把该值作为 `offset`。若获取末尾位置失败，继续使用上一次成功读取的偏移，以免漏掉断线期间的输出。
+
 ### popen 回退模式
 
 - **启动**：根据 `manifest.run.entrypoint` 构建命令，`subprocess.Popen` 启动（`start_new_session=True`）
@@ -312,12 +320,13 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 4. 点击“下载到本机”后，前端调用 `.../download-url` 与 `.../download`，将安装包下载到浏览器本机。
 5. 点击“安装到 AivudaOS”后，前端把该下载文件通过 `POST /aivuda_os/api/apps/upload` 上传给本机 AivudaOS，安装流程与手动上传一致。
 
-当前在线商店页已改为单按钮“下载并安装到 AivudaOS”流程：
+### 从另一台 aivudaOS 安装应用
 
-1. 先触发浏览器原生下载，保存到用户指定的本机位置（由浏览器下载设置决定）。
-2. 随后询问是否立即安装。
-3. 若确认，打开与“手动上传新应用安装包”完全复用的上传安装弹窗。
-4. 用户在弹窗中选择刚下载的本机文件并提交安装，后端仍走 `POST /aivuda_os/api/apps/upload` 同一流程。
+1. 从浏览器用局域网地址打开来源设备（例如 `http://192.168.20.21`），登录后进入「在线应用商店」，点击「共享本机已安装应用」并复制共享地址。
+2. 登录目标设备（例如 `http://192.168.20.20`），在同一页面的商店地址栏粘贴完整共享地址，点击「提交」。浏览器必须能访问两台设备。通过 HTTPS 打开目标页面时，来源设备也应使用浏览器信任的 HTTPS 地址。
+3. 打开应用，选定版本，点击「下载并安装到 AivudaOS」。大小不超过 200 MiB 时，浏览器直接把包上传到目标设备；更大的包先下载到本机，再由用户选择文件上传。
+
+共享地址由来源设备上已登录的用户生成，持有者可在一小时内读取全部已安装应用及其版本，重新生成即使旧地址失效。无需部署独立商店或重新上传已有版本。下载包是所选安装目录的 tar 快照，含应用文件、包内默认配置及安装时生成的文件。安装目录中的本机文件也会随包传输。单独存储的系统配置、运行数据和日志在安装目录之外。打包保留目录内有效的相对符号链接，跳过绝对链接、指向目录外的链接和特殊文件。目标设备仍需满足应用的架构与依赖要求，安装时会照常执行安装钩子。
 
 ### 实时操作事件（SSE）
 
@@ -450,7 +459,7 @@ result and failures. Missing app versions are installed through InstallerService
 existing versions are not overwritten. System/app parameters are merged and
 validated through the existing config routes, then autostart is applied.
 `human_header.avahi_hostname`, `payload.system_parameters.avahi_hostname` and
-exported `running` state are ignored. No direct database import occurs.
+exported `running` state are ignored. `payload.system_parameters` is optional: omit it for an app-only import. If a systemd unit cannot be refreshed, the saved system setting is retained, other apps are processed, and `result.runtime_environment_refresh_errors` identifies the affected units. No direct database import occurs.
 
 ## Popen stop and gateway exit
 
@@ -460,7 +469,7 @@ systemd-managed services or adopt another runtime's apps for shutdown. An
 explicit app stop waits for cleanup, including observed descendants in other
 sessions, before marking the app stopped. Processes get SIGTERM with a five
 second grace period and then SIGKILL if necessary. Identity checks use Linux
-PID start times. If cleanup fails, stop reports failure instead of recording a
+PID start times. Repeated starts in the same gateway reuse the running instance without truncating its log. For explicit stop after a gateway restart, the recorded PID, Linux boot ID and process start time must still match. Legacy PID-only rows cannot prove ownership: stop Popen apps before upgrading; if an old process survived an abnormal shutdown, verify it manually before starting another instance. Systemd-managed apps continue to use unit state. If cleanup fails, stop reports failure instead of recording a
 successful stop. A detached guardian also cleans owned Popen apps when the
 backend dies without running shutdown hooks. Autostart preferences are retained.
 
@@ -485,3 +494,11 @@ Online Store 导航图标右上角显示可更新的已安装 App 数量（超�
 版本比较按数字段及 SemVer 预发布规则进行，忽略构建元数据；未知格式或缺失版本不会触发更新提醒。当前商店索引没有设备兼容性字段，提示依据已发布版本，不额外推断设备兼容性。业务逻辑位于 `useStoreUpdates.js` 和 `services/core/storeUpdates.js`，中英文词条位于 `i18n/locales/`。
 
 验证：在 aivudaOS 目录运行 `node --test tests/test_store_updates_ui.mjs`，在 UI 目录运行 `npm run build`。
+
+### 设备网卡和源地址选项
+
+应用可在顶层配置组的 schema 声明 `x-device-ipv4: {interface: host_interface, address: host_ip, destination: ip}`，值为同组字段名。接口和源地址字段均使用字符串，`auto` 表示按当前目标的直连 IPv4 路由选择。除了以太网，具有 IPv4 地址的非回环接口（如 `wg0`）也可选择；自动模式仍要求链路已启用、内核路由无网关且源地址属于该接口。同一请求复用网卡快照，网络探测不占用网关事件循环。
+
+从应用参数或磁吸区切换接口或目的地址时，只将实际受影响应用的可编辑源地址恢复为 `auto`。源地址本身已绑定磁吸时，由该绑定决定其值。只打开页面或重算未变化的绑定不会清除手动源地址。
+
+若安装钩子为旧客户端生成静态 enum，在相应字段声明 `x-device-choice: interface` 或 `address` 可同时接受后来添加的接口或地址。已保存的选择即使暂时离线，也不因缺席当前网卡列表而阻止修改其他字段或通过启动前的配置校验。新选择仍需满足校验；实际使用网络时，应用须重新核对网卡、链路和地址。

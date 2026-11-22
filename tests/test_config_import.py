@@ -54,8 +54,10 @@ class ConfigImportTests(unittest.TestCase):
         config.get_app_default_config.return_value = {"port": 1}
         installer = Mock()
         installer.install_from_upload.return_value = {"app_id": "demo", "version": "1.0.0"}
-        async def put_sys(payload, token):
-            self.assertEqual(payload.data, {"other": 1, "avahi_hostname": "local", "feature": True})
+        def put_sys(data, version, token):
+            self.assertEqual((version, token), (1, "token"))
+            self.assertEqual(data, {"other": 1, "avahi_hostname": "local", "feature": True})
+            return {"ok": True, "version": 2, "runtime_environment_refresh_errors": ["demo.service: denied"]}
         async def put_app(app_id, payload, token):
             self.assertEqual((app_id, payload.version, payload.data), ("demo", 3, {"port": 42}))
         events = []
@@ -65,11 +67,13 @@ class ConfigImportTests(unittest.TestCase):
                 patch.object(import_service, "get_runtime_service") as runtime, \
                 patch.object(import_service, "get_magnet_service"), \
                 patch.object(import_service, "_store_get", side_effect=[json.dumps(info).encode(), package]), \
-                patch.object(import_service, "put_config", side_effect=put_sys), \
+                patch.object(import_service, "save_system_parameters", side_effect=put_sys), \
                 patch.object(import_service, "put_app_config", side_effect=put_app):
             payload = import_service.validate_import(self.document, self.store)
             result = import_service.apply_import(payload, self.store, "token", lambda *args: events.append(args))
             self.assertEqual(result["installed"], ["demo"])
+            self.assertTrue(result["system_configured"])
+            self.assertEqual(result["runtime_environment_refresh_errors"], ["demo.service: denied"])
             self.assertEqual(result["configured"], ["demo"])
             self.assertEqual(runtime.return_value.set_autostart.call_args.args, ("demo", True))
             runtime.return_value.start.assert_not_called()
@@ -91,7 +95,7 @@ class ConfigImportTests(unittest.TestCase):
                 patch.object(import_service, "get_magnet_service"), \
                 patch.object(import_service, "get_installer_service") as installer, \
                 patch.object(import_service, "_store_get") as download, \
-                patch.object(import_service, "put_config") as put_sys, \
+                patch.object(import_service, "save_system_parameters") as put_sys, \
                 patch.object(import_service, "put_app_config") as put_app:
             result = import_service.apply_import(self.document["payload"], self.store, "token", lambda *args: None)
             self.assertEqual(result["installed"], [])
@@ -99,6 +103,46 @@ class ConfigImportTests(unittest.TestCase):
             installer.assert_not_called()
             put_sys.assert_not_called()
             put_app.assert_not_called()
+
+    def test_app_only_import_without_system_parameters(self):
+        del self.document["payload"]["system_parameters"]
+        versioning = Mock()
+        versioning.list_versions.return_value = ["1.0.0"]
+        versioning.active_version.return_value = "1.0.0"
+        config = Mock()
+        config.get_app_config.return_value = SimpleNamespace(data={"port": 1}, version=2)
+        with patch.object(import_service, "get_versioning_service", return_value=versioning), \
+                patch.object(import_service, "get_config_service", return_value=config), \
+                patch.object(import_service, "get_runtime_service"), \
+                patch.object(import_service, "get_magnet_service"), \
+                patch.object(import_service, "save_system_parameters") as put_sys, \
+                patch.object(import_service, "put_app_config") as put_app:
+            payload = import_service.validate_import(self.document, self.store)
+            result = import_service.apply_import(payload, self.store, "token", lambda *args: None)
+            self.assertEqual(result["runtime_environment_refresh_errors"], [])
+            self.assertNotIn("system_configured", result)
+            self.assertEqual(result["configured"], ["demo"])
+            config.get_sys_config.assert_not_called()
+            put_sys.assert_not_called()
+            put_app.assert_awaited_once()
+            self.assertEqual(put_app.await_args.args[1].data, {"port": 42})
+
+    def test_import_rechecks_token_before_system_write(self):
+        from fastapi import HTTPException
+        from aivudaos.gateway.routes import config as config_route
+
+        config = Mock()
+        config.get_sys_config.return_value = SimpleNamespace(data={}, version=1)
+        with patch.object(import_service, "get_config_service", return_value=config), \
+                patch.object(config_route, "get_config_service", return_value=config), \
+                patch.object(config_route, "get_auth_service") as auth:
+            auth.return_value.validate_token.side_effect = AuthenticationError("expired")
+            with self.assertRaises(HTTPException) as raised:
+                import_service.apply_import({"system_parameters": {"flag": True}, "apps": []},
+                                            self.store, "expired-token", lambda *args: None)
+        self.assertEqual(raised.exception.status_code, 401)
+        auth.return_value.validate_token.assert_called_once_with("expired-token")
+        config.update_sys_config.assert_not_called()
 
     def test_bad_download_checksum_never_installs(self):
         versioning = Mock()
@@ -127,7 +171,8 @@ class ConfigImportTests(unittest.TestCase):
                     auth.return_value.validate_token.return_value = SimpleNamespace(username="admin")
                     bad = await client.post(path, json={"document": self.document, "app_store_base_url": "http://external.invalid/"})
                     self.assertEqual(bad.status_code, 400)
-                    with patch.object(import_service, "apply_import", return_value={"configured": ["demo"]}):
+                    result = {"configured": ["demo"], "runtime_environment_refresh_errors": ["demo.service: denied"]}
+                    with patch.object(import_service, "apply_import", return_value=result):
                         response = await client.post(path, json={"document": self.document, "app_store_base_url": self.store})
                         for _ in range(100):
                             record = manager.get_operation(response.json()["operation_id"])
@@ -136,5 +181,5 @@ class ConfigImportTests(unittest.TestCase):
                             await asyncio.sleep(0.01)
                     self.assertEqual(response.status_code, 202)
                     self.assertEqual(record["status"], "completed")
-                    self.assertEqual(record["result"]["configured"], ["demo"])
+                    self.assertEqual(record["result"], result)
         asyncio.run(call_api())

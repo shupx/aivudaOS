@@ -7,6 +7,7 @@ import { useResizableConfigTable } from '../composables/useResizableConfigTable'
 import MagnetConfigSection from '../components/app-config-center/MagnetConfigSection.vue'
 import AppParamsSection from '../components/app-config-center/AppParamsSection.vue'
 import ParameterValueInput from '../components/app-config-center/ParameterValueInput.vue'
+import { ROS_DOMAIN_SECTION } from '../services/core/rosDomains'
 import { parameterHistoryKey } from '../services/core/parameterValueHistory'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { NButton, NIcon, NSpace, NText, NAlert } from 'naive-ui'
@@ -44,6 +45,7 @@ const {
   selectedAppId,
   appTreeRows,
   systemRows,
+  showDomainSection, domainRows, domainSaving, domainDrafts,
   magnets,
   magnetConflicts,
   magnetCollapsed,
@@ -142,6 +144,7 @@ const {
   importOverwriteMagnets,
   importBusy,
   importErrorMessage,
+  importRefreshWarning,
   importSuccessMessage,
   importStoreConnectivityHelpVisible,
   importActionMessage,
@@ -275,6 +278,43 @@ const systemEnumDrafts = useDeferredFieldDrafts({
         :value-to-inline-text="valueToInlineText"
       />
     </div>
+
+    <article v-if="showDomainSection" :id="ROS_DOMAIN_SECTION" tabindex="-1"
+      class="actions-panel config-center-section config-center-shell" style="scroll-margin-top: 6rem">
+      <header class="log-header"><h3>{{ t('systemSettings.domainSection') }}</h3></header>
+      <p>{{ t('systemSettings.domainHint') }}</p>
+      <div class="table-wrap">
+        <table class="config-table compact" style="width: 100%">
+          <thead><tr>
+            <th>{{ t('systemSettings.domainApp') }}</th><th>{{ t('appConfigCenter.colPath') }}</th>
+            <th>{{ t('systemSettings.domainId') }}</th><th>{{ t('appConfigCenter.colAction') }}</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="row in domainRows" :key="JSON.stringify([row.appId, row.segments || row.path])">
+              <td>{{ row.appName }}</td><td class="mono-cell">{{ row.path }}</td>
+              <td>
+                <select v-if="row.domainChoices" class="input" :aria-label="row.appName + ' ' + row.path"
+                  :value="domainDrafts.getDraftValue(row)" :disabled="domainSaving || row.readonly"
+                  @change="domainDrafts.setDraftValue(row, $event.target.value)">
+                  <option v-for="(choice, index) in row.domainChoices" :key="index" :value="index">
+                    {{ choice === null ? t('systemSettings.domainSources.inherited') : choice }}
+                  </option>
+                </select>
+                <input v-else class="input" :type="row.type === 'string' || row.nullable ? 'text' : 'number'" inputmode="numeric" step="1"
+                  :aria-label="row.appName + ' ' + row.path"
+                  :placeholder="row.nullable ? t('systemSettings.domainBlankInherits') : ''"
+                  :value="domainDrafts.getDraftValue(row)" :disabled="domainSaving || row.readonly"
+                  @input="domainDrafts.setDraftValue(row, $event.target.value)"
+                  @keyup.enter="domainDrafts.commitDraft(row)">
+                <small v-if="row.source === 'inherited'">{{ t('systemSettings.domainSources.inherited') }} ({{ row.domain ?? '—' }})</small>
+              </td>
+              <td><NButton size="small" :disabled="loading || domainSaving || row.readonly || !domainDrafts.hasDraft(row)"
+                @click="domainDrafts.commitDraft(row)">{{ t('systemSettings.saveDomain') }}</NButton></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
 
     <article class="actions-panel config-center-section config-center-shell">
       <header class="log-header">
@@ -766,6 +806,7 @@ const systemEnumDrafts = useDeferredFieldDrafts({
           </div>
         </div>
 
+        <NAlert v-if="importRefreshWarning" type="warning" style="margin-top: 12px;">{{ importRefreshWarning }}</NAlert>
         <NAlert v-if="importErrorMessage" type="error" style="margin-top: 12px;">
           <div>{{ importErrorMessage }}</div>
           <div v-if="importStoreConnectivityHelpVisible" class="config-import-store-help">

@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 from aivudaos.core.apps.config_validation import validate_config_data
+from aivudaos.core.apps.device_network import NetworkSnapshot
 from aivudaos.core.errors import InvalidConfigError
 
 _MISSING = object()
@@ -13,6 +14,7 @@ def migrate_app_parameters(
     schema: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], List[Dict[str, str]], bool]:
     warnings: List[Dict[str, str]] = []
+    network = NetworkSnapshot()
 
     def warn(path: str, origin: str, reason: str, action: str = "fallback") -> Dict[str, str]:
         item = {"path": path, "source": origin, "reason": reason, "action": action}
@@ -22,6 +24,7 @@ def migrate_app_parameters(
 
     def visit(candidates: List[Tuple[str, Any]], node: Dict[str, Any], path: str) -> Any:
         rejected: List[Dict[str, str]] = []
+        saved = next((v for name, v in candidates if name == "target"), None)
 
         def resolve(action: str) -> None:
             for item in rejected:
@@ -66,7 +69,7 @@ def migrate_app_parameters(
                 resolve("used_" + origin)
                 return result
             try:
-                validate_config_data(value, node)
+                validate_config_data(value, node, previous_data=saved, network=network)
             except InvalidConfigError as exc:
                 rejected.append(warn(path, origin, str(exc)))
                 continue
@@ -96,7 +99,7 @@ def migrate_app_parameters(
     collect_missing(data, schema or {}, "$")
     valid = True
     try:
-        validate_config_data(data, schema)
+        validate_config_data(data, schema, previous_data=target, network=network)
     except InvalidConfigError as exc:
         valid = False
         warn("$", "result", str(exc), "requires_configuration")

@@ -102,9 +102,11 @@ export async function setAutostart(appId, enabled) {
   })
 }
 
-export async function fetchAppLogs(appId, offset = 0, limit = 65536) {
+export async function fetchAppLogs(appId, offset = 0, limit = 65536, fromEnd = false) {
+  const query = new URLSearchParams({ offset, limit })
+  if (fromEnd) query.set('from_end', 'true')
   return request(
-    `/api/apps/${encodeURIComponent(appId)}/logs?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
+    `/api/apps/${encodeURIComponent(appId)}/logs?${query}`,
     { auth: true },
   )
 }

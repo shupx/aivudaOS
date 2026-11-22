@@ -70,12 +70,13 @@ class ScriptHookRunner:
                 bufsize=1,
             )
             assert proc.stdout is not None
-            for line in proc.stdout:
-                output_lines.append(line)
-                log_file.write(line.encode("utf-8", errors="replace"))
-                log_file.flush()
-                if on_output:
-                    on_output(line)
+            with proc.stdout:
+                for line in proc.stdout:
+                    output_lines.append(line)
+                    log_file.write(line.encode("utf-8", errors="replace"))
+                    log_file.flush()
+                    if on_output:
+                        on_output(line)
             code = proc.wait()
             output = "".join(output_lines)
 
