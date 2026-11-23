@@ -14,6 +14,76 @@ App 的 `start / stop / restart` 与批量 `restart-running / restart-autostart 
 
 Apps 页面顶部 Restart 图标调用 `POST /api/apps/bulk/restart-running`，重启请求时所有正在运行的 app，不受自启动开关影响，也不会启动已停止的 app。原 `restart-autostart` API 保留原有行为。
 
+## 启动流水线
+
+在 Apps 顶部切换到「启动流水线」。先创建分组或应用 ROS 2 分层模板，再将已安装 App 从未分组池拖入分组。模板依次为 Middleware & Transport、Hardware & Drivers、Perception & Localization、Planning & Control、Telemetry & Tools；不按 App 名称猜测依赖。各 profile 独立，未分组列表以当前 profile 为准。
+
+**编排规则**：组按 `order` 排列，是严格的执行屏障。组内 `parallel` 将当时所有无未完成依赖的 App 放入同一批（最多 8 个同时执行）；`sequential` 每次只选当前就绪且排序最靠前的一项。`order` 相同按数组顺序决定。只有整批通过探活，才会正常放行下一批。同一 profile 内禁止重复 App、环、自依赖、未知依赖、前组依赖后组，以及启用项依赖禁用项。禁用的组和节点不执行。单组启动只检查其他组的前置节点是否已经就绪，不会代为启动它们。
+
+`on_failure` 决定启动失败后的调度：`abort` 在当前批次收尾后跳过其余批次；`skip_dependents` 跳过失败节点的直接及间接后继，独立分支继续；`continue` 仍尝试启动后继，有未就绪前置项的后继标为 `degraded`。有节点失败时整个操作报告失败，即使其他分支成功。逆序停止会反转组和批次，先停依赖方；如果某批停止失败，不再停更早的前置项。取消可中断正在等待的探活、阻止后续调度，但不强行中断已经提交给 RuntimeService 的启停，也不回滚正在运行的进程。
+
+### 配置和开机行为
+
+`${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/startup_pipeline.yaml` 首次保存时生成。不存在时返回版本 `0` 和空的 `default` profile。以下片段可用于有 `driver`、`localizer` 两个已安装 App 的设备（API 接收对应的 JSON）：
+
+```yaml
+version: 0
+takeover_autostart: false
+default_profile: robot
+profiles:
+  - name: robot
+    on_failure: skip_dependents
+    groups:
+      - id: hardware
+        name: Hardware & Drivers
+        order: 0
+        mode: parallel
+        enabled: true
+        items:
+          - app_id: driver
+            readiness: {type: ros2_topic, topic: /odom, require_publisher: true, timeout_sec: 30}
+      - id: localization
+        name: Localization
+        order: 1
+        items:
+          - app_id: localizer
+            depends_on: [driver]
+            readiness: {type: ros2_lifecycle, node_name: /localizer, lifecycle_state: active}
+```
+
+接管默认关闭：Popen 继续重放原有 `autostart`，systemd 继续管理独立 unit。**只有保存接管开关才改变开机行为**：在 systemd 模式下，保存时立即禁用已安装 App 的独立 unit 自启，不停止已运行进程；网关启动时再校正并运行默认 profile。接管期间保留单 App 自启偏好，关闭接管并保存后恢复，不自动启动此前未运行的 App。接管开启但计划无启用节点时不会启动任何 App。
+
+### 就绪探活
+
+| `type` | 放行条件 |
+|---|---|
+| `started`（默认） | 启动后确认进程仍在运行 |
+| `delay` | 存活满 `delay_sec`（默认 1 秒） |
+| `tcp` | 本机 `host:port` 可连接，host 限 `localhost` 或回环 IP，默认 `127.0.0.1` |
+| `http` | GET `url` 收到 HTTP 2xx；不跟随重定向 |
+| `ros2_node` | `ros2 node list` 包含 `node_name` |
+| `ros2_topic` | `ros2 topic list` 包含 `topic`；`require_publisher: true` 还要求发布者数大于 0 |
+| `ros2_lifecycle` | `ros2 lifecycle get` 返回目标 `lifecycle_state`（默认 `active`） |
+| `command` | 自定义 shell 命令 `command` 返回 0 |
+
+`timeout_sec` 默认 30 秒，`interval_sec` 默认 1 秒；探活期间应用退出会提前判为失败。ROS CLI 和命令继承 `os.yaml.runtime_environment`，并使用该 App 激活版本配置对应的 `ROS_DOMAIN_ID`；未覆盖时继承全局域。同一 App 声明多个不一致的有效域时，探活报错而非猜测。网关运行环境须能找到所需 ROS CLI 及其运行库。`command` 以网关服务账号权限在 App 安装目录中执行，可能被重试；仅填写受信任、无副作用的探活命令，不应包含密码。
+
+### HTTP 与事件
+
+以下路径相对 `/aivuda_os/api/apps`，均需 `token` 查询参数：
+
+| 方法与路径 | 用途 |
+|---|---|
+| `GET /pipeline` | 返回 `config`、`installed_apps`、默认 profile 的 `unassigned_apps`、`validation`（含各 profile 的分组批次预览）和 `active_operation` |
+| `POST /pipeline/validate` | 请求体为完整草稿；只返回 `{valid, errors, preview}`，不改变文件或运行状态 |
+| `PUT /pipeline` | 请求体为完整配置，携带最近读取的 `version`。成功后原子替换并返回新版本；旧版本返回 409，无效配置返回 422 |
+| `POST /pipeline/run` | 空请求体运行默认 profile；`{"profile":"robot","group_id":"hardware"}` 只运行指定组 |
+| `POST /pipeline/stop` | 空请求体或 `{"profile":"robot"}`；按保存的 profile 逆序停止 |
+
+启停返回 202 和 `operation_id`。`GET /operations/{operation_id}/events` 可从头回放 `pipeline_stage`、`pipeline_node`、`log` 及终态事件；节点状态与实际进程状态独立。`POST /operations/{operation_id}/cancel` 请求取消。运行中的流水线会占用所涉及 App 的 operation 名额，冲突返回 409。同一网关只允许一条流水线操作同时执行，操作记录与 SSE 回放仅保存在该网关进程内。
+
+MCP 工具：`get_startup_pipeline`、`run_startup_pipeline`、`stop_startup_pipeline`。内置 HTTP MCP 的流水线接口要求调用方显式提供 session token，见 [MCP 认证说明](mcp.md#认证与请求隔离)。
+
 ### 参数值输入历史
 
 配置参数中心的应用、系统、磁吸文本/数字输入框提供可选择的历史值。点击输入框显示该参数最近的历史记录，输入时过滤，支持鼠标点击或方向键与回车选择；选择后仍走原有类型校验和提交流程。失焦/回车成功提交后缓存，失败值不记录。

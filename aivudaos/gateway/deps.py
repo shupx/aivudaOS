@@ -6,7 +6,9 @@ from aivudaos.core.aivudaos_service import AivudaosServiceManager
 from aivudaos.core.apps.installer import InstallerService
 from aivudaos.core.apps.magnet import MagnetService
 from aivudaos.core.apps.operations import AppOperationManager
+from aivudaos.core.apps.pipeline import PipelineOrchestrator, PipelineStore
 from aivudaos.core.apps.runtime import RuntimeService
+from aivudaos.core.paths import CONFIG_DIR
 from aivudaos.core.apps.versioning import VersioningService
 from aivudaos.core.auth.relogin import ReloginService
 from aivudaos.core.auth.service import AuthService
@@ -70,6 +72,12 @@ def get_magnet_service() -> MagnetService:
 @lru_cache
 def get_app_operation_manager() -> AppOperationManager:
     return AppOperationManager()
+
+
+@lru_cache
+def get_pipeline_service() -> PipelineOrchestrator:
+    return PipelineOrchestrator(PipelineStore(CONFIG_DIR / 'startup_pipeline.yaml'),
+                                get_runtime_service(), get_app_operation_manager())
 
 
 @lru_cache

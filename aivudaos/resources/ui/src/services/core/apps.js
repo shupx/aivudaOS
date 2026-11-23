@@ -241,6 +241,8 @@ export function subscribeAppOperationEvents(
 
   es.onmessage = forward
   es.addEventListener('status', forward)
+  es.addEventListener('pipeline_stage', forward)
+  es.addEventListener('pipeline_node', forward)
   es.addEventListener('log', forward)
   es.addEventListener('error', forward)
   es.addEventListener('completed', forward)

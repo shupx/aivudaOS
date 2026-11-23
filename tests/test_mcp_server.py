@@ -86,7 +86,7 @@ class MCPServerTests(unittest.TestCase):
                     if param["in"] == "header":
                         self.assertEqual(kwargs["headers"][param["name"]], str(value))
                 if content_type == "application/json":
-                    self.assertEqual(kwargs["payload"], arguments["body"])
+                    self.assertEqual(kwargs["payload"], arguments.get("body"))
 
     def test_legacy_tool_names_preserved(self):
         self.assertTrue(set(LEGACY_NAMES).issubset({tool["name"] for tool in self.server.tools}))

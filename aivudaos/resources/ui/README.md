@@ -21,6 +21,14 @@
 - APT 源编辑器：显示后端检测到的实际路径与 deb822/传统格式说明，兼容 `ubuntu.sources` 与 `sources.list`，按目标文件区分备份，恢复确认使用实际路径。
 - 状态同步：操作后即时更新 + 后台轮询自动纠偏
 
+## 启动流水线
+
+「应用列表」保留原有启停、安装和批量操作。「启动流水线」按 profile 编排已安装应用：应用 ROS 2 五层模板或添加分组，将未分组应用拖入组内，再拖动分组或应用调整顺序。点击应用卡片编辑依赖和探活条件。运行前先检查批次预览并保存；版本冲突时重新加载，不会覆盖另一位操作者的保存。
+
+`src/services/core/startupPipeline.js` 管理请求、拖拽顺序归一化及本地依赖预检；`src/composables/useStartupPipeline.js` 管理草稿、操作与 SSE；`StartupPipelinePanel.vue`、`PipelineNodeConfigDrawer.vue` 负责展示。拖拽使用 `vue-draggable-plus`。流水线状态（如等待就绪）与 App 实际运行状态分开显示。停止按依赖逆序执行；取消只终止后续调度和当前探活，不会自动停掉已启动的 App。
+
+逻辑验证：在仓库根目录运行 `node --test tests/test_startup_pipeline_ui.mjs`，在本目录运行 `npm run build`。后端规则见[应用管理](../../../docs/app-management.md#启动流水线)。
+
 ## 参数弹窗复制
 
 参数值历史由 `services/core/parameterValueHistory.js` 和 `useParameterValueInput.js` 管理，`ParameterValueInput.vue` 复用现有输入样式及失焦/回车提交逻辑。localStorage 按站点、参数范围、App ID、参数路径及类型隔离；历史选择同样经过原有校验及保存。存储不可用时仍可编辑和提交。验证：`node --test tests/test_parameter_value_history.mjs`（从 aivudaOS 根目录运行）。

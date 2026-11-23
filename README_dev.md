@@ -12,6 +12,12 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 配置参数中心的文本/数字输入支持浏览器历史下拉选择，成功提交后按站点和参数缓存最近 20 个不同值。历史存储与输入交互逻辑分别位于 `services/core/parameterValueHistory.js`、`composables/useParameterValueInput.js`，视图共用 `ParameterValueInput.vue`；只读与密码/密钥类字段不缓存。验证：`node --test tests/test_parameter_value_history.mjs`，以及在 UI 目录执行 `npm run build`。源码构建不会自动更新已经部署的本机 AppImage 或远程设备 UI。
 
+## App 启动流水线
+
+Apps 的「启动流水线」独立于原来的单 App 列表。`core/apps/pipeline_config.py` 负责 YAML 版本锁、校验与 Kahn 分批；`pipeline.py` 将保存的计划作为一个可取消的 App operation 执行；`pipeline_probes.py` 在每个启动批次内检查进程和就绪条件。网关与 MCP 共用同一个运行时、操作管理器和保存接口，沿用单 worker 部署。配置位置为 `${AIVUDAOS_WS_ROOT}/config/startup_pipeline.yaml`；默认不接管自启。
+
+行为、接口及 ROS 2 探活示例见[应用管理](docs/app-management.md#启动流水线)。验证：在仓库根目录运行 `pytest tests/test_startup_pipeline.py`（测试环境需要 `pytest` 和 `httpx`）及 `node --test tests/test_startup_pipeline_ui.mjs`，在 UI 目录运行 `npm ci`、`npm run build`。探活测试使用临时工作区、回环服务和模拟 ROS CLI，不启动真实机器人。
+
 ## Python 兼容性约束
 
 Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。

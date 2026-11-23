@@ -30,6 +30,7 @@ class OperationRecord:
     cancel_requested: bool = False
     cancel_reason: Optional[str] = None
     cancel_handlers: List[Callable[[], None]] = field(default_factory=list)
+    reserved_apps: Tuple[str, ...] = ()
 
 
 class AppOperationManager:
@@ -46,13 +47,15 @@ class AppOperationManager:
         app_id: Optional[str],
         *,
         interactive_enabled: bool = False,
+        reserved_apps: Tuple[str, ...] = (),
     ) -> OperationRecord:
         with self._lock:
-            if app_id and app_id in self._app_running:
-                active_op = self._app_running[app_id]
-                raise AppOperationConflictError(
-                    f"{app_id} 已有运行中的操作: {active_op}"
-                )
+            reservations = reserved_apps + ((app_id,) if app_id else ())
+            for target in reservations:
+                if target in self._app_running:
+                    raise AppOperationConflictError(
+                        f"{target} already has a running operation: {self._app_running[target]}"
+                    )
 
             operation_id = uuid.uuid4().hex
             now = int(time.time())
@@ -64,10 +67,11 @@ class AppOperationManager:
                 started_at=now,
                 interactive_enabled=interactive_enabled,
                 interactive_open=interactive_enabled,
+                reserved_apps=reserved_apps,
             )
             self._records[operation_id] = record
-            if app_id:
-                self._app_running[app_id] = operation_id
+            for target in reservations:
+                self._app_running[target] = operation_id
 
         self.publish(
             operation_id,
@@ -114,76 +118,38 @@ class AppOperationManager:
 
     def mark_running(self, operation_id: str) -> None:
         record = self._require_record(operation_id)
-        record.status = "running"
-        self.publish(
-            operation_id,
-            "status",
-            status="running",
-            phase="running",
-        )
+        with record.condition:
+            if not record.cancel_requested:
+                record.status = "running"
+                self.publish(operation_id, "status", status="running", phase="running")
 
     def mark_completed(self, operation_id: str, result: Optional[Dict[str, Any]] = None) -> None:
-        record = self._require_record(operation_id)
-        record.status = "completed"
-        record.done = True
-        record.ended_at = int(time.time())
-        record.result = result or {}
-        self.close_interactive(operation_id, reason="completed")
-        self.publish(
-            operation_id,
-            "completed",
-            status="completed",
-            done=True,
-            result=record.result,
-        )
-        self._release_app(record)
+        self._finish(operation_id, "completed", result=result or {})
 
     def mark_failed(self, operation_id: str, error: str) -> None:
-        record = self._require_record(operation_id)
-        record.status = "failed"
-        record.error = error
-        record.done = True
-        record.ended_at = int(time.time())
-        self.close_interactive(operation_id, reason="failed")
-        self.publish(
-            operation_id,
-            "error",
-            status="failed",
-            done=True,
-            message=error,
-        )
-        self.publish(
-            operation_id,
-            "completed",
-            status="failed",
-            done=True,
-            error=error,
-        )
-        self._release_app(record)
+        self._finish(operation_id, "failed", error=error)
 
     def mark_canceled(self, operation_id: str, reason: str) -> None:
+        self._finish(operation_id, "canceled", error=reason)
+
+    def _finish(self, operation_id, status, result=None, error=None):
         record = self._require_record(operation_id)
-        record.status = "canceled"
-        record.error = reason
-        record.done = True
-        record.ended_at = int(time.time())
-        self.close_interactive(operation_id, reason="canceled")
-        self.publish(
-            operation_id,
-            "status",
-            status="canceled",
-            done=True,
-            message=reason,
-        )
-        self.publish(
-            operation_id,
-            "completed",
-            status="canceled",
-            done=True,
-            error=reason,
-            canceled=True,
-        )
-        self._release_app(record)
+        # An SSE waiter must not observe done before the final events exist.
+        with record.condition:
+            record.status = status
+            record.result, record.error = result, error
+            record.ended_at = int(time.time())
+            record.done = True
+            self.close_interactive(operation_id, reason=status)
+            self._release_app(record)
+            payload = {"result": result}
+            if error is not None:
+                payload = {"error": error}
+                event = "error" if status == "failed" else "status"
+                self.publish(operation_id, event, status=status, done=True, message=error)
+                if status == "canceled":
+                    payload["canceled"] = True
+            self.publish(operation_id, "completed", status=status, done=True, **payload)
 
     def get_operation(self, operation_id: str) -> Dict[str, Any]:
         record = self._require_record(operation_id)
@@ -315,9 +281,7 @@ class AppOperationManager:
         return record
 
     def _release_app(self, record: OperationRecord) -> None:
-        if not record.app_id:
-            return
         with self._lock:
-            current = self._app_running.get(record.app_id)
-            if current == record.operation_id:
-                self._app_running.pop(record.app_id, None)
+            for target in record.reserved_apps + ((record.app_id,) if record.app_id else ()):
+                if self._app_running.get(target) == record.operation_id:
+                    self._app_running.pop(target, None)

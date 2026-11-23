@@ -37,7 +37,9 @@ API token 时，内置 MCP 自动使用 `admin / admin123` 登录，临时 token
 主进程内，并发调用共用一次登录。受保护 API 返回 401 时，自动重新登录并
 重试一次；不会无限重试。
 
-只有默认/配置账号登录返回 401 时，才提示 agent 向用户获取当前用户名和密码：
+启动流水线是例外：配置可包含持久化的 shell 探活，访问流水线工具必须显式传入 `token` 或使用 `Authorization: Bearer <access_token>`，不会代入自动登录账号或服务端环境中的默认令牌。`get_startup_pipeline` 读取配置、可用应用及批次预览；`run_startup_pipeline` 和 `stop_startup_pipeline` 接受可选 `body`（如 `{"profile":"robot"}`），返回可供现有事件/取消工具使用的 `operation_id`。
+
+对于支持自动登录的其他工具，只有默认/配置账号登录返回 401 时，才提示 agent 向用户获取当前用户名和密码：
 
 1. 调用 `login`，参数 `body: {"username": "...", "password": "..."}`。
 2. 从结果读取 `access_token`。

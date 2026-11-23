@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
@@ -13,8 +13,8 @@ import {
   NAlert,
   NEmpty,
   NText,
-  NGrid,
-  NGi
+  NTab,
+  NTabs
 } from 'naive-ui'
 import {
   Upload,
@@ -29,6 +29,8 @@ import {
   Square
 } from 'lucide-vue-next'
 
+const StartupPipelinePanel = defineAsyncComponent(() => import('../components/apps/StartupPipelinePanel.vue'))
+const view = ref('apps')
 const { t } = useI18n()
 
 const {
@@ -102,7 +104,7 @@ const handleSortSelect = (key) => {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
       <NSpace align="center">
         <NText style="font-size: 20px; font-weight: 600;">{{ t('apps.title') }}</NText>
-        <NButton secondary size="small" :loading="loading" @click="refresh">
+        <NButton v-if="view === 'apps'" secondary size="small" :loading="loading" @click="refresh">
           <template #icon><NIcon><RefreshCw /></NIcon></template>
           {{ t('common.refresh') }}
         </NButton>
@@ -113,6 +115,12 @@ const handleSortSelect = (key) => {
       </NButton>
     </div>
 
+    <NTabs v-model:value="view" type="line" style="margin-bottom: 20px;">
+      <NTab name="apps">{{ t('pipeline.appList') }}</NTab>
+      <NTab name="pipeline">{{ t('pipeline.title') }}</NTab>
+    </NTabs>
+    <KeepAlive><StartupPipelinePanel v-if="view === 'pipeline'" :apps="apps" /></KeepAlive>
+    <template v-if="view === 'apps'">
     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
       <div style="position: relative; width: 320px; max-width: 100%;">
         <NInput
@@ -206,6 +214,8 @@ const handleSortSelect = (key) => {
         @restart-app="restartSingleApp"
       />
     </div>
+
+    </template>
 
     <UploadInstallModal
       :visible="showUploadModal"

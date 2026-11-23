@@ -95,6 +95,8 @@ class RuntimeService:
         self._caddy = CaddyConfigService(versioning=versioning)
         self._owned_processes = {}
         self._process_lock = threading.RLock()
+        self._autostart_lock = threading.RLock()
+        self._pipeline_autostart = False
         self._app_locks = WeakValueDictionary()
         self._guardian = None
         self._closing = False
@@ -209,7 +211,8 @@ class RuntimeService:
                 running = live.running
                 pid = live.pid
                 identity = None  # Unit state is authoritative; this is not a Popen PID.
-                autostart = live.enabled
+                if not self._pipeline_autostart:
+                    autostart = live.enabled
                 self._sync_runtime_row(
                     app_id,
                     running=running,
@@ -604,13 +607,40 @@ class RuntimeService:
     #  Autostart
     # ------------------------------------------------------------------ #
 
+    def configure_pipeline_autostart(self, takeover: bool) -> None:
+        """Reconcile boot ownership without starting/stopping apps or losing preferences."""
+        with self._autostart_lock:
+            self._pipeline_autostart = takeover
+            scope = self._systemd_scope()
+            if not self._should_use_systemd(scope):
+                if self._runtime_mode() == 'systemd':
+                    raise AppRuntimeError('Cannot reconcile boot ownership: systemd is unavailable')
+                return
+            if not takeover:
+                if self._reconcile_systemd_units(scope):
+                    raise AppRuntimeError('Could not restore individual systemd autostart settings')
+                return
+            # Disable already-installed units at SAVE time, before the next boot.
+            # An app which has never had a unit cannot be enabled independently.
+            try:
+                for app_id in self.list_installed_app_ids():
+                    if self._systemd.unit_file_path(app_id, scope).exists():
+                        self._systemd.set_enabled(app_id, scope, False, defer_reload=True)
+                self._systemd.daemon_reload(scope)
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise AppRuntimeError('Could not disable individual systemd autostart units') from exc
+
     def set_autostart(self, app_id: str, enabled: bool) -> Dict[str, Any]:
+        with self._autostart_lock:
+            return self._set_autostart(app_id, enabled)
+
+    def _set_autostart(self, app_id: str, enabled: bool) -> Dict[str, Any]:
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} is not installed")
 
         scope = self._systemd_scope()
-        if self._should_use_systemd(scope):
+        if not self._pipeline_autostart and self._should_use_systemd(scope):
             manifest = self._get_manifest(app_id)
             command = self._build_exec_command(manifest, install_path)
             command = self._decorate_command_for_realtime_logs(command)
@@ -1045,7 +1075,7 @@ class RuntimeService:
         }
 
     def stop_all_apps(self) -> Dict[str, Any]:
-        app_ids = self._list_installed_app_ids()
+        app_ids = self.list_installed_app_ids()
         stopped: List[str] = []
         skipped: List[str] = []
         failed: List[Dict[str, str]] = []
@@ -1077,7 +1107,7 @@ class RuntimeService:
             ).fetchall()
         return [str(row["app_id"]) for row in rows]
 
-    def _list_installed_app_ids(self) -> List[str]:
+    def list_installed_app_ids(self) -> List[str]:
         with db_conn() as conn:
             rows = conn.execute(
                 "SELECT DISTINCT app_id FROM app_installation ORDER BY app_id"
@@ -1095,7 +1125,7 @@ class RuntimeService:
         common_env = None
         for row in rows:
             app_id = str(row["app_id"])
-            enabled = bool(row["autostart"])
+            enabled = bool(row["autostart"]) and not self._pipeline_autostart
             try:
                 install_path = self._versioning.active_install_path(app_id)
                 if install_path is None:
@@ -1269,12 +1299,26 @@ class RuntimeService:
             "AIVUDA_OS_AVAHI_HOSTNAME": str(settings.get("avahi_hostname") or "").strip().lower(),
         }
 
+    def readiness_context(self, app_id: str) -> Tuple[dict, dict, dict, dict]:
+        """Launch environment and active config inputs for a readiness command."""
+        version = self._versioning.active_version(app_id)
+        if not version:
+            raise AppNotInstalledError(f"{app_id} has no active version")
+        manifest = self._get_manifest(app_id, version)
+        env = {**os.environ, **self._build_runtime_env(),
+               **self._build_config_env(app_id, version, manifest)}
+        if not has_ros2():  # A command or an app-specific PATH may still use ROS.
+            env["ROS_DOMAIN_ID"] = str(effective_domain(self._config.get_sys_config().data, env))
+        config = self._config.get_app_config(app_id, version)
+        return env, config.data, manifest.default_config, manifest.config_schema
+
     def refresh_runtime_environment(self) -> List[str]:
         """Refresh persisted units; running processes receive changes on restart."""
-        scope = self._systemd_scope()
-        if self._should_use_systemd(scope):
-            return self._reconcile_systemd_units(scope)
-        return []
+        with self._autostart_lock:
+            scope = self._systemd_scope()
+            if self._should_use_systemd(scope):
+                return self._reconcile_systemd_units(scope)
+            return []
 
     @staticmethod
     def _decorate_command_for_realtime_logs(command: List[str]) -> List[str]:
@@ -1431,7 +1475,8 @@ class RuntimeService:
                 "(app_id, running, autostart, pid, process_identity, last_started_at, last_stopped_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(app_id) DO UPDATE SET "
-                "running=excluded.running, autostart=excluded.autostart, pid=excluded.pid, "
+                "running=excluded.running, pid=excluded.pid, "
+                "autostart=CASE WHEN ? THEN app_runtime.autostart ELSE excluded.autostart END, "
                 "process_identity=excluded.process_identity, "
                 "last_started_at=COALESCE(excluded.last_started_at, app_runtime.last_started_at), "
                 "last_stopped_at=COALESCE(excluded.last_stopped_at, app_runtime.last_stopped_at)",
@@ -1443,6 +1488,7 @@ class RuntimeService:
                     process_identity,
                     last_started_at,
                     last_stopped_at,
+                    self._pipeline_autostart,
                 ),
             )
             conn.commit()
