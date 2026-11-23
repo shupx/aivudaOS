@@ -16,7 +16,11 @@ Apps 页面顶部 Restart 图标调用 `POST /api/apps/bulk/restart-running`，�
 
 ## 启动流水线
 
-在 Apps 顶部切换到「启动流水线」。先创建分组或应用 ROS 2 分层模板，再将已安装 App 从未分组池拖入分组。模板依次为 Middleware & Transport、Hardware & Drivers、Perception & Localization、Planning & Control、Telemetry & Tools；不按 App 名称猜测依赖。各 profile 独立，未分组列表以当前 profile 为准。
+在 Apps 顶部切换到「启动流水线」，新建分组并展开未分组托盘。点击 App 可加入首组，也可以直接拖入目标分组。虚线框表示分组，组间箭头表示执行顺序。将上游 App 的右锚点连到下游 App 的左锚点，即可添加就绪依赖。选中依赖线后按 Delete 或 Backspace 可删除。串行组中按执行次序推导的箭头会随模式和顺序自动调整。创建环路或反向跨组依赖时，画布会提示原因并保留原配置。
+
+双击组名可重命名，分组标题上的 ▶ 只运行该组。点击 App 可设置探活、目标分组和组内次序。「自动整理」按分层排列画布。拖动松手和连线变更后等待 500 ms 自动保存，出现版本冲突时可保留当前草稿查看，或确认重新加载服务器版本。
+
+齿轮设置中可切换 profile、调整失败策略、选择开机自启接管或应用 ROS 2 分层模板。模板依次为 Middleware & Transport、Hardware & Drivers、Perception & Localization、Planning & Control、Telemetry & Tools。每个 profile 独立维护分组、依赖和布局。
 
 **编排规则**：组按 `order` 排列，是严格的执行屏障。组内 `parallel` 将当时所有无未完成依赖的 App 放入同一批（最多 8 个同时执行）；`sequential` 每次只选当前就绪且排序最靠前的一项。`order` 相同按数组顺序决定。只有整批通过探活，才会正常放行下一批。同一 profile 内禁止重复 App、环、自依赖、未知依赖、前组依赖后组，以及启用项依赖禁用项。禁用的组和节点不执行。单组启动只检查其他组的前置节点是否已经就绪，不会代为启动它们。
 
@@ -50,6 +54,8 @@ profiles:
             depends_on: [driver]
             readiness: {type: ros2_lifecycle, node_name: /localizer, lifecycle_state: active}
 ```
+
+可选的 `profile.layout` 保存显示位置。例如 `{"group:hardware":{"x":20,"y":30},"app:driver":{"x":24,"y":64}}`。分组使用画布坐标，App 使用相对于分组左上角的坐标。每项须有有限数值 `x`、`y`，可选宽高 `w`、`h` 须为正的有限数值。省略布局时按执行顺序自动排布。启停计划始终由 `groups`、`items` 与 `depends_on` 决定。
 
 接管默认关闭：Popen 继续重放原有 `autostart`，systemd 继续管理独立 unit。**只有保存接管开关才改变开机行为**：在 systemd 模式下，保存时立即禁用已安装 App 的独立 unit 自启，不停止已运行进程；网关启动时再校正并运行默认 profile。接管期间保留单 App 自启偏好，关闭接管并保存后恢复，不自动启动此前未运行的 App。接管开启但计划无启用节点时不会启动任何 App。
 

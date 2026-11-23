@@ -23,9 +23,9 @@
 
 ## 启动流水线
 
-「应用列表」保留原有启停、安装和批量操作。「启动流水线」按 profile 编排已安装应用：应用 ROS 2 五层模板或添加分组，将未分组应用拖入组内，再拖动分组或应用调整顺序。点击应用卡片编辑依赖和探活条件。运行前先检查批次预览并保存；版本冲突时重新加载，不会覆盖另一位操作者的保存。
+打开「启动流水线」后才加载 `@vue-flow/core` 及其样式。新建分组，展开未分组托盘，点击 App 加入首组，或拖入目标分组。将上游 App 的右锚点连到下游 App 的左锚点即可添加依赖。选中依赖线并按 Delete 或 Backspace 删除。双击组名可重命名，点组内的 ▶ 可单独启动该组，点 App 可编辑就绪探活。设置中可切换 profile、应用 ROS 2 分层模板、设置失败策略和开机自启。
 
-`src/services/core/startupPipeline.js` 管理请求、拖拽顺序归一化及本地依赖预检；`src/composables/useStartupPipeline.js` 管理草稿、操作与 SSE；`StartupPipelinePanel.vue`、`PipelineNodeConfigDrawer.vue` 负责展示。拖拽使用 `vue-draggable-plus`。流水线状态（如等待就绪）与 App 实际运行状态分开显示。停止按依赖逆序执行；取消只终止后续调度和当前探活，不会自动停掉已启动的 App。
+`src/services/core/pipelineGraph.js` 将执行模型投影为画布，也校验连线和移动。`usePipelineCanvas.js` 用 `shallowRef` 保存节点与边，按节点索引更新相邻边动画。`useStartupPipeline.js` 管理编辑和运行，`usePipelineAutosave.js` 在松手或连线变更后等待 500 ms 再提交，同一时间只发送一个 PUT。版本冲突会保留本地草稿，确认重新加载后才读取服务器版本。自动整理仅更新当前 profile 的布局。
 
 逻辑验证：在仓库根目录运行 `node --test tests/test_startup_pipeline_ui.mjs`，在本目录运行 `npm run build`。后端规则见[应用管理](../../../docs/app-management.md#启动流水线)。
 
@@ -98,3 +98,7 @@ Online Store 导航图标右上角显示可更新的已安装 App 数量（超�
 ## 设备网卡配置
 
 声明 `x-device-ipv4` 的配置组可以选择网卡和源 IPv4。通过普通参数或磁吸区更换网卡、目的地址时，对应的可编辑源地址会恢复为 `auto`，由其他磁吸组管理的源地址保留原值。已保存的离线选项不妨碍修改其他参数；配置可保存不代表网络当前可用。
+
+## 机载应用入口
+
+IMX219 与 AprilTag 的参数在应用参数中心管理。图传从地面站 Foxglove 的 Image 面板打开；C20D 保留自己的云台控制面板。操作步骤见[机载联调说明](../../../docs/drone-camera-gimbal.md)。

@@ -67,8 +67,8 @@ export function unassignedNodes(profile, installed) {
 
 // Check the draft immediately after a move. Do not silently remove or invert an edge.
 // The server independently validates the entire config (including probe parameters).
-export function analyzeProfile(profile, installed) {
-  const errors = [], preview = [], nodes = new Map(), state = new Map(), stack = []
+export function profileIssues(profile, installed) {
+  const errors = [], nodes = new Map(), state = new Map(), stack = []
   const ids = new Set(installed.map(a => a.app_id))
   const issue = (code, apps, dependency) => errors.push({ code, apps, dependency })
   profile.groups.forEach((group, stage) => group.items.forEach(node => {
@@ -91,11 +91,17 @@ export function analyzeProfile(profile, installed) {
     stack.pop(); state.set(id, 2)
   }
   for (const id of nodes.keys()) if (!state.has(id)) visit(id)
+  return errors
+}
+
+export function analyzeProfile(profile, installed) {
+  const errors = profileIssues(profile, installed), preview = []
   if (!errors.length) for (const group of profile.groups.filter(g => g.enabled !== false)) {
+    const nodes = new Map(group.items.map(node => [node.app_id, node]))
     const pending = new Set(group.items.filter(n => n.enabled !== false).map(n => n.app_id))
     const batches = []
     while (pending.size) {
-      const ready = [...pending].filter(id => !(nodes.get(id).node.depends_on || []).some(dep => pending.has(dep)))
+      const ready = [...pending].filter(id => !(nodes.get(id).depends_on || []).some(dep => pending.has(dep)))
       const batch = group.mode === 'sequential' ? ready.slice(0, 1) : ready
       if (!batch.length) break
       batches.push(batch)

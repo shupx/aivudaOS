@@ -185,9 +185,33 @@ def _group(raw, path):
     }
 
 
+def _layout(raw, path) -> Dict[str, Dict[str, float]]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} must be an object")
+    result = {}
+    for node_id, box in raw.items():
+        _text(node_id, path)
+        location = f"{path}[{node_id!r}]"
+        _object(box, ("x", "y", "w", "h"), location)
+        if "x" not in box or "y" not in box:
+            raise ValueError(f"{location} requires x and y")
+        coords = {}
+        for key, value in box.items():
+            try:
+                finite = type(value) in (float, int) and math.isfinite(value)
+            except OverflowError:
+                finite = False
+            if not finite or (key in ("w", "h") and value <= 0):
+                raise ValueError(f"{location}.{key} must be finite; sizes must be positive")
+            coords[key] = float(value)
+        result[node_id] = coords
+    return result
+
+
 def _profile(raw, path):
-    raw = _object(raw, ("name", "on_failure", "groups"), path)
+    raw = _object(raw, ("name", "on_failure", "groups", "layout"), path)
     return {
+        **({"layout": _layout(raw["layout"], f"{path}.layout")} if "layout" in raw else {}),
         "name": _text(raw.get("name"), f"{path}.name"),
         "on_failure": _enum(raw.get("on_failure", "abort"), ("abort", "skip_dependents", "continue"),
                             f"{path}.on_failure"),

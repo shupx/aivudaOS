@@ -108,6 +108,35 @@ def test_invalid_plans(groups, reason):
     assert reason in ' '.join(result['errors'])
 
 
+def test_layout_round_trip_is_optional_and_does_not_change_plans(tmp_path):
+    store = PipelineStore(tmp_path / 'pipeline.yaml')
+    legacy = store.save(config(group('one', node('a'), node('b', 'a'))))
+    before = legacy['profiles'][0]
+    assert 'layout' not in before
+    edited = copy.deepcopy(legacy)
+    layout = {'group:one': {'x': -15, 'y': 3.5, 'w': 320, 'h': 180},
+              'app:a': {'x': 0, 'y': 20}}
+    edited['profiles'][0]['layout'] = layout
+    store.save(edited)
+    after = store.load()['profiles'][0]
+    assert after['layout'] == layout
+    assert build_execution_plan(after) == build_execution_plan(before)
+    assert build_stop_plan(after) == build_stop_plan(before)
+
+
+@pytest.mark.parametrize('layout', [None, [], {1: {'x': 0, 'y': 0}}, {'a': []},
+    {'a': {'x': 0}}, {'a': {'y': 0}}, {'a': {'x': True, 'y': 0}},
+    {'a': {'x': '3', 'y': 0}}, {'a': {'x': float('nan'), 'y': 0}},
+    {'a': {'x': 0, 'y': float('inf')}}, {'a': {'x': 0, 'y': 0, 'w': 0}},
+    {'a': {'x': 0, 'y': 0, 'h': -1}}, {'a': {'x': 0, 'y': 0, 'z': 1}},
+])
+def test_invalid_layout_cannot_replace_saved_config(tmp_path, layout):
+    store = PipelineStore(tmp_path / 'pipeline.yaml')
+    with pytest.raises(ValueError, match='layout'):
+        store.save(config(group('one'), layout=layout))
+    assert not store.path.exists()
+
+
 def test_invalid_saved_dag_remains_editable_but_never_runs(service):
     import yaml
 

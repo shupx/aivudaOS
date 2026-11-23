@@ -6,6 +6,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // The dashboard imports these controls on first paint. Leave feature-only
+        // packages (notably Vue Flow) to Rollup's dynamic import boundaries.
+        manualChunks(id) {
+          if (/\/node_modules\/(?:vue|vue-router|vue-i18n|@vue|@intlify)\//.test(id)) return 'vue-runtime'
+          if (/\/naive-ui\/es\/(?:input|select|form|menu|tabs|dropdown|modal|dialog)\/src\//.test(id)) return 'ui-controls'
+        },
+      },
+    },
   },
   server: {
     host: '0.0.0.0',

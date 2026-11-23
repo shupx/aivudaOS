@@ -16,6 +16,8 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 Apps 的「启动流水线」独立于原来的单 App 列表。`core/apps/pipeline_config.py` 负责 YAML 版本锁、校验与 Kahn 分批；`pipeline.py` 将保存的计划作为一个可取消的 App operation 执行；`pipeline_probes.py` 在每个启动批次内检查进程和就绪条件。网关与 MCP 共用同一个运行时、操作管理器和保存接口，沿用单 worker 部署。配置位置为 `${AIVUDAOS_WS_ROOT}/config/startup_pipeline.yaml`；默认不接管自启。
 
+画布随「启动流水线」标签懒加载，只依赖 `@vue-flow/core`。`pipelineGraph.js` 从 `groups`、`items` 和 `depends_on` 派生分组节点、依赖边与执行顺序箭头。可选的 `profile.layout` 保存节点坐标和尺寸。拖拽结束或连线变更后，编辑器以 500 ms 防抖串行保存，运行事件按 App 或组 ID 更新对应状态及相邻边。
+
 行为、接口及 ROS 2 探活示例见[应用管理](docs/app-management.md#启动流水线)。验证：在仓库根目录运行 `pytest tests/test_startup_pipeline.py`（测试环境需要 `pytest` 和 `httpx`）及 `node --test tests/test_startup_pipeline_ui.mjs`，在 UI 目录运行 `npm ci`、`npm run build`。探活测试使用临时工作区、回环服务和模拟 ROS CLI，不启动真实机器人。
 
 ## Python 兼容性约束
@@ -307,6 +309,10 @@ agent 无 token 时先使用默认 `admin / admin123` 自动登录，主进程�
 - 脚本输出继续走 SSE：`/api/apps/operations/{operation_id}/events`。
 - 需要输入时，前端通过 WebSocket 连接 `interactive_ws_path?token=...` 并发送文本输入；后端会自动追加换行写入脚本 stdin。
 - 当前交互链路基于 PTY，支持 `sudo` 密码、`y/n` 等命令行提示输入。
+
+## 机载视觉应用联调
+
+相机、AprilTag、C20D 与 Zenoh Bridge 的参数、话题和只读验收步骤见[机载联调说明](docs/drone-camera-gimbal.md)。
 
 ## 在线应用商店接入
 

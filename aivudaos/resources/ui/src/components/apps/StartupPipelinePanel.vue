@@ -1,189 +1,170 @@
 <script setup>
-import { toRef } from 'vue'
+import { provide, reactive, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { VueDraggable } from 'vue-draggable-plus'
-import { NAlert, NButton, NDropdown, NInput, NModal, NPopconfirm, NSelect, NSpin, NSwitch, NTag, NText, useThemeVars } from 'naive-ui'
-import { Ellipsis, GripVertical, Play, Plus, Settings2, Square } from 'lucide-vue-next'
-import PipelineNodeConfigDrawer from './PipelineNodeConfigDrawer.vue'
+import { VueFlow } from '@vue-flow/core'
+// Keep both the graph runtime and its styles behind the Apps tab's async import.
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import { NButton, NPopconfirm, NSpin, useThemeVars } from 'naive-ui'
+import { ChevronRight, LayoutGrid, Play, Plus, Settings, Square, X } from 'lucide-vue-next'
 import { useStartupPipeline } from '../../composables/useStartupPipeline'
+import PipelineAppNode from './PipelineAppNode.vue'
+import PipelineGroupNode from './PipelineGroupNode.vue'
+import PipelineNodeConfigDrawer from './PipelineNodeConfigDrawer.vue'
+import PipelineSettingsDrawer from './PipelineSettingsDrawer.vue'
 
 const props = defineProps({ apps: { type: Array, required: true } })
 const { t } = useI18n(), theme = useThemeVars()
-const {
-  config, profile, selected, dirty, locked, busy, error, notice, pool, analysis, preview,
-  checked, conflicts, appMap, appName, groupName, statusName, probeSummary, modes, policies,
-  probeOptions, profileOptions, groupOptions, dependencyOptions, destination, position, maxPosition,
-  nodeDraft, changeProbe, editNode, submitNode, nameDialog, nameValid, openName, submitName, addFromPool,
-  stageActions, stageAction, reorderGroups, reorderNodes, template, save, validate, load, execute, cancel,
-  active, canRun, progress, profileProgress, connectionLost, cancelPending,
-} = useStartupPipeline(toRef(props, 'apps'))
+const ui = reactive(useStartupPipeline(toRef(props, 'apps')))
+provide('pipelineEditor', ui)
 </script>
 
 <template>
   <section class="pipeline" :aria-label="t('pipeline.title')" :style="{
-    '--surface': theme.cardColor, '--line': theme.dividerColor, '--tint': theme.actionColor,
-    '--muted': theme.textColor3, '--accent': theme.primaryColor, '--danger': theme.errorColor,
+    '--surface': theme.cardColor, '--paper': theme.bodyColor, '--line': theme.borderColor,
+    '--ink': theme.textColor1, '--muted': theme.textColor2, '--accent': theme.primaryColor,
+    '--ok': theme.successColor, '--warn': theme.warningColor, '--danger': theme.errorColor,
   }">
-    <NAlert v-if="error" type="error" role="alert">{{ error }} <NButton v-if="!config" size="small" @click="load">{{ t('common.refresh') }}</NButton></NAlert>
-    <NSpin v-if="!config && !error" size="small" :description="t('pipeline.loading')" />
-    <template v-if="config && profile">
-      <header class="toolbar">
-        <div class="control-row">
-          <label>{{ t('pipeline.profile') }} <NSelect v-model:value="selected" :options="profileOptions" :disabled="locked" size="small" /></label>
-          <NButton size="small" secondary :disabled="locked" :aria-label="t('pipeline.addProfile')" :title="t('pipeline.addProfile')" @click="openName('addProfile')"><Plus :size="16"/></NButton>
-          <NTag v-if="selected === config.default_profile" size="small" :bordered="false">{{ t('pipeline.defaultProfile') }}</NTag>
-          <NButton v-else text size="small" :disabled="locked" @click="config.default_profile = selected">{{ t('pipeline.makeDefault') }}</NButton>
-          <label>{{ t('pipeline.onFailure') }} <NSelect v-model:value="profile.on_failure" :options="policies" :disabled="locked" size="small" /></label>
+    <div v-if="(ui.error || ['error', 'conflict'].includes(ui.saveState)) && !ui.settingsOpen && !ui.nodeDraft" class="feedback" role="alert">
+      <span>{{ ui.error || t(ui.saveState === 'conflict' ? 'pipeline.conflict' : 'pipeline.saveFailed') }}</span>
+      <NPopconfirm v-if="ui.saveState === 'conflict'" @positive-click="ui.load()">
+        <template #trigger><NButton size="tiny">{{ t('pipeline.reload') }}</NButton></template>
+        {{ t('pipeline.discard') }}
+      </NPopconfirm>
+      <NButton v-else-if="ui.saveState === 'error'" size="tiny" @click="ui.retrySave()">{{ t('pipeline.retrySave') }}</NButton>
+      <NButton v-else-if="!ui.config" size="tiny" @click="ui.load()">{{ t('common.refresh') }}</NButton>
+    </div>
+    <NSpin v-if="!ui.config && !ui.error" size="small" :description="t('pipeline.loading')" />
+    <template v-if="ui.config && ui.profile">
+      <div class="editor-frame">
+        <div class="toolbar" role="group" :aria-label="t('pipeline.title')">
+          <div class="actions">
+            <NButton size="small" type="primary" :disabled="!ui.canRun" @click="ui.execute('run')">
+              <template #icon><Play :size="15" aria-hidden="true" /></template>{{ t('pipeline.run') }}
+            </NButton>
+            <NButton v-if="ui.active" size="small" :disabled="ui.cancelPending" @click="ui.cancel()">
+              <template #icon><X :size="15" aria-hidden="true" /></template>{{ t('pipeline.cancelRun') }}
+            </NButton>
+            <NButton v-else size="small" :disabled="!ui.canRun" @click="ui.execute('stop')">
+              <template #icon><Square :size="13" aria-hidden="true" /></template>{{ t('pipeline.stop') }}
+            </NButton>
+          </div>
+          <div class="actions layout-actions">
+            <NButton size="small" quaternary :disabled="ui.locked" @click="ui.addGroup()">
+              <template #icon><Plus :size="16" aria-hidden="true" /></template>{{ t('pipeline.addGroup') }}
+            </NButton>
+            <NButton size="small" quaternary :disabled="ui.locked || !ui.nodes.length" @click="ui.autoLayout()">
+              <template #icon><LayoutGrid :size="15" aria-hidden="true" /></template>{{ t('pipeline.arrange') }}
+            </NButton>
+          </div>
+          <NButton class="settings-button" size="small" quaternary :title="t('pipeline.settings')"
+            :aria-label="t('pipeline.settings')" aria-haspopup="dialog" @click="ui.settingsOpen = true">
+            <Settings :size="17" aria-hidden="true" />
+          </NButton>
         </div>
-        <div class="control-row">
-          <label :title="t('pipeline.takeoverHint')"><NSwitch v-model:value="config.takeover_autostart" size="small" :disabled="locked" :aria-label="t('pipeline.takeover')" /> {{ t('pipeline.takeover') }}</label>
-          <NButton size="small" :disabled="locked" @click="template">{{ t('pipeline.template') }}</NButton>
-          <NButton size="small" :loading="busy === 'validate'" :disabled="locked" @click="validate">{{ t('pipeline.validate') }}</NButton>
-          <NPopconfirm v-if="dirty" :disabled="locked" @positive-click="load">
-            <template #trigger><NButton size="small" :disabled="locked">{{ t('pipeline.reload') }}</NButton></template>{{ t('pipeline.discard') }}
-          </NPopconfirm>
-          <NButton v-else size="small" :disabled="locked" @click="load">{{ t('pipeline.reload') }}</NButton>
-          <NButton size="small" type="primary" :loading="busy === 'save'" :disabled="locked || !dirty" @click="save">{{ t('pipeline.save') }}</NButton>
+
+        <div class="pipeline-canvas" :aria-label="t('pipeline.canvas')" role="region"
+          @dragover.prevent @drop.prevent="ui.onDrop">
+          <VueFlow :nodes="ui.nodes" :edges="ui.edges" :apply-default="false" fit-view-on-init :max-zoom="1.5"
+            :nodes-draggable="!ui.locked" :nodes-connectable="!ui.locked" :nodes-focusable="false"
+            :zoom-on-double-click="false" :elevate-nodes-on-select="false" :node-drag-threshold="4"
+            :delete-key-code="['Backspace', 'Delete']" :selection-key-code="null" :multi-selection-key-code="null"
+            @init="ui.onInit" @nodes-change="ui.onNodesChange" @edges-change="ui.onEdgesChange"
+            @node-drag-start="ui.onDragStart" @node-drag-stop="ui.onDragStop" @connect="ui.onConnect"
+            @connect-start="ui.onGestureStart" @connect-end="ui.onGestureEnd">
+            <template #node-pipelineGroup="{ data }"><PipelineGroupNode :data="data" /></template>
+            <template #node-pipelineApp="{ data }"><PipelineAppNode :data="data" /></template>
+          </VueFlow>
+          <p v-if="!ui.nodes.length" class="empty-canvas">{{ t('pipeline.emptyCanvas') }}</p>
         </div>
-        <div class="run-row control-row">
-          <NButton size="small" secondary type="primary" :disabled="!canRun" @click="execute('run')"><template #icon><Play :size="15" /></template>{{ t('pipeline.run') }}</NButton>
-          <NButton size="small" secondary :disabled="!canRun" @click="execute('stop')"><template #icon><Square :size="14" /></template>{{ t('pipeline.stop') }}</NButton>
-          <NButton v-if="active" size="small" type="warning" :loading="cancelPending" :disabled="!!busy || cancelPending" @click="cancel">{{ t('pipeline.cancelRun') }}</NButton>
-          <NText v-if="dirty || notice" depth="3" role="status">{{ t(`pipeline.${dirty ? 'unsaved' : notice}`) }}</NText>
-        </div>
-      </header>
-      <NAlert v-if="analysis.errors.length || checked?.errors?.length" type="error" :title="t('pipeline.conflicts')">
-        <ul class="issues"><li v-for="(issue, i) in analysis.errors" :key="i">{{ t(`pipeline.issues.${issue.code}`, { apps: issue.apps.join(', '), dep: issue.dependency }) }}</li>
-          <li v-for="(message, i) in checked?.errors" :key="'server-' + i">{{ message }}</li></ul>
-      </NAlert>
-      <section v-if="progress" class="operation surface" :aria-label="t('pipeline.operation')">
-        <div class="control-row"><h3>{{ t('pipeline.operation') }}</h3>
-          <NTag size="small" :type="progress.status === 'failed' ? 'error' : 'info'" role="status">{{ statusName(progress.status) }}</NTag>
-          <NText depth="3">{{ progress.profile }}<template v-if="progress.group_id"> / {{ groupName(profile.groups.find(g => g.id === progress.group_id)) || progress.group_id }}</template></NText>
-        </div>
-        <p v-if="connectionLost" role="status">{{ t('pipeline.reconnecting') }}</p>
-        <details v-if="progress.logs.length"><summary>{{ t('pipeline.log') }} ({{ progress.logs.length }})</summary><pre>{{ progress.logs.join('\n') }}</pre></details>
-      </section>
-      <div class="workspace">
-        <div class="stages">
-          <div class="section-heading"><h3>{{ t('pipeline.stageOrder') }}</h3>
-            <NButton size="small" secondary :disabled="locked" @click="openName('addStage')"><template #icon><Plus :size="15" /></template>{{ t('pipeline.addStage') }}</NButton></div>
-          <p class="help">{{ t('pipeline.orderHint') }}</p>
-          <VueDraggable :model-value="profile.groups" handle=".stage-grip" draggable=".stage" :disabled="locked" @update:model-value="reorderGroups" class="stage-list">
-            <article v-for="(group, index) in profile.groups" :key="group.id" class="stage surface" :data-enabled="group.enabled">
-              <header class="stage-header">
-                <span class="grip stage-grip" :title="t('pipeline.dragStage')"><GripVertical :size="16" /></span>
-                <span class="ordinal" :aria-label="t('pipeline.stageNumber', { n: index + 1 })">{{ index + 1 }}</span>
-                <h4>{{ groupName(group) }}</h4>
-                <NTag v-if="profileProgress?.stages.has(group.id)" size="small" :bordered="false">{{ statusName(profileProgress.stages.get(group.id)) }}</NTag>
-                <div class="stage-controls">
-                  <NSelect v-model:value="group.mode" :options="modes" :disabled="locked" size="small" :aria-label="t('pipeline.mode')" />
-                  <NSwitch v-model:value="group.enabled" size="small" :disabled="locked" :aria-label="t('pipeline.includeStage')" :title="t('pipeline.includeStage')" />
-                  <NDropdown trigger="click" :options="stageActions(group, index)" @select="stageAction($event, group, index)">
-                    <NButton size="small" quaternary :disabled="locked" :aria-label="t('pipeline.stageActions', { name: groupName(group) })"><Ellipsis :size="18" /></NButton>
-                  </NDropdown>
-                </div>
-              </header>
-              <VueDraggable :model-value="group.items" group="pipeline-apps" handle=".node-grip" draggable=".node" :disabled="locked" class="drop-list" :data-empty="t('pipeline.dropHere')" @update:model-value="reorderNodes(group, $event)">
-                <div v-for="node in group.items" :key="node.app_id" class="node" :class="{ conflict: conflicts.has(node.app_id), editable: !locked }" @click="!locked && editNode(node, group)">
-                  <span class="grip node-grip" :title="t('pipeline.dragNode')"><GripVertical :size="16" /></span>
-                  <div class="node-info">
-                    <div class="node-title"><strong>{{ appName(node.app_id) }}</strong>
-                      <NText depth="3" v-if="appName(node.app_id) !== node.app_id">{{ node.app_id }}</NText>
-                    </div>
-                    <div class="badges"><NTag size="tiny" :bordered="false" :type="appMap.get(node.app_id)?.running ? 'success' : 'default'">{{ t(appMap.get(node.app_id)?.running ? 'pipeline.runtimeRunning' : 'pipeline.runtimeStopped') }}</NTag>
-                      <NTag size="tiny" :type="profileProgress?.nodes.get(node.app_id) === 'waiting_ready' ? 'warning' : 'default'">
-                        <template v-if="profileProgress?.nodes.get(node.app_id) === 'waiting_ready' && active" #icon><NSpin :size="11" /></template>
-                        {{ statusName(profileProgress?.nodes.get(node.app_id) || (group.enabled && node.enabled ? 'idle' : 'disabled')) }}
-                      </NTag>
-                    </div>
-                    <div class="node-summary">{{ t('pipeline.readiness') }}: {{ probeSummary(node.readiness) }}</div>
-                    <div class="node-summary badges">{{ t('pipeline.dependsOn') }}:
-                      <NTag v-for="dep in node.depends_on" :key="dep" size="tiny" :bordered="false">{{ dep }}</NTag>
-                      <span v-if="!node.depends_on?.length">{{ t('pipeline.noDeps') }}</span>
-                    </div>
-                  </div>
-                  <NButton size="small" quaternary :disabled="locked" :aria-label="t('pipeline.editApp', { app: appName(node.app_id) })" :title="t('pipeline.configureNode')" @click.stop="editNode(node, group)"><Settings2 :size="16" /></NButton>
-                </div>
-              </VueDraggable>
-            </article>
-          </VueDraggable>
-          <p v-if="!profile.groups.length" class="empty surface">{{ t('pipeline.noStages') }}</p>
-        </div>
-        <aside class="pool surface">
-          <h3>{{ t('pipeline.unassigned') }} <NText depth="3">({{ pool.length }})</NText></h3>
-          <p class="help">{{ t('pipeline.poolHint') }}</p>
-          <VueDraggable :model-value="pool" group="pipeline-apps" handle=".pool-grip" draggable=".pool-node" :sort="false" :disabled="locked" class="drop-list" :data-empty="t('pipeline.noUnassigned')">
-            <div v-for="node in pool" :key="node.app_id" class="pool-node">
-              <span class="grip pool-grip" :title="t('pipeline.dragNode')"><GripVertical :size="16" /></span>
-              <div class="node-info"><strong>{{ appName(node.app_id) }}</strong><div v-if="appName(node.app_id) !== node.app_id" class="node-summary">{{ node.app_id }}</div></div>
-              <NDropdown trigger="click" :options="groupOptions" key-field="value" @select="addFromPool(node.app_id, $event)">
-                <NButton size="small" quaternary :disabled="locked || !groupOptions.length" :aria-label="t('pipeline.assign', { app: appName(node.app_id) })" :title="t('pipeline.assign', { app: appName(node.app_id) })"><Plus :size="15" /></NButton>
-              </NDropdown>
+
+        <div class="tray">
+          <button type="button" class="tray-toggle" :aria-expanded="ui.trayOpen" aria-controls="pipeline-pool"
+            @click="ui.trayOpen = !ui.trayOpen">
+            <ChevronRight :size="15" aria-hidden="true" />
+            {{ t('pipeline.unassigned') }} <span class="count">{{ ui.pool.length }}</span>
+          </button>
+          <div v-show="ui.trayOpen" id="pipeline-pool" class="tray-body">
+            <p class="tray-hint">{{ t(ui.pool.length ? 'pipeline.poolHint' : 'pipeline.noUnassigned') }}</p>
+            <div v-if="ui.pool.length" class="pool-apps">
+              <button v-for="app in ui.pool" :key="app.app_id" type="button" class="pool-app" :data-app-id="app.app_id"
+                :disabled="ui.locked" :draggable="!ui.locked" :aria-label="t('pipeline.assign', { app: ui.appName(app.app_id) })"
+                :title="t('pipeline.assign', { app: ui.appName(app.app_id) })" @dragstart="ui.onTrayDrag($event, app.app_id)"
+                @dragend="ui.onGestureEnd" @click="ui.addFromPool(app.app_id)">
+                <img :src="ui.appIcon(app.app_id)" alt="" draggable="false" @error.once="$event.target.src = '/app-default-icon.png'">
+                <span>{{ ui.appName(app.app_id) }}</span><Plus :size="13" aria-hidden="true" />
+              </button>
             </div>
-          </VueDraggable>
-        </aside>
+          </div>
+        </div>
       </div>
-      <section class="surface preview">
-        <h3>{{ t('pipeline.preview') }}</h3>
-        <p v-if="!preview.length" class="help">{{ t('pipeline.noPreview') }}</p>
-        <ol v-else><li v-for="stage in preview" :key="stage.group_id"><strong>{{ groupName(profile.groups.find(g => g.id === stage.group_id)) || stage.group_id }}</strong>
-          <span v-for="(batch, i) in stage.batches" :key="i" class="batch">{{ t('pipeline.batch', { n: i + 1 }) }}: {{ batch.join(', ') }}</span>
-          <NText v-if="!stage.batches.length" depth="3">{{ t('pipeline.emptyStage') }}</NText>
-        </li></ol>
-      </section>
+      <div class="editor-status" role="status" aria-live="polite">
+        <span v-if="ui.profileProgress">{{ ui.statusName(ui.profileProgress.status) }}</span>
+        <span v-if="ui.connectionLost">{{ t('pipeline.reconnecting') }}</span>
+        <span v-if="['pending', 'saving', 'saved'].includes(ui.saveState)">{{ t(`pipeline.saveStates.${ui.saveState}`) }}</span>
+      </div>
+      <PipelineSettingsDrawer />
+      <PipelineNodeConfigDrawer />
     </template>
-    <PipelineNodeConfigDrawer :node="nodeDraft" :name="appName(nodeDraft?.app_id)" v-model:destination="destination" v-model:position="position" :max-position="maxPosition" :groups="groupOptions" :dependencies="dependencyOptions" :probes="probeOptions" @close="nodeDraft = null" @apply="submitNode" @change-probe="changeProbe" />
-    <NModal :show="!!nameDialog" preset="dialog" :show-icon="false" :title="nameDialog && t(`pipeline.${nameDialog.kind}`)" @update:show="nameDialog = null">
-      <template v-if="nameDialog?.kind === 'removeStage'">{{ t('pipeline.confirmRemove', { name: nameDialog.value }) }}</template>
-      <NInput v-else-if="nameDialog" v-model:value="nameDialog.value" :placeholder="t('pipeline.name')" :aria-label="t('pipeline.name')" @keydown.enter.prevent="submitName" />
-      <template #action><NButton size="small" @click="nameDialog = null">{{ t('common.cancel') }}</NButton>
-        <NButton size="small" :type="nameDialog?.kind === 'removeStage' ? 'error' : 'primary'" :disabled="!nameValid" @click="submitName">{{ t(nameDialog?.kind === 'removeStage' ? 'pipeline.removeStage' : 'pipeline.apply') }}</NButton></template>
-    </NModal>
   </section>
 </template>
 
 <style scoped>
-.pipeline { display: grid; gap: 18px; font-size: 14px; min-width: 0; }
-.pipeline h3, .pipeline h4 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; }
-.pipeline h4 { font-size: 15px; overflow-wrap: anywhere; }
-.toolbar { display: grid; gap: 12px; }
-.control-row, .section-heading, .stage-header, .stage-controls, .node, .pool-node, .badges, .node-title { display: flex; align-items: center; gap: 8px; }
-.control-row, .stage-header, .badges, .node-title { flex-wrap: wrap; }
-.control-row label { display: flex; align-items: center; gap: 8px; max-width: 100%; }
-.control-row .n-select { width: auto; min-width: 104px; max-width: 190px; }
-.run-row { padding-top: 12px; border-top: 1px solid var(--line); }
-.workspace { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(180px, 26%); align-items: start; }
-.surface { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
-.section-heading { justify-content: space-between; }
-.help, .node-summary, .node-title .n-text, .empty { color: var(--muted); font-size: 13px; }
-.help { margin: 6px 0 12px; max-width: 75ch; }
-.stage-list { display: grid; gap: 12px; }
-.stage { min-width: 0; overflow: hidden; }
-.stage-header { padding: 10px; background: var(--tint); border-bottom: 1px solid var(--line); }
-.stage-controls { margin-inline-start: auto; gap: 6px; }
-.stage-controls .n-select { width: 112px; }
-.ordinal { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--accent); padding-inline-end: 6px; border-inline-end: 1px solid var(--line); }
-.stage[data-enabled="false"] .ordinal { color: var(--muted); }
-.grip { display: inline-flex; cursor: grab; color: var(--muted); touch-action: none; padding: 6px 0; flex: none; }
-.grip:active { cursor: grabbing; }
-.drop-list { min-height: 48px; padding: 4px 10px; }
-.drop-list:empty::before { content: attr(data-empty); display: block; font-size: 13px; padding: 10px 0; color: var(--muted); pointer-events: none; }
-.node, .pool-node { padding: 8px 0; align-items: flex-start; }
-.node + .node, .pool-node + .pool-node { border-top: 1px solid var(--line); }
-.node.editable { cursor: pointer; }
-.node.conflict { box-shadow: inset 3px 0 var(--danger); padding-inline-start: 8px; }
-.node-info { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.badges { margin: 3px 0; }
-.pool, .preview, .operation, .empty { padding: 14px; }
-.pool .drop-list { padding: 0; }
-.pool .help { margin-bottom: 6px; }
-.issues, .preview ol { margin: 8px 0 0; padding-inline-start: 24px; }
-.preview li { padding: 3px 0; overflow-wrap: anywhere; }
-.batch, .preview li > .n-text { margin-inline-start: 12px; font-size: 13px; }
-.operation details { margin-top: 8px; }
-.operation summary { cursor: pointer; }
-.operation pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; }
-@media (max-width: 950px) { .workspace { grid-template-columns: minmax(0, 1fr); } .pool { grid-row: 1; } }
-@media (max-width: 600px) { .stage-controls { flex-wrap: wrap; } .control-row label { flex-wrap: wrap; } .control-row { gap: 6px; } }
+.pipeline { display: grid; min-width: 0; gap: 8px; color: var(--ink); }
+.editor-frame { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); min-width: 0; overflow: hidden; }
+.toolbar, .actions, .feedback, .editor-status { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.toolbar { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.layout-actions { border-inline-start: 1px solid var(--line); padding-inline-start: 7px; }
+.settings-button { margin-inline-start: auto; }
+.pipeline-canvas { position: relative; height: clamp(340px, 57vh, 660px); background-color: var(--paper);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--muted) 22%, transparent) 1px, transparent 1px); background-size: 16px 16px; }
+.pipeline-canvas :deep(.vue-flow) { --vf-connection-path: var(--accent); }
+.pipeline-canvas :deep(.vue-flow__edge-path) { stroke: var(--muted); stroke-width: 1.6; }
+.pipeline-canvas :deep(.pipeline-derived-edge), .pipeline-canvas :deep(.pipeline-derived-edge path) { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .pipeline-canvas :deep(.vue-flow__edge.animated path) { animation: none; } }
+.pipeline-canvas :deep(.vue-flow__edge:is(.selected, :focus-visible) .vue-flow__edge-path) { stroke: var(--accent); stroke-width: 2.5; }
+.empty-canvas { position: absolute; top: 48%; inset-inline: 16px; margin: 0 auto; max-width: 36ch; text-align: center; color: var(--muted); pointer-events: none; }
+.tray { border-top: 1px solid var(--line); }
+.tray-toggle, .pool-app { display: inline-flex; align-items: center; gap: 8px; font: inherit; color: inherit; cursor: pointer; }
+.tray-toggle { width: 100%; border: 0; background: transparent; text-align: start; padding: 10px 14px; font-weight: 600; }
+.tray-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.tray-body { padding: 0 14px 12px; }
+.tray-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.pool-apps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 118px; overflow-y: auto; padding: 2px; }
+.pool-app { gap: 7px; min-height: 31px; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 3px 8px 3px 4px; }
+.pool-app img { flex: none; width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
+.pool-app span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pool-app svg { flex: none; color: var(--muted); }
+.pool-app:hover:not(:disabled) { border-color: var(--accent); }
+.pool-app:disabled { cursor: default; opacity: .6; }
+.tray-toggle:focus-visible, .pool-app:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.feedback, .editor-status { font-size: 13px; color: var(--muted); }
+.feedback { border-inline-start: 3px solid var(--danger); padding-inline-start: 8px; overflow-wrap: anywhere; }
+.editor-status:empty { display: none; }
+.editor-status { justify-content: flex-end; }
+@media (max-width: 640px) {
+  .toolbar { gap: 4px; padding: 8px; }
+  .layout-actions { padding-inline-start: 0; border: none; }
+  .actions { gap: 2px; }
+  .pipeline-canvas { height: clamp(310px, 50vh, 460px); }
+}
+</style>
+
+<!-- Shared by both teleported Naive UI drawers, not global application controls. -->
+<style>
+.pipeline-form { display: grid; align-content: start; gap: 15px; font-size: 14px; }
+.pipeline-form fieldset { display: grid; gap: 10px; min-width: 0; margin: 0; border: 0; padding: 0; }
+.pipeline-form fieldset + fieldset { border-top: var(--n-header-border-bottom); padding-top: 16px; }
+.pipeline-form legend { padding: 0 0 6px; font-weight: 650; }
+.pipeline-form .field { display: grid; gap: 4px; min-width: 0; }
+.pipeline-form :is(input:not([type="checkbox"]), select, textarea) { box-sizing: border-box; width: 100%; min-width: 0;
+  padding: 6px 9px; font: inherit; line-height: 1.45; color: inherit; background-color: var(--n-color);
+  border: 1px solid color-mix(in srgb, currentColor 36%, transparent); border-radius: 6px; }
+.pipeline-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--pipeline-focus); outline-offset: 1px; }
+.pipeline-form input[type="checkbox"] { margin: 0; width: 16px; height: 16px; accent-color: var(--pipeline-focus); flex: none; }
+.pipeline-form .check { display: flex; gap: 8px; align-items: center; overflow-wrap: anywhere; }
+.pipeline-form .form-pair { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.pipeline-form .form-pair > .field { flex: 1 1 100px; }
+.pipeline-form .form-hint { margin: 0; font-size: 12px; }
 </style>
