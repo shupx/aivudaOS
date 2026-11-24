@@ -14,12 +14,12 @@ const events = entries => entries.map(([type, payload], i) => `event: ${type}\nd
 
 // Browser-only gateway stub. Observe real request bodies; the test never mutates
 // application state or calls Vue Flow's internal move/connect methods.
-async function editor(t, { active = false, conflict = false, stream, cfg = initial() } = {}) {
-  const state = { cfg, writes: [], runs: [], faults: [], canceled: false }
-  const page = await dashboardPage(t, '/dashboard/apps', async (route, { pathname }) => {
+async function appsPage(t, { active = false, conflict = false, stream, cfg = initial() } = {}) {
+  const state = { cfg, installed: [...installed], writes: [], runs: [], actions: [], configViews: [], faults: [], canceled: false }
+  const page = await dashboardPage(t, '/dashboard/apps', async (route, { pathname, searchParams }) => {
     const req = route.request()
     let json = { items: [] }
-    if (pathname.endsWith('/apps/installed')) json = { items: installed }
+    if (pathname.endsWith('/apps/installed')) json = { items: state.installed }
     else if (pathname.endsWith('/apps/pipeline')) {
       if (req.method() === 'PUT') {
         const draft = req.postDataJSON(); state.writes.push(draft)
@@ -27,10 +27,19 @@ async function editor(t, { active = false, conflict = false, stream, cfg = initi
         assert.equal(draft.version, state.cfg.version)
         state.cfg = { ...draft, version: state.cfg.version + 1 }
       }
-      json = { config: state.cfg, installed_apps: installed, unassigned_apps: [installed[2]], validation: valid,
-        active_operation: active && !state.canceled ? { operation_id: 'boot', profile: 'default', action: 'run' } : null }
+      const list = searchParams.get('view') === 'list'
+      if (req.method() === 'GET') state.configViews.push(list ? 'list' : 'editor')
+      json = { config: state.cfg, active_operation: active && !state.canceled ? {
+        operation_id: 'boot', profile: 'default', action: 'run', ...(typeof active === 'object' ? active : {}),
+      } : null }
+      if (!list) Object.assign(json, { installed_apps: state.installed, unassigned_apps: [], validation: valid })
     } else if (pathname.endsWith('/pipeline/validate')) json = valid
-    else if (pathname.endsWith('/pipeline/run')) { state.runs.push(req.postDataJSON()); json = { operation_id: 'run' } }
+    else if (/\/pipeline\/(run|restart|stop)$/.test(pathname)) {
+      const action = pathname.split('/').pop(), scope = req.postDataJSON()
+      state.actions.push({ action, scope })
+      if (action === 'run') state.runs.push(scope)
+      json = { operation_id: `${action}-${state.actions.length}` }
+    }
     else if (/\/operations\/[^/]+\/events$/.test(pathname)) {
       if (stream) return route.fulfill({ contentType: 'text/event-stream', body: await stream() })
       return route.abort()
@@ -39,12 +48,96 @@ async function editor(t, { active = false, conflict = false, stream, cfg = initi
     return route.fulfill({ json })
   })
   page.on('pageerror', err => state.faults.push(err.message))
-  // Pipeline data and the canvas chunk must not be needed by the normal App list.
-  assert.equal(await page.evaluate(() => performance.getEntriesByType('resource').some(e => /StartupPipelinePanel|vue-flow|\/api\/apps\/pipeline[?]/i.test(e.name))), false)
+  return { page, state }
+}
+
+async function editor(t, options) {
+  const { page, state } = await appsPage(t, options)
+  // The list loads the default profile as JSON and leaves the graph runtime and CSS behind the tab.
+  await page.locator('.app-list-stage').first().waitFor()
+  assert.equal(await page.evaluate(() => performance.getEntriesByType('resource').some(e => /StartupPipelinePanel|vue-flow/i.test(e.name))), false)
   await page.getByText('Startup pipeline', { exact: true }).click()
   await page.locator('.vue-flow__node').first().waitFor()
   return { page, state }
 }
+
+test('App list loads only the lightweight config and sends group and global actions to the pipeline', async t => {
+  const { page, state } = await appsPage(t, { stream: () => events([['completed', { done: true, status: 'completed' }]]) })
+  const first = page.getByRole('region', { name: 'first', exact: true })
+  await first.locator('#app-card-alpha').waitFor()
+  await page.getByRole('region', { name: 'Unassigned apps' }).locator('#app-card-gamma').waitFor()
+  assert.deepEqual(state.configViews, ['list'])
+  assert.equal(await page.locator('.stage-connector').count(), 1)
+  const search = page.getByPlaceholder('Search by app name and jump')
+  await search.fill('gamma')
+  await search.press('Enter')
+  await page.waitForFunction(() => document.getElementById('app-card-gamma')?.style.borderWidth === '2px')
+
+  for (const [label, action] of [['Start', 'run'], ['Restart', 'restart'], ['Stop', 'stop']]) {
+    await Promise.all([
+      page.waitForRequest(r => r.method() === 'POST' && r.url().includes(`/pipeline/${action}?`)),
+      first.getByRole('button', { name: `${label} group first`, exact: true }).click(),
+    ])
+  }
+  await page.getByRole('button', { name: 'Group by pipeline', exact: true }).click()
+  await first.waitFor({ state: 'detached' })
+  assert.equal(await page.locator('.apps-grid .apps-app-card').count(), 3)
+  for (const [label, action] of [['Start default pipeline', 'run'], ['Restart default pipeline', 'restart'], ['Stop default pipeline in reverse order', 'stop']]) {
+    await Promise.all([
+      page.waitForRequest(r => r.method() === 'POST' && r.url().includes(`/pipeline/${action}?`)),
+      page.getByRole('button', { name: label, exact: true }).click(),
+    ])
+  }
+  assert.deepEqual(state.actions, [{ profile: 'default', group_id: 'first' }, {}].flatMap(scope =>
+    ['run', 'restart', 'stop'].map(action => ({ action, scope }))))
+  const resources = await page.evaluate(() => performance.getEntriesByType('resource').map(e => e.name))
+  assert.ok(resources.every(name => !/StartupPipelinePanel|vue-flow|pipelineGraph/i.test(name)))
+  assert.deepEqual(state.faults, [])
+})
+
+test('the list can cancel an attached group restart and restores its controls on completion', async t => {
+  const { page, state } = await appsPage(t, { active: { group_id: 'first', action: 'restart' } })
+  const group = page.getByRole('region', { name: 'first', exact: true })
+  await group.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await group.getByRole('button', { name: 'Restart group first', exact: true }).waitFor()
+  assert.ok(state.canceled)
+  assert.deepEqual(state.faults, [])
+})
+
+test('empty default profile keeps the flat list and legacy bulk controls', async t => {
+  const cfg = initial(); cfg.profiles[0].groups = []
+  const { page } = await appsPage(t, { cfg })
+  await page.getByTitle('Restart all currently running apps').waitFor()
+  assert.equal(await page.locator('.app-list-stage').count(), 0)
+  assert.equal(await page.getByTitle('Start default pipeline').count(), 0)
+  await page.locator('#app-card-gamma').waitFor()
+})
+
+test('leaving the editor flushes the draft and returning updates the app pool', async t => {
+  const { page, state } = await editor(t)
+  await page.getByRole('button', { name: 'Add group', exact: true }).click()
+  await page.getByText('App list', { exact: true }).click()
+  await page.locator('.app-list-stage[data-group-id="stage-3"]').waitFor()
+  assert.equal(state.writes.length, 1)
+  state.installed = [app('alpha'), app('beta'), app('delta')]
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await page.locator('#app-card-delta').waitFor()
+  await page.getByText('Startup pipeline', { exact: true }).click()
+  await page.locator('.tray-toggle').click()
+  await page.locator('.pool-app[data-app-id="delta"]').waitFor()
+  assert.equal(await page.locator('.pool-app[data-app-id="gamma"]').count(), 0)
+  await page.getByRole('button', { name: 'Add group', exact: true, disabled: false }).waitFor()
+  const fullReads = state.configViews.filter(view => view === 'editor').length
+  await page.getByText('App list', { exact: true }).click()
+  await page.getByRole('button', { name: 'Start group first', exact: true, disabled: false }).waitFor()
+  await Promise.all([
+    page.waitForResponse(r => r.url().includes('/apps/pipeline?view=list')),
+    page.getByText('Startup pipeline', { exact: true }).click(),
+  ])
+  await page.getByRole('button', { name: 'Add group', exact: true }).waitFor()
+  assert.equal(state.configViews.filter(view => view === 'editor').length, fullReads)
+  assert.deepEqual(state.faults, [])
+})
 
 async function drag(page, start, end, whileHeld) {
   await page.mouse.move(start.x, start.y)
@@ -111,6 +204,20 @@ test('handle gestures add and remove dependencies; dragging across stage boundar
   assert.deepEqual(state.faults, [])
 })
 
+test('dropping outside all groups grows the original group and auto arrange discards saved dimensions', async t => {
+  const { page, state } = await editor(t)
+  const source = canvasApp(page, 'alpha'), stage = canvasGroup(page, 'first')
+  const from = await center(source), bounds = await stage.boundingBox()
+  const destination = { x: from.x, y: bounds.y + bounds.height + 24 }
+  const moved = await editAndSave(page, () => drag(page, from, destination))
+  assert.equal(await source.getAttribute('data-group-id'), 'first')
+  assert.ok((await stage.boundingBox()).height > bounds.height)
+  assert.deepEqual(moved.profiles[0].groups[0].items.map(item => item.app_id), ['alpha'])
+  const arranged = await editAndSave(page, () => page.getByRole('button', { name: 'Auto arrange' }).click())
+  assert.ok(Object.values(arranged.profiles[0].layout).every(box => !('w' in box) && !('h' in box)))
+  assert.deepEqual(state.faults, [])
+})
+
 test('collapsed tray assigns an installed app to the canvas and persists its configuration', async t => {
   const { page, state } = await editor(t)
   const tray = page.locator('.tray-toggle'), poolApp = page.locator('.pool-app[data-app-id="gamma"]')
@@ -155,6 +262,7 @@ test('a group run consumes named SSE without remounting graph nodes', async t =>
   await animated.waitFor({ state: 'attached' }) // A horizontal SVG path can have zero bounding-box height.
   finish()
   await page.getByText('Completed', { exact: true }).waitFor()
+  await alpha.locator('[data-status="idle"]').waitFor() // The live inventory has alpha stopped.
   await animated.waitFor({ state: 'detached' })
   assert.deepEqual(state.runs, [{ profile: 'default', group_id: 'second' }])
   assert.ok(await beta.evaluate((node, old) => node === old, oldBeta)); assert.ok(await alpha.evaluate((node, old) => node === old, oldAlpha))

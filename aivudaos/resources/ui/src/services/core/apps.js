@@ -209,6 +209,7 @@ export function subscribeAppOperationEvents(
     onEvent,
     onError,
     onOpen,
+    extraEventTypes = [],
   } = {},
 ) {
   const url = buildAuthUrl(`/api/apps/operations/${encodeURIComponent(operationId)}/events`)
@@ -240,19 +241,60 @@ export function subscribeAppOperationEvents(
   }
 
   es.onmessage = forward
-  es.addEventListener('status', forward)
-  es.addEventListener('pipeline_stage', forward)
-  es.addEventListener('pipeline_node', forward)
-  es.addEventListener('log', forward)
-  es.addEventListener('error', forward)
-  es.addEventListener('completed', forward)
-  es.addEventListener('heartbeat', forward)
+  for (const type of ['status', 'log', 'error', 'completed', 'heartbeat', ...extraEventTypes]) {
+    es.addEventListener(type, forward)
+  }
 
   return {
     close() {
       es.close()
     },
   }
+}
+
+// EventSource retries on its own. While disconnected, keep cancellation and
+// completion visible through the ordinary operation endpoint.
+export function watchPipelineOperation(operationId, { onEvent, onConnectionChange }) {
+  let source, pollTimer, polling = false, connected = false, closed = false
+  function schedulePoll(delay) {
+    if (!closed && !connected && !polling && !pollTimer) pollTimer = setTimeout(poll, delay)
+  }
+  async function poll() {
+    pollTimer = undefined
+    polling = true
+    try {
+      const info = await fetchAppOperation(operationId)
+      if (!closed && !connected) onEvent({ ...info, type: info.done ? 'completed' : 'status' })
+    } catch (error) {
+      if (!closed && !connected && error.status === 404) {
+        onEvent({ operation_id: operationId, type: 'error', done: true, status: 'failed', message: error.message })
+      }
+    } finally {
+      polling = false
+      schedulePoll(2000)
+    }
+  }
+  function disconnected() {
+    if (closed) return
+    connected = false
+    onConnectionChange?.(false)
+    schedulePoll(300)
+  }
+  try {
+    source = subscribeAppOperationEvents(operationId, {
+      extraEventTypes: ['pipeline_stage', 'pipeline_node'],
+      onEvent(event) { if (!closed) onEvent(event) },
+      onOpen() {
+        if (closed) return
+        connected = true
+        clearTimeout(pollTimer)
+        pollTimer = undefined
+        onConnectionChange?.(true)
+      },
+      onError: disconnected,
+    })
+  } catch { disconnected() }
+  return { close() { closed = true; source?.close(); clearTimeout(pollTimer) } }
 }
 
 export function openAppOperationInteractiveSocket(

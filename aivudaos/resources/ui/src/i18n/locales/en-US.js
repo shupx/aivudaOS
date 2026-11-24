@@ -93,6 +93,12 @@ export default {
       running: 'Running', cancelling: 'Canceling', canceled: 'Canceled', completed: 'Completed' },
   },
   apps: {
+    pipelineGroups: {
+      groupedView: 'Group by pipeline', flatView: 'Show flat list', nextStage: 'Starts after the previous enabled group finishes',
+      startGroup: 'Start group {name}', restartGroup: 'Restart group {name}', stopGroup: 'Stop group {name}',
+      startDefault: 'Start default pipeline', restartDefault: 'Restart default pipeline', stopDefault: 'Stop default pipeline in reverse order',
+      runningCount: '{running}/{total} running', emptyGroup: 'No installed apps in this group.',
+    },
     migrationWarning: 'Some parameters could not be carried over. Review the changes below.',
     migrationAction: {
       used_target: 'Used the target version’s existing value',

@@ -12,9 +12,11 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 
 App 的 `start / stop / restart` 与批量 `restart-running / restart-autostart / start-autostart / stop-all` 现在会先返回 queued operation，由后台线程并行执行；同一 app 仍然保留单操作冲突保护。
 
-Apps 页面顶部 Restart 图标调用 `POST /api/apps/bulk/restart-running`，重启请求时所有正在运行的 app，不受自启动开关影响，也不会启动已停止的 app。原 `restart-autostart` API 保留原有行为。
+默认流水线没有配置分组时，列表顶部的三个操作分别重启当前运行的 App、启动设为自启的 App、停止所有 App。配置了分组后，这三个位置控制默认流水线，作用范围限于方案里启用的组和节点，切回平铺显示也遵循此规则。
 
 ## 启动流水线
+
+应用列表读取 `default_profile`。默认方案含非空分组时，列表按阶段显示分组框，未分组应用放在底部。组标题显示执行模式和运行数。使用标题右侧按钮启动、重启或停止单组，使用列表工具栏操作整条流程。执行中可取消。搜索仍可跳转到卡片，切换平铺或紧凑布局后也可使用。
 
 在 Apps 顶部切换到「启动流水线」，新建分组并展开未分组托盘。点击 App 可加入首组，也可以直接拖入目标分组。虚线框表示分组，组间箭头表示执行顺序。将上游 App 的右锚点连到下游 App 的左锚点，即可添加就绪依赖。选中依赖线后按 Delete 或 Backspace 可删除。串行组中按执行次序推导的箭头会随模式和顺序自动调整。创建环路或反向跨组依赖时，画布会提示原因并保留原配置。
 
@@ -84,11 +86,13 @@ profiles:
 | `POST /pipeline/validate` | 请求体为完整草稿；只返回 `{valid, errors, preview}`，不改变文件或运行状态 |
 | `PUT /pipeline` | 请求体为完整配置，携带最近读取的 `version`。成功后原子替换并返回新版本；旧版本返回 409，无效配置返回 422 |
 | `POST /pipeline/run` | 空请求体运行默认 profile；`{"profile":"robot","group_id":"hardware"}` 只运行指定组 |
-| `POST /pipeline/stop` | 空请求体或 `{"profile":"robot"}`；按保存的 profile 逆序停止 |
+| `POST /pipeline/stop` | 逆序停止整条方案，也可传 `group_id` 仅停止一组。若组外下游节点仍在运行，事件流会给出英文提示 |
+| `POST /pipeline/restart` | 请求体同 `run`。在同一操作及同一套 App 锁内先逆序停止，停止全部成功后按依赖启动并执行就绪探活 |
+| `GET /pipeline?view=list` | 应用列表轻量读取 `config` 和 `active_operation`，实时安装清单由已有列表接口提供 |
 
-启停返回 202 和 `operation_id`。`GET /operations/{operation_id}/events` 可从头回放 `pipeline_stage`、`pipeline_node`、`log` 及终态事件；节点状态与实际进程状态独立。`POST /operations/{operation_id}/cancel` 请求取消。运行中的流水线会占用所涉及 App 的 operation 名额，冲突返回 409。同一网关只允许一条流水线操作同时执行，操作记录与 SSE 回放仅保存在该网关进程内。
+启动、停止和重启均返回 202 和 `operation_id`。`GET /operations/{operation_id}/events` 可从头回放 `pipeline_stage`、`pipeline_node`、`log` 及终态事件；节点状态与实际进程状态独立。`POST /operations/{operation_id}/cancel` 请求取消。运行中的流水线会占用所涉及 App 的 operation 名额，冲突返回 409。同一网关只允许一条流水线操作同时执行，操作记录与 SSE 回放仅保存在该网关进程内。
 
-MCP 工具：`get_startup_pipeline`、`run_startup_pipeline`、`stop_startup_pipeline`。内置 HTTP MCP 的流水线接口要求调用方显式提供 session token，见 [MCP 认证说明](mcp.md#认证与请求隔离)。
+MCP 提供 `get_startup_pipeline`、`run_startup_pipeline`、`restart_startup_pipeline` 和 `stop_startup_pipeline`。内置 HTTP MCP 的流水线接口要求调用方显式提供 session token，见 [MCP 认证说明](mcp.md#认证与请求隔离)。
 
 ### 参数值输入历史
 

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import './startup_pipeline_list_cases.mjs'
 import {
-  analyzeProfile, applyOperationEvent, applyRos2Template, createStartupPipelineApi, editableConfig,
+  applyOperationEvent, applyRos2Template, createStartupPipelineApi, editableConfig, profileIssues,
   newGroup, newNode, newProgress, newReadiness, normalizeOrder, readinessFields, ros2Stages, unassignedNodes,
 } from '../aivudaos/resources/ui/src/services/core/startupPipeline.js'
 import {
   applyAutoLayout, applyConnect, applyDisconnect, applyGroupOrder, applyMoveToGroup, GRAPH_SIZE,
-  isEdgeAnimated, toFlowGraph,
+  isEdgeAnimated, pipelineNodeStatus, toFlowGraph,
 } from '../aivudaos/resources/ui/src/services/core/pipelineGraph.js'
 import en from '../aivudaos/resources/ui/src/i18n/locales/en-US.js'
 import zh from '../aivudaos/resources/ui/src/i18n/locales/zh-CN.js'
@@ -88,6 +89,25 @@ test('ROS 2 template is repeatable and keeps custom stages, stage names and assi
   assert.equal(p.groups[5].items[0].app_id, 'alpha')
   assert.deepEqual(p.groups.map(g => g.order), [0, 1, 2, 3, 4, 5])
 })
+
+// Independent, deliberately simple reference for checking the ranked graph scheduler.
+function analyzeProfile(profile, installed) {
+  const errors = profileIssues(profile, installed), preview = []
+  if (!errors.length) for (const group of profile.groups.filter(g => g.enabled !== false)) {
+    const nodes = new Map(group.items.map(node => [node.app_id, node]))
+    const pending = new Set(group.items.filter(n => n.enabled !== false).map(n => n.app_id))
+    const batches = []
+    while (pending.size) {
+      const ready = [...pending].filter(id => !nodes.get(id).depends_on.some(dep => pending.has(dep)))
+      const batch = group.mode === 'sequential' ? ready.slice(0, 1) : ready
+      assert.ok(batch.length, 'a validated DAG has a ready frontier')
+      batches.push(batch)
+      batch.forEach(id => pending.delete(id))
+    }
+    preview.push({ group_id: group.id, batches })
+  }
+  return { errors, preview }
+}
 
 test('preview respects stage barriers and selects newly ready lower-ranked nodes in sequential mode', () => {
   const groups = [group('start', node('s')), group('work', node('a', ['b']), node('b', ['s']), node('c')),
@@ -189,12 +209,14 @@ test('assignment, stage transfers and explicit index edits preserve fields and s
 test('auto-layout aligns parallel batches, packs stages, and derives only missing sequential arrows', () => {
   const p = profile({ ...group('seq', node('a', ['b']), node('b'), node('c'), { ...node('d'), enabled: false }), mode: 'sequential' },
     group('parallel', node('p', ['q']), node('q'), node('r')), group('empty'))
-  p.layout = { 'app:b': { x: 801, y: 602, w: 260 }, 'app:pool': { x: 10, y: 10 } }
+  const expected = toFlowGraph(p)
+  p.layout = { 'app:b': { x: 801, y: 602, w: 260, h: 400 }, 'group:seq': { x: 9, y: 9, w: 4000, h: 3000 }, 'app:pool': { x: 10, y: 10 } }
   const { layout: ignored, ...model } = structuredClone(p)
   assert.deepEqual(applyAutoLayout(p), { ok: true }); assert.deepEqual(model, { name: p.name, on_failure: p.on_failure, groups: p.groups })
   const graph = toFlowGraph(p), nodes = byId(graph), rect = id => nodes.get(id)
-  assert.deepEqual(Object.keys(p.layout).sort(), [...nodes.keys()].sort()); assert.equal(p.layout['app:b'].w, 260)
-  assert.ok(rect('app:b').position.x + 260 < rect('app:a').position.x); assert.ok(rect('app:a').position.x < rect('app:c').position.x)
+  assert.deepEqual(p.layout, Object.fromEntries(expected.nodes.map(n => [n.id, n.position])))
+  assert.deepEqual(graph, expected)
+  assert.ok(rect('app:b').position.x + GRAPH_SIZE.appWidth < rect('app:a').position.x); assert.ok(rect('app:a').position.x < rect('app:c').position.x)
   assert.equal(rect('app:q').position.x, rect('app:r').position.x); assert.ok(rect('app:q').position.y < rect('app:r').position.y)
   assert.ok(rect('app:p').position.x > rect('app:q').position.x)
   assert.ok(rect('group:parallel').position.x > rect('group:seq').width + rect('group:seq').position.x)
@@ -215,6 +237,36 @@ test('sequential arbitration across rank words matches executable preview, not F
   const p = profile({ ...group('big', ...items), mode: 'sequential' })
   const order = toFlowGraph(p).nodes.filter(n => n.type === 'pipelineApp').map(n => n.data.appId)
   assert.deepEqual(order, analyzeProfile(p, items).preview[0].batches.flat())
+})
+
+test('an app dropped outside all groups stays at its drop point and expands its own group', async () => {
+  const { usePipelineCanvas } = await import('../aivudaos/resources/ui/src/composables/usePipelineCanvas.js')
+  for (const drop of [{ x: -100, y: -50 }, { x: 700, y: 350 }]) {
+    const p = profile(group('g', node('a'), node('b')))
+    p.layout = { 'group:g': { x: 80, y: 120 } }
+    const canvas = usePipelineCanvas({ profile: { value: p }, profileProgress: { value: null }, locked: { value: false },
+      changed: () => canvas.refresh(), resumeSave() {} })
+    canvas.refresh()
+    const before = byId({ nodes: canvas.nodes.value }), parent = before.get('group:g')
+    const point = (group, offset) => ({ x: group.position.x + offset.x, y: group.position.y + offset.y })
+    canvas.onDragStop({ node: { ...before.get('app:a'), position: drop, dimensions: { width: 200, height: 76 } } })
+    const after = byId({ nodes: canvas.nodes.value }), expanded = after.get(parent.id), moved = after.get('app:a')
+    assert.equal(moved.parentNode, parent.id)
+    assert.deepEqual(point(expanded, moved.position), point(parent, drop))
+    assert.deepEqual(point(expanded, after.get('app:b').position), point(parent, before.get('app:b').position))
+    assert.ok(moved.position.x >= 0 && moved.position.y >= GRAPH_SIZE.header)
+    assert.ok(expanded.width >= moved.position.x + moved.width && expanded.height >= moved.position.y + moved.height)
+  }
+})
+
+test('node status uses live running state after completion and preserves unresolved exceptions', () => {
+  assert.equal(pipelineNodeStatus(true, 'waiting_ready', true, true), 'waiting_ready')
+  assert.equal(pipelineNodeStatus(true, 'active', true, false), 'active')
+  assert.equal(pipelineNodeStatus(false, 'active', true, false), 'idle')
+  assert.equal(pipelineNodeStatus(false, 'stopped', true, true), 'running')
+  assert.equal(pipelineNodeStatus(false, 'starting', false, false), 'disabled')
+  for (const status of ['failed', 'degraded', 'skipped']) assert.equal(pipelineNodeStatus(false, status, true, true), status)
+  assert.equal(pipelineNodeStatus(false, undefined, true, true), 'running')
 })
 
 test('animated edges derive transient activity from the matching node or stage operation statuses', () => {

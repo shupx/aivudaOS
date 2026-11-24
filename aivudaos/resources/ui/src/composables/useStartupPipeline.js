@@ -1,30 +1,29 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { request } from '../services/core/api'
-import { buildAppIconUrl, cancelAppOperation, fetchAppOperation, subscribeAppOperationEvents } from '../services/core/apps'
+import { buildAppIconUrl, cancelAppOperation, watchPipelineOperation } from '../services/core/apps'
 import {
   applyOperationEvent, applyRos2Template, cloneConfig, createStartupPipelineApi, editableConfig,
-  failurePolicies, newGroup, newProgress, newReadiness, normalizeOrder, profileIssues, readinessFields, ros2Stages,
+  failurePolicies, newGroup, newProgress, newReadiness, normalizeOrder, pipelineGroupLabel, profileIssues, readinessFields,
 } from '../services/core/startupPipeline.js'
-import { applyAutoLayout, applyGroupOrder, applyMoveToGroup } from '../services/core/pipelineGraph.js'
+import { applyAutoLayout, applyGroupOrder, applyMoveToGroup, pipelineNodeStatus, toFlowGraph } from '../services/core/pipelineGraph.js'
 import { usePipelineCanvas } from './usePipelineCanvas'
 import { usePipelineAutosave } from './usePipelineAutosave'
 
-export function useStartupPipeline(liveApps) {
+export function useStartupPipeline(liveApps, operationRevision, { onSaved, onFinished }) {
   const { t, te } = useI18n()
   const api = createStartupPipelineApi(request), empty = new Map()
   const config = ref(null), installed = ref([]), selected = ref(''), busy = ref(''), error = ref('')
   const settingsOpen = ref(false), trayOpen = ref(false), nodeDraft = ref(null), destination = ref(''), position = ref(1)
   const progress = ref(null), connectionLost = ref(false), cancelPending = ref(false), valid = ref(false)
-  let subscription, pollTimer, disposed = false
+  let subscription, disposed = false
   const profile = computed(() => config.value?.profiles.find(p => p.name === selected.value))
   const groupsById = computed(() => new Map(profile.value?.groups.map(g => [g.id, g])))
   const itemsById = computed(() => new Map(profile.value?.groups.flatMap(g => g.items.map(n => [n.app_id, n]))))
   const appMap = computed(() => {
-    const map = new Map(installed.value.map(app => [app.app_id, app]))
-    for (const app of liveApps.value || []) if (map.has(app.app_id)) map.set(app.app_id, { ...map.get(app.app_id), ...app })
-    return map
+    const details = new Map(installed.value.map(app => [app.app_id, app]))
+    return new Map(liveApps.value.map(app => [app.app_id, { ...details.get(app.app_id), ...app }]))
   })
   const pool = computed(() => [...appMap.value.values()].filter(app => !itemsById.value.has(app.app_id)))
   const active = computed(() => !!progress.value && !progress.value.done)
@@ -36,21 +35,30 @@ export function useStartupPipeline(liveApps) {
     valid.value = data.validation?.valid !== false
     if (!valid.value) error.value = data.validation.errors.join('\n')
   }
-  const autosave = usePipelineAutosave(config, api, error, acceptValidation)
+  const autosave = usePipelineAutosave(config, api, error, data => {
+    acceptValidation(data)
+    onSaved(data.config)
+  })
+  function clearFinishedNodeStates() {
+    if (progress.value?.done) progress.value.nodes.clear()
+  }
+  watch(operationRevision, clearFinishedNodeStates)
+  function nodeStatus(id, groupId) {
+    const enabled = itemsById.value.get(id)?.enabled !== false && groupsById.value.get(groupId)?.enabled !== false
+    return pipelineNodeStatus(active.value, nodeStates.value.get(id), enabled, appMap.value.get(id)?.running)
+  }
   const canRun = computed(() => !!profile.value && valid.value && !locked.value && !autosave.dirty.value)
   function changed(graph = false) {
+    clearFinishedNodeStates()
     if (graph) canvas.refresh()
     autosave.mark()
   }
   function reject(code) { error.value = t(`pipeline.graphErrors.${code}`); return false }
-  const canvas = usePipelineCanvas({ profile, installed, progress, locked, changed, reject,
+  const canvas = usePipelineCanvas({ profile, profileProgress, locked, changed, reject,
     addFromPool, pauseSave: autosave.pause, resumeSave: autosave.resume })
   const appName = id => appMap.value.get(id)?.name || id
   const appIcon = id => appMap.value.has(id) ? buildAppIconUrl(appMap.value.get(id)) : ''
-  function groupName(group) {
-    if (!group) return ''
-    return ros2Stages.some(([id, name]) => id === group.id && name === group.name) ? t(`pipeline.stages.${group.id}`) : group.name
-  }
+  const groupName = group => pipelineGroupLabel(group, t)
   const statusName = state => te(`pipeline.states.${state}`) ? t(`pipeline.states.${state}`) : state
   function readinessBadge(probe) {
     if (probe?.type === 'delay') return t('pipeline.seconds', { count: probe.delay_sec ?? 1 })
@@ -69,33 +77,51 @@ export function useStartupPipeline(liveApps) {
     return [...ids].map(id => ({ value: id, label: appName(id) }))
   })
 
-  async function perform(action, fn) {
+  async function perform(action, fn, clearError = true) {
     if (busy.value) return
     busy.value = action
-    error.value = ''
+    if (clearError) error.value = ''
     try { await fn() } catch (e) { if (!disposed) error.value = e.message }
     finally { if (!disposed) busy.value = '' }
   }
-  function load() {
+  function load(onlyIfChanged = false) {
     return perform('load', async () => {
-      const data = await api.load()
+      let data
+      if (onlyIfChanged && config.value && installed.value.length === liveApps.value.length &&
+          installed.value.every(app => appMap.value.has(app.app_id))) {
+        data = await api.loadForList()
+        if (disposed) return
+        if (!nodeDraft.value && config.value.version !== data.config.version) data = await api.load()
+      } else {
+        data = await api.load()
+      }
       if (disposed) return
-      config.value = editableConfig(data.config)
-      installed.value = data.installed_apps || data.unassigned_apps || []
-      if (!profile.value) selected.value = config.value.default_profile
-      nodeDraft.value = null
-      autosave.reset()
-      acceptValidation(data)
-      canvas.refresh()
+      const inventory = data.installed_apps || data.unassigned_apps
+      if (inventory) installed.value = inventory
+      if (!onlyIfChanged || (!nodeDraft.value && config.value?.version !== data.config.version)) {
+        config.value = editableConfig(data.config)
+        if (!profile.value) selected.value = config.value.default_profile
+        nodeDraft.value = null
+        autosave.reset()
+        canvas.refresh()
+      }
+      // An open drawer may still be editing the previous version.
+      if (data.validation && config.value.version === data.config.version) {
+        error.value = ''
+        acceptValidation(data)
+      }
       if (data.active_operation?.operation_id) attach(data.active_operation)
-    })
+    }, !onlyIfChanged || valid.value)
   }
-  function selectProfile(name) {
-    if (locked.value || !config.value.profiles.some(p => p.name === name)) return
+  function showProfile(name) {
+    if (!config.value.profiles.some(p => p.name === name)) return
     selected.value = name
     nodeDraft.value = null
     canvas.refresh()
     canvas.fit()
+  }
+  function selectProfile(name) {
+    if (!locked.value) showProfile(name)
   }
   function addProfile(value) {
     const name = value?.trim()
@@ -109,7 +135,7 @@ export function useStartupPipeline(liveApps) {
   function setPolicy(value) { if (!locked.value && failurePolicies.includes(value)) { profile.value.on_failure = value; changed() } }
   function setTakeover(value) { if (!locked.value) { config.value.takeover_autostart = value; changed() } }
   function check(candidate) {
-    const issue = profileIssues(candidate, installed.value)[0]
+    const issue = profileIssues(candidate, liveApps.value)[0]
     if (!issue) return true
     error.value = t(`pipeline.issues.${issue.code}`, { apps: issue.apps.join(', '), dep: issue.dependency })
     return false
@@ -175,8 +201,10 @@ export function useStartupPipeline(liveApps) {
   }
   function autoLayout() {
     if (locked.value) return
-    applyAutoLayout(profile.value)
-    changed(true)
+    const graph = toFlowGraph({ groups: profile.value.groups })
+    applyAutoLayout(profile.value, graph)
+    canvas.refresh(graph)
+    changed()
     canvas.fit()
   }
   function addFromPool(id, groupId, coordinates) {
@@ -215,47 +243,31 @@ export function useStartupPipeline(liveApps) {
     changed(true)
   }
 
-  function disconnect() { subscription?.close(); subscription = undefined; clearTimeout(pollTimer); pollTimer = undefined }
   function attach(operation) {
-    disconnect()
     const id = operation.operation_id
     if (!id) throw new Error(t('pipeline.noOperation'))
-    if (config.value.profiles.some(p => p.name === operation.profile) && selected.value !== operation.profile) {
-      selected.value = operation.profile
-      nodeDraft.value = null
-      canvas.refresh()
-      canvas.fit()
-    }
+    subscription?.close()
+    if (selected.value !== operation.profile) showProfile(operation.profile)
     canvas.clearAnimation()
     progress.value = newProgress(operation)
     connectionLost.value = false
     cancelPending.value = false
-    const current = () => !disposed && progress.value?.operation_id === id && !progress.value.done
-    function ingest(event) {
-      if (!current()) return
-      applyOperationEvent(progress.value, event)
-      if (event.type === 'pipeline_node') canvas.updateStatus(`app:${event.app_id}`)
-      if (event.type === 'pipeline_stage') canvas.updateStatus(`group:${event.group_id}`)
-      if (progress.value.done) {
-        disconnect()
-        canvas.clearAnimation()
-        connectionLost.value = cancelPending.value = false
-      }
-    }
-    async function poll() {
-      try {
-        const info = await fetchAppOperation(id)
-        if (current()) ingest({ ...info, type: info.done ? 'completed' : 'status' })
-      } catch { /* EventSource retries independently. */ }
-      pollTimer = current() && connectionLost.value ? setTimeout(poll, 2000) : undefined
-    }
-    function fallback() {
-      if (!current()) return
-      connectionLost.value = true
-      if (!pollTimer) pollTimer = setTimeout(poll, 300)
-    }
-    try { subscription = subscribeAppOperationEvents(id, { onEvent: ingest, onOpen: () => { connectionLost.value = false }, onError: fallback }) }
-    catch { fallback() }
+    const revisionAtStart = operationRevision.value
+    subscription = watchPipelineOperation(id, {
+      onConnectionChange(connected) { connectionLost.value = !connected },
+      onEvent(event) {
+        if (!applyOperationEvent(progress.value, event)) return
+        if (event.type === 'pipeline_node') canvas.updateStatus(`app:${event.app_id}`)
+        if (event.type === 'pipeline_stage') canvas.updateStatus(`group:${event.group_id}`)
+        if (progress.value.done) {
+          subscription?.close()
+          canvas.clearAnimation()
+          if (revisionAtStart !== operationRevision.value) clearFinishedNodeStates()
+          connectionLost.value = cancelPending.value = false
+          onFinished()
+        }
+      },
+    })
   }
   function execute(action, groupId) {
     if (!canRun.value) return
@@ -273,17 +285,26 @@ export function useStartupPipeline(liveApps) {
       catch (e) { cancelPending.value = false; throw e }
     })
   }
+  function flush() {
+    autosave.resume() // Switching tabs can end a gesture before its drag-end event.
+    return autosave.flush()
+  }
   onMounted(load)
-  onBeforeRouteLeave(() => autosave.flush())
+  onActivated(async () => {
+    if (busy.value || active.value || !await autosave.flush()) return
+    if (!disposed) await load(true)
+  })
+  onDeactivated(flush)
+  onBeforeRouteLeave(flush)
   onUnmounted(() => {
     disposed = true
-    disconnect()
-    autosave.flush().finally(autosave.dispose)
+    subscription?.close()
+    flush().finally(autosave.dispose)
   })
   return { config, profile, selected, groupsById, itemsById, appMap, pool, busy, error, active, locked, canRun,
-    saveState: autosave.saveState, dirty: autosave.dirty, retrySave: autosave.retry, settingsOpen, trayOpen,
+    saveState: autosave.saveState, dirty: autosave.dirty, retrySave: autosave.retry, flush, settingsOpen, trayOpen,
     nodeDraft, destination, position, maxPosition, dependencyOptions, groupOptions, profileOptions, policies, probeOptions,
-    progress, profileProgress, nodeStates, stageStates, cancelPending, connectionLost, groupName, appName, appIcon, statusName, readinessBadge,
+    progress, profileProgress, nodeStatus, stageStates, cancelPending, connectionLost, groupName, appName, appIcon, statusName, readinessBadge,
     selectProfile, addProfile, makeDefault, setPolicy, setTakeover, template, addGroup, renameGroup, toggleMode, setGroupEnabled,
     removeGroup, moveGroup, autoLayout, addFromPool, editNode, closeNode, setDestination, changeProbe, submitNode, execute, cancel, load,
     ...canvas }

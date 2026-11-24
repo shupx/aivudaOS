@@ -14,7 +14,9 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 ## App 启动流水线
 
-Apps 的「启动流水线」独立于原来的单 App 列表。`core/apps/pipeline_config.py` 负责 YAML 版本锁、校验与 Kahn 分批；`pipeline.py` 将保存的计划作为一个可取消的 App operation 执行；`pipeline_probes.py` 在每个启动批次内检查进程和就绪条件。网关与 MCP 共用同一个运行时、操作管理器和保存接口，沿用单 worker 部署。配置位置为 `${AIVUDAOS_WS_ROOT}/config/startup_pipeline.yaml`；默认不接管自启。
+应用列表与启动流水线编辑器读取同一份 `${AIVUDAOS_WS_ROOT}/config/startup_pipeline.yaml`。列表调用 `GET /pipeline?view=list` 获取默认方案及当前操作，用 CSS 虚线框和 `AppCard` 展示分组。只有进入编辑器才加载 Vue Flow。未配置分组时沿用原列表的批量操作，开机接管默认关闭。
+
+`core/apps/pipeline_config.py` 负责版本锁、校验和拓扑分批。`pipeline.py` 支持整条方案和单组启动、停止、重启。重启在同一个 operation 内持有 App 预留锁，逆序停止成功后再正序启动并执行 `pipeline_probes.py` 的就绪检测。HTTP 与 MCP 共用运行时和操作管理器，沿用单 worker 部署。
 
 画布随「启动流水线」标签懒加载，只依赖 `@vue-flow/core`。`pipelineGraph.js` 从 `groups`、`items` 和 `depends_on` 派生分组节点、依赖边与执行顺序箭头。可选的 `profile.layout` 保存节点坐标和尺寸。拖拽结束或连线变更后，编辑器以 500 ms 防抖串行保存，运行事件按 App 或组 ID 更新对应状态及相邻边。
 
@@ -22,7 +24,7 @@ Apps 的「启动流水线」独立于原来的单 App 列表。`core/apps/pipel
 
 ## Python 兼容性约束
 
-Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。
+默认流水线无分组时，Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。
 
 - 后端 Python 代码必须兼容 `Python 3.8`。
 - 类型标注不要使用 `dict[str, Any]`、`list[str]`、`set[str]`、`tuple[int, int]` 这类 3.9+ 内建泛型写法。

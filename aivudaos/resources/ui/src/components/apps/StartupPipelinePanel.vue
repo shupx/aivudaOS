@@ -13,10 +13,14 @@ import PipelineGroupNode from './PipelineGroupNode.vue'
 import PipelineNodeConfigDrawer from './PipelineNodeConfigDrawer.vue'
 import PipelineSettingsDrawer from './PipelineSettingsDrawer.vue'
 
-const props = defineProps({ apps: { type: Array, required: true } })
+const props = defineProps({ apps: { type: Array, required: true }, operationRevision: { type: Number, default: 0 } })
+const emit = defineEmits(['saved', 'operation-finished'])
 const { t } = useI18n(), theme = useThemeVars()
-const ui = reactive(useStartupPipeline(toRef(props, 'apps')))
+const ui = reactive(useStartupPipeline(toRef(props, 'apps'), toRef(props, 'operationRevision'), {
+  onSaved: config => emit('saved', config), onFinished: () => emit('operation-finished'),
+}))
 provide('pipelineEditor', ui)
+defineExpose({ flush: ui.flush })
 </script>
 
 <template>

@@ -32,6 +32,10 @@ class OperationRecord:
     cancel_handlers: List[Callable[[], None]] = field(default_factory=list)
     reserved_apps: Tuple[str, ...] = ()
 
+    @property
+    def reservations(self) -> Tuple[str, ...]:
+        return self.reserved_apps + ((self.app_id,) if self.app_id else ())
+
 
 class AppOperationManager:
     """In-memory operation manager for streaming long-running app operations."""
@@ -50,13 +54,6 @@ class AppOperationManager:
         reserved_apps: Tuple[str, ...] = (),
     ) -> OperationRecord:
         with self._lock:
-            reservations = reserved_apps + ((app_id,) if app_id else ())
-            for target in reservations:
-                if target in self._app_running:
-                    raise AppOperationConflictError(
-                        f"{target} already has a running operation: {self._app_running[target]}"
-                    )
-
             operation_id = uuid.uuid4().hex
             now = int(time.time())
             record = OperationRecord(
@@ -69,6 +66,12 @@ class AppOperationManager:
                 interactive_open=interactive_enabled,
                 reserved_apps=reserved_apps,
             )
+            reservations = record.reservations
+            for target in reservations:
+                if target in self._app_running:
+                    raise AppOperationConflictError(
+                        f"{target} already has a running operation: {self._app_running[target]}"
+                    )
             self._records[operation_id] = record
             for target in reservations:
                 self._app_running[target] = operation_id
@@ -140,6 +143,7 @@ class AppOperationManager:
             record.result, record.error = result, error
             record.ended_at = int(time.time())
             record.done = True
+            record.cancel_handlers.clear()
             self.close_interactive(operation_id, reason=status)
             self._release_app(record)
             payload = {"result": result}
@@ -215,7 +219,8 @@ class AppOperationManager:
         record = self._require_record(operation_id)
         should_call = False
         with record.condition:
-            record.cancel_handlers.append(handler)
+            if not record.done:
+                record.cancel_handlers.append(handler)
             should_call = record.cancel_requested
 
         if should_call:
@@ -270,8 +275,8 @@ class AppOperationManager:
         with record.condition:
             if not record.done and record.seq <= since_seq:
                 record.condition.wait(timeout=timeout)
-            events = [evt for evt in record.events if int(evt.get("seq", 0)) > since_seq]
-            return events, record.done
+            # publish() appends one event per sequence, starting at one.
+            return record.events[max(0, since_seq):], record.done
 
     def _require_record(self, operation_id: str) -> OperationRecord:
         with self._lock:
@@ -282,6 +287,7 @@ class AppOperationManager:
 
     def _release_app(self, record: OperationRecord) -> None:
         with self._lock:
-            for target in record.reserved_apps + ((record.app_id,) if record.app_id else ()):
+            for target in record.reservations:
                 if self._app_running.get(target) == record.operation_id:
                     self._app_running.pop(target, None)
+            record.reserved_apps = ()

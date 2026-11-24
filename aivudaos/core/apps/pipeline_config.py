@@ -95,13 +95,16 @@ def _bool(value, path):
     return value
 
 
+def _is_finite_number(value):
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def _duration(value, path, allow_zero=False):
-    if type(value) in (int, float):
-        try:
-            if math.isfinite(value) and (value > 0 or (allow_zero and value == 0)):
-                return value
-        except OverflowError:
-            pass
+    if _is_finite_number(value) and (value > 0 or (allow_zero and value == 0)):
+        return value
     bound = "nonnegative" if allow_zero else "positive"
     raise ValueError(f"{path} must be a finite {bound} number of seconds")
 
@@ -197,11 +200,7 @@ def _layout(raw, path) -> Dict[str, Dict[str, float]]:
             raise ValueError(f"{location} requires x and y")
         coords = {}
         for key, value in box.items():
-            try:
-                finite = type(value) in (float, int) and math.isfinite(value)
-            except OverflowError:
-                finite = False
-            if not finite or (key in ("w", "h") and value <= 0):
+            if not _is_finite_number(value) or (key in ("w", "h") and value <= 0):
                 raise ValueError(f"{location}.{key} must be finite; sizes must be positive")
             coords[key] = float(value)
         result[node_id] = coords
@@ -295,8 +294,12 @@ def build_execution_plan(profile: dict) -> List[dict]:
 
 def build_stop_plan(profile: dict) -> List[dict]:
     """Reverse start order, including the deterministic order inside each batch."""
+    return reverse_plan(build_execution_plan(profile))
+
+
+def reverse_plan(plan):
     return [{"group_id": stage["group_id"], "batches": [b[::-1] for b in reversed(stage["batches"])]}
-            for stage in reversed(build_execution_plan(profile))]
+            for stage in reversed(plan)]
 
 
 def _config(raw, check_graph=True) -> Tuple[dict, dict, List[str]]:
@@ -335,11 +338,11 @@ def validate_config(config: dict) -> Dict[str, Any]:
     return {"valid": not errors, "errors": errors, "preview": {} if errors else preview}
 
 
-def _checked(raw, check_graph=True):
-    config, _, errors = _config(raw, check_graph=check_graph)
+def _checked(raw, check_graph=True) -> Tuple[dict, dict]:
+    config, plans, errors = _config(raw, check_graph=check_graph)
     if errors:
         raise ValueError("; ".join(errors))
-    return config
+    return config, plans
 
 
 class PipelineStore:
@@ -348,17 +351,24 @@ class PipelineStore:
     def __init__(self, path: Path):
         self.path = Path(path)
 
-    def load(self, *, for_editing=False) -> dict:
-        """Never execute an invalid DAG, but let the editor diagnose and repair one."""
+    def _read(self):
         try:
             text = self.path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return _default_config()
         try:
-            raw = yaml.safe_load(text)
+            return yaml.safe_load(text)
         except yaml.YAMLError as exc:
             raise ValueError(f"Invalid pipeline YAML: {exc}") from exc
-        return _checked(raw, check_graph=not for_editing)
+
+    def load(self, *, for_editing=False) -> dict:
+        """Never execute an invalid DAG, but let the editor diagnose and repair one."""
+        config, _ = _checked(self._read(), check_graph=not for_editing)
+        return config
+
+    def load_with_plans(self) -> Tuple[dict, dict]:
+        """Read and validate one snapshot for both phases of an operation."""
+        return _checked(self._read())
 
     def save(self, config: dict, before_replace: Optional[Callable[[dict, dict], None]] = None) -> dict:
         """Compare and increment version; return the normalized saved snapshot.
@@ -368,7 +378,7 @@ class PipelineStore:
         rollback of external effects, including if atomic replacement later fails.
         The callback must not re-enter save() on this path.
         """
-        new = _checked(config)
+        new, _ = _checked(config)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Lock a stable sidecar, not the YAML inode that os.replace() exchanges.
         lock_path = self.path.with_name(self.path.name + ".lock")

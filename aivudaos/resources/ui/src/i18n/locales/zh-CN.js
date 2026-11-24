@@ -93,6 +93,12 @@ export default {
       running: '运行中', cancelling: '取消中', canceled: '已取消', completed: '已完成' },
   },
   apps: {
+    pipelineGroups: {
+      groupedView: '按流程分组', flatView: '切换为平铺列表', nextStage: '前一个启用的分组完成后执行本组',
+      startGroup: '启动分组「{name}」', restartGroup: '重启分组「{name}」', stopGroup: '停止分组「{name}」',
+      startDefault: '按流程启动', restartDefault: '按流程重启', stopDefault: '按流程逆序停止',
+      runningCount: '{running}/{total} 运行中', emptyGroup: '本组没有已安装的应用。',
+    },
     migrationWarning: '部分参数未能沿用，请查看以下处理结果。',
     migrationAction: {
       used_target: '已采用目标版本已有参数值',

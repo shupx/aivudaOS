@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
+import AppGroupSection from '../components/apps/AppGroupSection.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { useAppsPanel } from '../composables/useAppsPanel'
 import {
@@ -20,7 +21,7 @@ import {
   Upload,
   RefreshCw,
   Search,
-  X,
+  Layers,
   ArrowUpDown,
   LayoutGrid,
   List,
@@ -42,9 +43,7 @@ const {
   compactMode,
   sortOption,
   sortDesc,
-  appsSortDropdownVisible,
   setSortOption,
-  toggleSortDesc,
   searchResults,
   searchDropdownVisible,
   activeSearchIndex,
@@ -86,7 +85,18 @@ const {
   submitUpload,
   cancelCurrentUpload,
   submitInteractiveInput,
-} = useAppsPanel()
+  listSections, hasPipelineGroups, groupedView, pipelineGroupName,
+  pipelineBusy, pipelineOperation, pipelineCancelPending, pipelineError, pipelineConfigReady, pipelineConfigLoading,
+  runGroup, restartGroup, stopGroup, runDefaultPipeline, restartDefaultPipeline, stopDefaultPipeline,
+  cancelPipelineOperation, refreshList, acceptPipelineConfig, operationRevision,
+} = useAppsPanel(view)
+
+const editor = ref(null)
+const listControlsDisabled = computed(() => !pipelineConfigReady.value || pipelineBusy.value || Boolean(bulkActionPending.value))
+async function beforeTabChange(_next, current) {
+  if (current === 'pipeline') await editor.value?.flush()
+  return true
+}
 
 const sortOptions = computed(() => [
   { label: t('apps.sortByName') + (sortOption.value === 'name' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'name' },
@@ -94,9 +104,6 @@ const sortOptions = computed(() => [
   { label: t('apps.sortByInstallationTime') + (sortOption.value === 'installed_at' ? (sortDesc.value ? ' ↓' : ' ↑') : ''), key: 'installed_at' },
 ])
 
-const handleSortSelect = (key) => {
-  setSortOption(key)
-}
 </script>
 
 <template>
@@ -104,7 +111,7 @@ const handleSortSelect = (key) => {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
       <NSpace align="center">
         <NText style="font-size: 20px; font-weight: 600;">{{ t('apps.title') }}</NText>
-        <NButton v-if="view === 'apps'" secondary size="small" :loading="loading" @click="refresh">
+        <NButton v-if="view === 'apps'" secondary size="small" :loading="loading || pipelineConfigLoading" @click="refreshList">
           <template #icon><NIcon><RefreshCw /></NIcon></template>
           {{ t('common.refresh') }}
         </NButton>
@@ -115,14 +122,17 @@ const handleSortSelect = (key) => {
       </NButton>
     </div>
 
-    <NTabs v-model:value="view" type="line" style="margin-bottom: 20px;">
+    <NTabs v-model:value="view" :on-before-leave="beforeTabChange" type="line" style="margin-bottom: 20px;">
       <NTab name="apps">{{ t('pipeline.appList') }}</NTab>
       <NTab name="pipeline">{{ t('pipeline.title') }}</NTab>
     </NTabs>
-    <KeepAlive><StartupPipelinePanel v-if="view === 'pipeline'" :apps="apps" /></KeepAlive>
+    <KeepAlive>
+      <StartupPipelinePanel v-if="view === 'pipeline'" ref="editor" :apps="apps" :operation-revision="operationRevision"
+        @saved="acceptPipelineConfig" @operation-finished="refresh" />
+    </KeepAlive>
     <template v-if="view === 'apps'">
     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
-      <div style="position: relative; width: 320px; max-width: 100%;">
+      <div class="apps-search-box" style="position: relative; width: 320px; max-width: 100%;">
         <NInput
           v-model:value="searchText"
           :input-props="{ name: 'apps-search', autocomplete: 'on' }"
@@ -149,7 +159,7 @@ const handleSortSelect = (key) => {
         </div>
       </div>
 
-      <NDropdown trigger="click" :options="sortOptions" @select="handleSortSelect">
+      <NDropdown v-if="!groupedView" trigger="click" :options="sortOptions" @select="setSortOption">
         <NButton quaternary circle>
           <template #icon><NIcon><ArrowUpDown /></NIcon></template>
         </NButton>
@@ -159,8 +169,32 @@ const handleSortSelect = (key) => {
         <template #icon><NIcon><component :is="compactMode ? List : LayoutGrid" /></NIcon></template>
       </NButton>
 
+      <NButton v-if="hasPipelineGroups" size="small" secondary :type="groupedView ? 'primary' : 'default'"
+        :aria-pressed="groupedView" :title="t(groupedView ? 'apps.pipelineGroups.flatView' : 'apps.pipelineGroups.groupedView')"
+        @click="groupedView = !groupedView">
+        <template #icon><NIcon><Layers /></NIcon></template>{{ t('apps.pipelineGroups.groupedView') }}
+      </NButton>
+
       <div style="margin-left: auto;">
-        <NSpace :size="4">
+        <NSpace v-if="pipelineOperation && !pipelineOperation.done" align="center" :size="8">
+          <span role="status">{{ t(`pipeline.states.${pipelineOperation.status}`) }}</span>
+          <NButton size="small" :disabled="pipelineCancelPending" @click="cancelPipelineOperation">{{ t('pipeline.cancelRun') }}</NButton>
+        </NSpace>
+        <NSpace v-else-if="hasPipelineGroups" :size="4">
+          <NButton quaternary circle :disabled="listControlsDisabled"
+            :title="t('apps.pipelineGroups.startDefault')" :aria-label="t('apps.pipelineGroups.startDefault')" @click="runDefaultPipeline">
+            <template #icon><NIcon><Play /></NIcon></template>
+          </NButton>
+          <NButton quaternary circle :disabled="listControlsDisabled"
+            :title="t('apps.pipelineGroups.restartDefault')" :aria-label="t('apps.pipelineGroups.restartDefault')" @click="restartDefaultPipeline">
+            <template #icon><NIcon><RotateCcw /></NIcon></template>
+          </NButton>
+          <NButton quaternary circle :disabled="listControlsDisabled"
+            :title="t('apps.pipelineGroups.stopDefault')" :aria-label="t('apps.pipelineGroups.stopDefault')" @click="stopDefaultPipeline">
+            <template #icon><NIcon><Square /></NIcon></template>
+          </NButton>
+        </NSpace>
+        <NSpace v-else-if="pipelineConfigReady && !pipelineConfigLoading" :size="4">
           <NButton
             quaternary circle
             :title="t('apps.restartRunningTooltip')"
@@ -194,26 +228,32 @@ const handleSortSelect = (key) => {
 
     <NAlert v-if="error" type="error" style="margin-bottom: 24px;">{{ error }}</NAlert>
 
+    <NAlert v-if="pipelineError" type="error" style="margin-bottom: 16px;">{{ pipelineError }}</NAlert>
     <NEmpty v-if="!apps.length && !loading" :description="t('apps.noInstalledApps')" style="margin-top: 48px;" />
 
-    <div class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
-      <AppCard
-        v-for="app in apps"
-        :key="app.app_id"
-        :app="app"
-        :busy="Boolean(busyById[app.app_id])"
-        :restart-busy="Boolean(restartBusyById[app.app_id])"
-        :card-id="`app-card-${app.app_id}`"
-        :highlighted="highlightedAppId === app.app_id"
-        :compact="compactMode"
-        :favorite="isFavoriteApp(app)"
-        show-restart
-        @toggle-running="toggleRunning"
-        @toggle-autostart="toggleAutostart"
-        @toggle-favorite="toggleFavoriteApp"
-        @restart-app="restartSingleApp"
-      />
-    </div>
+    <AppGroupSection v-for="section in listSections" :key="section.group ? `group:${section.group.id}` : 'apps'"
+      :section="section" :name="section.group ? pipelineGroupName(section.group) : ''"
+      :busy="listControlsDisabled" :cancel-pending="pipelineCancelPending"
+      @run="runGroup" @restart="restartGroup" @stop="stopGroup" @cancel="cancelPipelineOperation">
+      <div class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
+        <AppCard
+          v-for="app in section.apps"
+          :key="app.app_id"
+          :app="app"
+          :busy="Boolean(busyById[app.app_id])"
+          :restart-busy="Boolean(restartBusyById[app.app_id])"
+          :card-id="`app-card-${app.app_id}`"
+          :highlighted="highlightedAppId === app.app_id"
+          :compact="compactMode"
+          :favorite="isFavoriteApp(app)"
+          show-restart
+          @toggle-running="toggleRunning"
+          @toggle-autostart="toggleAutostart"
+          @toggle-favorite="toggleFavoriteApp"
+          @restart-app="restartSingleApp"
+        />
+      </div>
+    </AppGroupSection>
 
     </template>
 

@@ -8,9 +8,7 @@ const ui = inject('pipelineEditor'), { t } = useI18n()
 const id = computed(() => props.data.appId)
 const name = computed(() => ui.appName(id.value))
 const item = computed(() => ui.itemsById.get(id.value))
-const status = computed(() => ui.nodeStates.get(id.value) ||
-  (item.value?.enabled === false || ui.groupsById.get(props.data.groupId)?.enabled === false ? 'disabled' :
-    ui.appMap.get(id.value)?.running ? 'running' : 'idle'))
+const status = computed(() => ui.nodeStatus(id.value, props.data.groupId))
 const badge = computed(() => ui.readinessBadge(item.value?.readiness))
 </script>
 

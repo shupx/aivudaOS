@@ -15,8 +15,12 @@ import {
   waitForAppOperation,
 } from '../services/core/apps'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
+import { useAppListGroups } from './useAppListGroups'
 
 let pollTimer = null
+let refreshId = 0, appliedRefresh = 0
+const operationRevision = ref(0)
+function recordAppAction() { operationRevision.value++ }
 const APPS_COMPACT_MODE_STORAGE_KEY = 'aivuda_ui_apps_compact_mode'
 const FAVORITE_APP_IDS_STORAGE_KEY = 'aivuda_ui_favorite_app_ids'
 
@@ -62,22 +66,28 @@ async function hydrateDescriptions(apps) {
 }
 
 async function refresh() {
+  const id = ++refreshId
   appState.appsLoading = true
   appState.appsError = ''
   try {
     const items = await fetchInstalledApps()
     await hydrateDescriptions(items)
+    if (id < appliedRefresh) return
+    appliedRefresh = id
     setApps(mergeAppsWithDetail(items))
     markGatewayOnline(true)
   } catch (err) {
+    if (id !== refreshId) return
+    appliedRefresh = id
     appState.appsError = String(err?.message || err || i18n.global.t('errors.loadFailed'))
     markGatewayOnline(false)
   } finally {
-    appState.appsLoading = false
+    if (id === refreshId) appState.appsLoading = false
   }
 }
 
 async function toggleRunning(app, nextValue) {
+  recordAppAction()
   const appId = app.app_id
   const previousValue = Boolean(app.running)
   patchApp(appId, { running: Boolean(nextValue) })
@@ -103,6 +113,7 @@ async function toggleRunning(app, nextValue) {
 }
 
 async function toggleAutostart(app, nextValue) {
+  recordAppAction()
   const appId = app.app_id
   const previousValue = Boolean(app.autostart)
   patchApp(appId, { autostart: Boolean(nextValue) })
@@ -122,6 +133,7 @@ async function toggleAutostart(app, nextValue) {
 async function restartSingleApp(app) {
   const appId = app?.app_id
   if (!appId) return
+  recordAppAction()
 
   setBusy(appId, true)
   setRestartBusy(appId, true)
@@ -163,7 +175,7 @@ function isAppsPollingRoute(path) {
   return true
 }
 
-export function useAppsPanel() {
+export function useAppsPanel(view) {
   const route = useRoute()
   const router = useRouter()
 
@@ -198,6 +210,8 @@ export function useAppsPanel() {
       return aName.localeCompare(bName) * desc
     })
   })
+  const listGroups = view ? useAppListGroups({ apps, view, refresh, onAction: recordAppAction, t: i18n.global.t }) : {}
+  if (view) watch(view, () => { void refresh() })
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
   const busyById = computed(() => appState.busyById)
@@ -251,6 +265,7 @@ export function useAppsPanel() {
 
   const uploadModal = useAppUploadInstallModal({
     async onInstalled() {
+      recordAppAction()
       await refresh()
     },
   })
@@ -398,6 +413,7 @@ export function useAppsPanel() {
   }
 
   async function runBulkAction(actionName, task) {
+    recordAppAction()
     appState.appsError = ''
     bulkActionPending.value = actionName
     const queuedOperations = []
@@ -507,5 +523,7 @@ export function useAppsPanel() {
     startEnabledApps,
     stopEveryApp,
     ...uploadModal,
+    operationRevision,
+    ...listGroups,
   }
 }

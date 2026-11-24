@@ -203,6 +203,93 @@ def test_sequential_and_external_prerequisites(service):
     assert service.runtime.calls[-3:] == [('stop', 'c'), ('stop', 'b'), ('stop', 'a')]
 
 
+def test_group_stop_warns_about_running_downstream_without_stopping_it(service):
+    service.save(config(group('one', node('b', 'a'), node('a'), node('e', enabled=False)),
+                        group('two', node('c', 'b'), node('d', 'c'))))
+    service.runtime.running.update('abde')  # d is running even though its direct prerequisite c is not.
+    events = finish(service, service.queue('stop', group_id='one'))
+    assert events[-1]['status'] == 'completed'
+    assert service.runtime.calls == [('stop', 'b'), ('stop', 'a')]
+    assert service.runtime.running == {'d', 'e'}
+    assert [e['message'] for e in events if e['type'] == 'log' and e.get('group_id') == 'one'] == [
+        'Downstream apps are running and will remain running: d']
+
+
+@pytest.mark.parametrize('group_id,targets,readiness', [
+    ('second', 'bc', 'abc'), (None, 'abcd', 'abcd'),
+])
+def test_restart_uses_one_operation_for_reverse_stop_and_forward_readiness(service, group_id, targets, readiness):
+    service.save(config(group('first', node('a')), group('second', node('c', 'b'), node('b', 'a')),
+                        group('third', node('d', 'c'))))
+    service.runtime.running.update('abcd')
+    probed = []
+
+    def wait(node_id, spec, cancel):
+        assert node_id in service.runtime.running
+        assert service.runtime.calls[:len(targets)] == [('stop', n) for n in reversed(targets)]
+        probed.append(node_id)
+
+    service.prober.wait = wait
+    op = service.queue('restart', group_id=group_id)
+    events = finish(service, op)
+    assert events[-1]['status'] == 'completed'
+    assert {e['operation_id'] for e in events} == {op['operation_id']}
+    assert {e['operation_type'] for e in events} == {'pipeline_restart'}
+    assert service.runtime.calls == [('stop', n) for n in reversed(targets)] + [('run', n) for n in targets]
+    assert probed == list(readiness)
+    assert service.runtime.running == set('abcd')
+
+
+@pytest.mark.parametrize('cancel_phase', ['stop', 'readiness'])
+def test_cancel_group_restart_reserves_apps_across_phases(service, cancel_phase):
+    service.save(config(group('first', node('a')), group('second', node('b', 'a'), node('c', 'b'))))
+    service.runtime.running.update('abc')
+    entered = threading.Event()
+    release = threading.Event()
+    stop = service.runtime.stop
+
+    def stop_and_wait(node_id):
+        stop(node_id)
+        if node_id == 'b' and cancel_phase == 'stop':
+            entered.set()
+            assert release.wait(3)
+
+    def wait(node_id, spec, cancel):
+        if node_id == 'b' and cancel_phase == 'readiness':
+            entered.set()
+            assert cancel.wait(3)
+            raise AppRuntimeError('Canceled')
+
+    service.runtime.stop = stop_and_wait
+    service.prober.wait = wait
+    op = service.queue('restart', group_id='second')
+    try:
+        assert entered.wait(2)
+        for target in 'abc':  # Includes the external prerequisite through both phases.
+            with pytest.raises(AppOperationConflictError):
+                service.operations.start_operation('stop', target)
+        service.operations.request_cancel(op['operation_id'])
+    finally:
+        release.set()
+    assert finish(service, op)[-1]['status'] == 'canceled'
+    expected = [('stop', 'c'), ('stop', 'b')]
+    if cancel_phase == 'readiness':
+        expected.append(('run', 'b'))
+    assert service.runtime.calls == expected
+    rec = service.operations.start_operation('test', None, reserved_apps=('a', 'b', 'c'))
+    service.operations.mark_completed(rec.operation_id)
+
+
+def test_restart_preserves_stop_failure_barrier(service):
+    service.save(config(group('g', node('a'), node('b', 'a')), on_failure='continue'))
+    service.runtime.running.update('ab')
+    service.runtime.stop = Mock()  # b remains running after stop.
+    events = finish(service, service.queue('restart'))
+    assert events[-1]['status'] == 'failed'
+    service.runtime.stop.assert_called_once_with('b')
+    assert service.runtime.calls == []
+
+
 @pytest.mark.parametrize('policy,expected', [
     ('abort', ['failed', 'skipped', 'skipped', 'skipped']),
     ('skip_dependents', ['failed', 'skipped', 'skipped', 'active']),
@@ -279,7 +366,7 @@ def test_api_auth_preview_save_run_cancel_and_reverse_stop(service, monkeypatch)
     with TestClient(app) as http:
         draft = config(group('first', node('a')), group('second', node('b', 'a')))
         for method, path, body in [('GET', '', None), ('PUT', '', draft), ('POST', '/validate', draft),
-                                   ('POST', '/run', {}), ('POST', '/stop', {})]:
+                                   ('POST', '/run', {}), ('POST', '/stop', {}), ('POST', '/restart', {})]:
             assert http.request(method, base + path, json=body, params={'token': 'bad'}).status_code == 401
         http.params = {'token': 'test'}
         assert http.post(base + '/validate', json=draft).json()['preview']['robot'][1]['batches'] == [['b']]
@@ -293,7 +380,20 @@ def test_api_auth_preview_save_run_cancel_and_reverse_stop(service, monkeypatch)
         info = http.get(base).json()
         assert [n['app_id'] for n in info['unassigned_apps']] == ['c', 'd', 'e']
         assert info['config']['version'] == 1 and info['validation']['valid']
+        with monkeypatch.context() as light:
+            unexpected = Mock(side_effect=AssertionError('List view must skip inventory and planning'))
+            light.setattr(service.runtime, 'get_installed_list', unexpected)
+            light.setattr('aivudaos.core.apps.pipeline_config._plan', unexpected)
+            assert http.get(base, params={'view': 'list'}).json() == {
+                'config': info['config'], 'active_operation': None}
         assert http.post(base + '/run', json={'profile': 'missing'}).status_code == 422
+        assert http.post(base + '/restart', json={'group_id': 'missing'}).status_code == 422
+        restarted = http.post(base + '/restart')
+        assert restarted.status_code == 202 and finish(service, restarted.json())[-1]['status'] == 'completed'
+        stopped = http.post(base + '/stop', json={'group_id': 'first'})
+        assert stopped.status_code == 202 and finish(service, stopped.json())[-1]['status'] == 'completed'
+        assert service.runtime.running == {'b'}
+        finish(service, service.queue('stop'))
         probing = threading.Event()
 
         def wait(node_id, spec, cancel):
@@ -373,6 +473,7 @@ def test_reads_during_takeover_keep_per_app_preference(tmp_path, monkeypatch):
 def test_mcp_names_and_explicit_pipeline_credentials():
     server = MCPServer(EmbeddedAPIClient())
     names = {tool['name'] for tool in server.tools}
-    assert {'get_startup_pipeline', 'run_startup_pipeline', 'stop_startup_pipeline'} <= names
-    with pytest.raises(ValueError, match='session token'):
-        server.call_tool('run_startup_pipeline', {})
+    assert {'get_startup_pipeline', 'run_startup_pipeline', 'restart_startup_pipeline', 'stop_startup_pipeline'} <= names
+    for tool in ('run_startup_pipeline', 'restart_startup_pipeline'):
+        with pytest.raises(ValueError, match='session token'):
+            server.call_tool(tool, {})

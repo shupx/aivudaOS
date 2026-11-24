@@ -9,7 +9,7 @@ from aivudaos.core.db.schema import init_db
 from aivudaos.core.paths import UI_DIST_DIR, ensure_dirs
 from aivudaos.core.errors import AppOperationConflictError, AppRuntimeError
 from aivudaos.gateway.deps import get_magnet_service, get_pipeline_service, get_runtime_service
-from aivudaos.gateway.routes import apps, auth, config, pipeline, shared_store
+from aivudaos.gateway.routes import include_business_routes, shared_store
 
 
 logger = logging.getLogger(__name__)
@@ -18,10 +18,7 @@ API_PREFIX = "/aivuda_os"
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AivudaOS", version="1.0.0")
-    app.include_router(auth.router, prefix=API_PREFIX)
-    app.include_router(config.router, prefix=API_PREFIX)
-    app.include_router(pipeline.router, prefix=API_PREFIX)
-    app.include_router(apps.router, prefix=API_PREFIX)
+    include_business_routes(app, prefix=API_PREFIX)
 
     app.include_router(shared_store.router, prefix=API_PREFIX)
     app.mount(API_PREFIX + "/api/shared-apps", shared_store.shared_store)

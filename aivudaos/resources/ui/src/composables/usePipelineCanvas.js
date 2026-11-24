@@ -5,7 +5,7 @@ import {
 
 const poolType = 'application/x-aivuda-pipeline-app'
 
-export function usePipelineCanvas({ profile, installed, progress, locked, changed, reject, addFromPool, pauseSave, resumeSave }) {
+export function usePipelineCanvas({ profile, profileProgress, locked, changed, reject, addFromPool, pauseSave, resumeSave }) {
   const nodes = shallowRef([]), edges = shallowRef([])
   const incident = new Map(), animated = new Set()
   let flow
@@ -19,17 +19,16 @@ export function usePipelineCanvas({ profile, installed, progress, locked, change
     else animated.delete(edge)
   }
   function updateStatus(id) {
-    const state = progress.value?.profile === profile.value?.name ? progress.value : null
+    const state = profileProgress.value
     for (const edge of incident.get(id) || []) setAnimation(edge, isEdgeAnimated(edge, state))
   }
   function clearAnimation() {
     for (const edge of animated) setAnimation(edge, false)
   }
-  function refresh() {
-    const graph = toFlowGraph(profile.value, installed.value)
+  function refresh(graph = toFlowGraph(profile.value)) {
     incident.clear()
     animated.clear()
-    const state = progress.value?.profile === profile.value?.name ? progress.value : null
+    const state = profileProgress.value
     for (const edge of graph.edges) {
       edge.animated = isEdgeAnimated(edge, state)
       if (edge.animated) animated.add(edge)
@@ -85,6 +84,22 @@ export function usePipelineCanvas({ profile, installed, progress, locked, change
     Object.assign(layout[node.id], { x: node.position.x, y: node.position.y })
     changed(true)
   }
+  function moveWithinParent(node, parent) {
+    const layout = profile.value.layout ??= {}
+    // Moving left or up expands the parent at its origin. Rebase siblings so
+    // every app (including the dropped one) keeps its absolute canvas position.
+    const dx = Math.max(0, -node.position.x), dy = Math.max(0, GRAPH_SIZE.header - node.position.y)
+    if (dx || dy) {
+      layout[parent.id] = { x: parent.position.x - dx, y: parent.position.y - dy,
+        w: parent.width + dx, h: parent.height + dy }
+    }
+    for (const child of nodes.value) {
+      if (child.parentNode !== parent.id) continue
+      const p = child.id === node.id ? node.position : child.position
+      layout[child.id] = { ...layout[child.id], x: p.x + dx, y: p.y + dy }
+    }
+    changed(true)
+  }
   function onDragStop({ node, event }) {
     resumeSave()
     if (locked.value || !node) return refresh()
@@ -96,7 +111,7 @@ export function usePipelineCanvas({ profile, installed, progress, locked, change
     const pointer = event?.touches?.[0] || event?.changedTouches?.[0] || event
     const point = pointer && flow?.screenToFlowCoordinate({ x: pointer.clientX, y: pointer.clientY })
     const group = (point && groupAt(point, parent.id)) || groupAt(center, parent.id)
-    if (!group) return refresh()
+    if (!group || group.id === parent.id) return moveWithinParent(node, parent)
     const position = { x: Math.max(0, absolute.x - group.position.x), y: Math.max(GRAPH_SIZE.header, absolute.y - group.position.y) }
     finish(applyMoveToGroup(profile.value, node.data.appId, group.data.groupId, position))
   }

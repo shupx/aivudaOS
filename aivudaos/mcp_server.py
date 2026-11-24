@@ -17,11 +17,10 @@ class APIClient(BaseAPIClient):
 
 def api_schema():
     from fastapi import FastAPI
-    from aivudaos.gateway.routes import apps, auth, config, pipeline
+    from aivudaos.gateway.routes import include_business_routes
 
     app = FastAPI()
-    for router in (auth.router, config.router, pipeline.router, apps.router):
-        app.include_router(router)
+    include_business_routes(app)
     return app
 
 

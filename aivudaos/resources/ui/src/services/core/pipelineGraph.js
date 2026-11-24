@@ -87,8 +87,8 @@ function edge(kind, source, target) {
     deletable: editable, markerEnd: { type: 'arrowclosed' } }
 }
 
-function box(saved, x, y, w, h, automatic) {
-  return { x: !automatic && validPosition(saved) ? saved.x : x, y: !automatic && validPosition(saved) ? saved.y : y,
+function box(saved, x, y, w, h) {
+  return { x: validPosition(saved) ? saved.x : x, y: validPosition(saved) ? saved.y : y,
     w: size(saved?.w, w), h: size(saved?.h, h) }
 }
 
@@ -97,8 +97,9 @@ function flowNode(id, type, data, { x, y, w, h }) {
     style: { width: `${w}px`, height: `${h}px` }, deletable: false }
 }
 
-function project(profile, automatic) {
-  const nodes = [], edges = [], assigned = new Set(), layout = profile?.layout || {}, s = GRAPH_SIZE
+// Assigned apps stay visible even after uninstall so a broken profile can be repaired.
+export function toFlowGraph(profile) {
+  const layout = profile?.layout || {}, nodes = [], edges = [], assigned = new Set(), s = GRAPH_SIZE
   for (const g of profile?.groups || []) for (const item of g.items) assigned.add(item.app_id)
   let stageX = 0, previousGroup
   for (const group of profile?.groups || []) {
@@ -108,7 +109,7 @@ function project(profile, automatic) {
       let rowY = s.header, columnWidth = 0
       for (const item of batch) {
         const key = appKey(item.app_id), deps = item.depends_on || []
-        const rect = box(layout[key], columnX, rowY, s.appWidth, s.appHeight, automatic)
+        const rect = box(layout[key], columnX, rowY, s.appWidth, s.appHeight)
         children.push({ ...flowNode(key, 'pipelineApp', { appId: item.app_id, groupId: group.id }, rect), parentNode: id })
         rowY = Math.max(rowY, rect.y) + rect.h + s.rowGap
         columnWidth = Math.max(columnWidth, rect.x + rect.w - columnX)
@@ -121,7 +122,7 @@ function project(profile, automatic) {
       }
       columnX += columnWidth + s.columnGap
     }
-    const rect = box(layout[id], stageX, 0, s.groupWidth, s.groupHeight, automatic)
+    const rect = box(layout[id], stageX, 0, s.groupWidth, s.groupHeight)
     rect.w = Math.max(rect.w, right + s.padding); rect.h = Math.max(rect.h, bottom + s.padding)
     nodes.push({ ...flowNode(id, 'pipelineGroup', { groupId: group.id }, rect), connectable: false, dragHandle: '.group-header' })
     for (const child of children) nodes.push(child) // Parents must precede their children in Flow.
@@ -134,19 +135,17 @@ function project(profile, automatic) {
   return { nodes, edges }
 }
 
-// Inventory membership determines the external pool, not the graph: even an assigned
-// but uninstalled app has to remain visible so an invalid profile can be repaired.
-export function toFlowGraph(profile, _installedApps) {
-  return project(profile, false)
-}
-
-export function applyAutoLayout(profile) {
-  const layout = {}, previous = profile.layout || {}
-  for (const { id, position } of project(profile, true).nodes) {
-    layout[id] = { ...previous[id], ...position }
-  }
+export function applyAutoLayout(profile, graph = toFlowGraph({ groups: profile.groups })) {
+  const layout = {}
+  for (const { id, position } of graph.nodes) layout[id] = { ...position }
   profile.layout = layout
   return ok()
+}
+
+export function pipelineNodeStatus(active, status, enabled, running) {
+  if (status && (active || ['failed', 'degraded', 'skipped'].includes(status))) return status
+  if (!enabled) return 'disabled'
+  return running ? 'running' : 'idle'
 }
 
 // Validate a shallow candidate before touching any mutable (possibly reactive) array.

@@ -1,6 +1,6 @@
 """Authenticated startup pipeline endpoints, mounted before dynamic app routes."""
 from contextlib import contextmanager
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, StrictStr
@@ -33,10 +33,10 @@ def pipeline_errors():
 
 
 @router.get('')
-def get_startup_pipeline():
-    """Read profiles, installed and unassigned apps, validation, and the execution preview."""
+def get_startup_pipeline(view: Optional[Literal['list']] = None):
+    """Read the pipeline configuration and operation. Use view=list to omit inventory and validation."""
     with pipeline_errors():
-        return get_pipeline_service().describe()
+        return get_pipeline_service().describe(list_view=view == 'list')
 
 
 @router.put('')
@@ -67,5 +67,11 @@ def run_startup_pipeline(selection: Optional[PipelineSelection] = None):
 
 @router.post('/stop', status_code=202)
 def stop_startup_pipeline(selection: Optional[PipelineSelection] = None):
-    """Queue a stop in reverse dependency order."""
+    """Stop a profile or one group in reverse dependency order."""
     return _queue('stop', selection)
+
+
+@router.post('/restart', status_code=202)
+def restart_startup_pipeline(selection: Optional[PipelineSelection] = None):
+    """Stop, then start a profile or one group under the same cancellable operation."""
+    return _queue('restart', selection)

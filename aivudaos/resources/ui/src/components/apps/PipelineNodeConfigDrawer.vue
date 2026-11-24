@@ -56,7 +56,7 @@ const node = computed(() => ui.nodeDraft)
           <legend>{{ t('pipeline.dependsOn') }}</legend>
           <div v-if="ui.dependencyOptions.length" class="dependency-list">
             <label v-for="dep in ui.dependencyOptions" :key="dep.value" class="check">
-              <input type="checkbox" v-model="node.depends_on" :value="dep.value" :disabled="dep.disabled">{{ dep.label }}
+              <input type="checkbox" v-model="node.depends_on" :value="dep.value">{{ dep.label }}
             </label>
           </div>
           <p v-else class="form-hint">{{ t('pipeline.noDeps') }}</p>
