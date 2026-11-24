@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NTag, useThemeVars } from 'naive-ui'
 import { ArrowDown, Play, RotateCcw, Square, X } from 'lucide-vue-next'
@@ -12,6 +13,7 @@ defineProps({
 const emit = defineEmits(['run', 'restart', 'stop', 'cancel'])
 const { t } = useI18n()
 const theme = useThemeVars()
+const withDeps = ref(false)
 </script>
 
 <template>
@@ -25,6 +27,7 @@ const theme = useThemeVars()
       <h3>{{ name }}</h3>
       <NTag size="small" :bordered="false">{{ t(`pipeline.modes.${section.group.mode}`) }}</NTag>
       <NTag v-if="!section.group.enabled" size="small" :bordered="false">{{ t('common.disabled') }}</NTag>
+      <span v-if="section.prerequisites?.length" class="stage-count">{{ t('pipeline.groupRequires', { names: section.prerequisites.join(', ') }) }}</span>
       <span class="stage-count">{{ t('apps.pipelineGroups.runningCount', { running: section.group.runningCount, total: section.apps.length }) }}</span>
       <div class="stage-actions">
         <template v-if="section.status">
@@ -33,12 +36,13 @@ const theme = useThemeVars()
             :aria-label="t('pipeline.cancelRun')" @click="emit('cancel')"><X :size="16" /></NButton>
         </template>
         <template v-else>
+          <label class="with-deps"><input type="checkbox" v-model="withDeps" :disabled="busy">{{ t('pipeline.withDeps') }}</label>
           <NButton size="small" quaternary circle :disabled="busy || !section.group.enabled || !section.apps.length"
             :title="t('apps.pipelineGroups.startGroup', { name })" :aria-label="t('apps.pipelineGroups.startGroup', { name })"
-            @click="emit('run', section.group.id)"><Play :size="15" /></NButton>
+            @click="emit('run', section.group.id, withDeps)"><Play :size="15" /></NButton>
           <NButton size="small" quaternary circle :disabled="busy || !section.group.enabled || !section.apps.length"
             :title="t('apps.pipelineGroups.restartGroup', { name })" :aria-label="t('apps.pipelineGroups.restartGroup', { name })"
-            @click="emit('restart', section.group.id)"><RotateCcw :size="15" /></NButton>
+            @click="emit('restart', section.group.id, withDeps)"><RotateCcw :size="15" /></NButton>
           <NButton size="small" quaternary circle :disabled="busy || !section.group.enabled || !section.apps.length"
             :title="t('apps.pipelineGroups.stopGroup', { name })" :aria-label="t('apps.pipelineGroups.stopGroup', { name })"
             @click="emit('stop', section.group.id)"><Square :size="14" /></NButton>
@@ -59,6 +63,7 @@ const theme = useThemeVars()
 .app-list-stage { border: 1.5px dashed color-mix(in srgb, var(--stage-line) 72%, transparent); border-radius: 9px; padding: 12px; }
 .app-list-stage + .app-list-stage { margin-top: 12px; }
 .stage-header, .stage-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.with-deps { font-size: 12px; color: var(--stage-muted); }
 .stage-header { margin-bottom: 10px; }
 h3 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
 .stage-number, .stage-count, .empty-stage, .stage-actions span { color: var(--stage-muted); font-size: 12px; }

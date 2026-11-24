@@ -8,17 +8,16 @@ import '@vue-flow/core/dist/theme-default.css'
 import { NButton, NPopconfirm, NSpin, useThemeVars } from 'naive-ui'
 import { ChevronRight, LayoutGrid, Play, Plus, Settings, Square, X } from 'lucide-vue-next'
 import { useStartupPipeline } from '../../composables/useStartupPipeline'
+import PipelineLogs from './PipelineLogs.vue'
 import PipelineAppNode from './PipelineAppNode.vue'
 import PipelineGroupNode from './PipelineGroupNode.vue'
 import PipelineNodeConfigDrawer from './PipelineNodeConfigDrawer.vue'
 import PipelineSettingsDrawer from './PipelineSettingsDrawer.vue'
 
-const props = defineProps({ apps: { type: Array, required: true }, operationRevision: { type: Number, default: 0 } })
-const emit = defineEmits(['saved', 'operation-finished'])
+const props = defineProps({ apps: { type: Array, required: true }, pipeline: { type: Object, required: true } })
+const emit = defineEmits(['saved'])
 const { t } = useI18n(), theme = useThemeVars()
-const ui = reactive(useStartupPipeline(toRef(props, 'apps'), toRef(props, 'operationRevision'), {
-  onSaved: config => emit('saved', config), onFinished: () => emit('operation-finished'),
-}))
+const ui = reactive(useStartupPipeline(toRef(props, 'apps'), props.pipeline, config => emit('saved', config)))
 provide('pipelineEditor', ui)
 defineExpose({ flush: ui.flush })
 </script>
@@ -107,6 +106,7 @@ defineExpose({ flush: ui.flush })
         <span v-if="ui.connectionLost">{{ t('pipeline.reconnecting') }}</span>
         <span v-if="['pending', 'saving', 'saved'].includes(ui.saveState)">{{ t(`pipeline.saveStates.${ui.saveState}`) }}</span>
       </div>
+      <PipelineLogs :lines="ui.profileProgress?.logs" />
       <PipelineSettingsDrawer />
       <PipelineNodeConfigDrawer />
     </template>
@@ -136,7 +136,7 @@ defineExpose({ flush: ui.flush })
 .tray-body { padding: 0 14px 12px; }
 .tray-hint { margin: 0; font-size: 12px; color: var(--muted); }
 .pool-apps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 118px; overflow-y: auto; padding: 2px; }
-.pool-app { gap: 7px; min-height: 31px; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 3px 8px 3px 4px; }
+.pool-app { box-sizing: border-box; width: 200px; height: 76px; gap: 7px; min-height: 31px; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 3px 8px 3px 4px; }
 .pool-app img { flex: none; width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
 .pool-app span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pool-app svg { flex: none; color: var(--muted); }

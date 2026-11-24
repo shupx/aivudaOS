@@ -198,7 +198,7 @@ async def upload_app(
 
 
 @router.get("/installed")
-async def get_installed(token: str) -> Dict[str, Any]:
+def get_installed(token: str) -> Dict[str, Any]:
     _require_auth(token)
     runtime = get_runtime_service()
     return {"items": runtime.get_installed_list()}

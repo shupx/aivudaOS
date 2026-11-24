@@ -16,6 +16,7 @@ import {
 } from '../services/core/apps'
 import { useAppUploadInstallModal } from './useAppUploadInstallModal'
 import { useAppListGroups } from './useAppListGroups'
+import { usePipelineOperation } from './usePipelineOperation'
 
 let pollTimer = null
 let refreshId = 0, appliedRefresh = 0
@@ -210,7 +211,9 @@ export function useAppsPanel(view) {
       return aName.localeCompare(bName) * desc
     })
   })
-  const listGroups = view ? useAppListGroups({ apps, view, refresh, onAction: recordAppAction, t: i18n.global.t }) : {}
+  const pipeline = view && usePipelineOperation({ revision: operationRevision, onAction: recordAppAction,
+    onFinished: refresh, t: i18n.global.t })
+  const listGroups = view ? useAppListGroups({ apps, view, refresh, pipeline, t: i18n.global.t }) : {}
   if (view) watch(view, () => { void refresh() })
   const loading = computed(() => appState.appsLoading)
   const error = computed(() => appState.appsError)
@@ -523,7 +526,7 @@ export function useAppsPanel(view) {
     startEnabledApps,
     stopEveryApp,
     ...uploadModal,
-    operationRevision,
+    pipeline,
     ...listGroups,
   }
 }

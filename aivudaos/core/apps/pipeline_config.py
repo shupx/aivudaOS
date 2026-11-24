@@ -1,6 +1,6 @@
 """Startup pipeline configuration. Plans contain app IDs, never live processes.
 
-Group order is a hard barrier; item order breaks ties between ready items.
+Group links define barriers; order breaks ties between ready items.
 Equal orders preserve array order. Disabled entries must still form a valid DAG,
 so enabling an entry cannot reveal a previously hidden cycle or missing app.
 """
@@ -12,7 +12,7 @@ import math
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 from urllib.parse import urlsplit
 
 import yaml
@@ -29,7 +29,8 @@ _ROS_NAME = re.compile(r"/?(?:[A-Za-z_][A-Za-z0-9_]*/)*[A-Za-z_][A-Za-z0-9_]*")
 _PROBE_FIELDS = {
     "started": (), "delay": ("delay_sec",), "tcp": ("host", "port"),
     "http": ("url",), "command": ("command",), "ros2_node": ("node_name",),
-    "ros2_topic": ("topic", "require_publisher"),
+    "ros2_topic": ("topic", "require_publisher", "require_message"),
+    "log_contains": ("pattern",), "log_regex": ("pattern",), "exited_zero": (),
     "ros2_lifecycle": ("node_name", "lifecycle_state"),
 }
 
@@ -42,7 +43,7 @@ def ros2_template() -> List[dict]:
         ("telemetry", "Telemetry & Tools"),
     )
     return [{"id": key, "name": name, "order": i, "mode": "parallel", "enabled": True,
-             "items": []} for i, (key, name) in enumerate(groups)]
+             "depends_on": [], "items": []} for i, (key, name) in enumerate(groups)]
 
 
 def _default_config() -> dict:
@@ -146,6 +147,16 @@ def normalize_readiness(value, path):
         probe["url"] = url
     elif kind == "command":
         probe["command"] = _text(value.get("command"), f"{path}.command")
+    elif kind in ("log_contains", "log_regex"):
+        pattern = _text(value.get("pattern"), f"{path}.pattern")
+        if len(pattern.encode()) > 4096:
+            raise ValueError(f"{path}.pattern exceeds 4096 bytes")
+        if kind == "log_regex":
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"{path}.pattern: {exc}") from exc
+        probe["pattern"] = pattern
     elif kind.startswith("ros2_"):
         field = "topic" if kind == "ros2_topic" else "node_name"
         name = _text(value.get(field), f"{path}.{field}")
@@ -155,6 +166,7 @@ def normalize_readiness(value, path):
         if kind == "ros2_topic":
             probe["require_publisher"] = _bool(value.get("require_publisher", False),
                                                f"{path}.require_publisher")
+            probe["require_message"] = _bool(value.get("require_message", False), f"{path}.require_message")
         if kind == "ros2_lifecycle":
             probe["lifecycle_state"] = _text(value.get("lifecycle_state", "active"),
                                              f"{path}.lifecycle_state")
@@ -176,9 +188,11 @@ def _item(raw, path):
 
 
 def _group(raw, path):
-    raw = _object(raw, ("id", "name", "order", "mode", "enabled", "items"), path)
+    raw = _object(raw, ("id", "name", "order", "mode", "enabled", "items", "depends_on"), path)
     group_id = _identifier(raw.get("id"), f"{path}.id")
     return {
+        **({"depends_on": [_identifier(dep, f"{path}.depends_on") for dep in
+                         _array(raw["depends_on"], f"{path}.depends_on")]} if "depends_on" in raw else {}),
         "id": group_id, "name": _text(raw.get("name", group_id), f"{path}.name"),
         "order": _integer(raw.get("order", 0), f"{path}.order"),
         "mode": _enum(raw.get("mode", "parallel"), ("parallel", "sequential"), f"{path}.mode"),
@@ -207,21 +221,29 @@ def _layout(raw, path) -> Dict[str, Dict[str, float]]:
     return result
 
 
-def _profile(raw, path):
+def _profile(raw, path, *, for_plan=True):
     raw = _object(raw, ("name", "on_failure", "groups", "layout"), path)
+    groups = [_group(v, f"{path}.groups[{i}]") for i, v in enumerate(
+        _array(raw.get("groups"), f"{path}.groups"))]
+    legacy = not any("depends_on" in group for group in groups)
+    ranked = sorted(groups, key=lambda g: g["order"]) if legacy or for_plan else groups
+    previous = []
+    for group in ranked:
+        group.setdefault("depends_on", previous if legacy and group["enabled"] else [])
+        if legacy and group["enabled"]:
+            previous = [group["id"]]
     return {
         **({"layout": _layout(raw["layout"], f"{path}.layout")} if "layout" in raw else {}),
         "name": _text(raw.get("name"), f"{path}.name"),
         "on_failure": _enum(raw.get("on_failure", "abort"), ("abort", "skip_dependents", "continue"),
                             f"{path}.on_failure"),
-        "groups": [_group(v, f"{path}.groups[{i}]") for i, v in enumerate(
-            _array(raw.get("groups"), f"{path}.groups"))],
-    }
+        "groups": groups,
+    }, ranked
 
 
 def _batches(group, owners, group_idx):
     # Rank is the stable (order, array index) tie-breaker. Same-group edges are
-    # scheduled here; preceding group barriers already satisfy cross-group edges.
+    # scheduled here. The global planner validates cross-group constraints.
     items = sorted(group["items"], key=lambda x: x["order"])
     rank = {item["app_id"]: i for i, item in enumerate(items)}
     incoming = [0] * len(items)
@@ -234,8 +256,6 @@ def _batches(group, owners, group_idx):
             if dep not in owners:
                 raise ValueError(f"App {app!r} has unknown prerequisite {dep!r}")
             dep_group, dep_enabled = owners[dep]
-            if dep_group > group_idx:
-                raise ValueError(f"App {app!r} depends on {dep!r} in a later group")
             if group["enabled"] and item["enabled"] and not dep_enabled:
                 raise ValueError(f"Enabled app {app!r} depends on disabled prerequisite {dep!r}")
             if dep_group == group_idx:
@@ -266,8 +286,64 @@ def _batches(group, owners, group_idx):
     return batches
 
 
-def _plan(profile):
-    groups = sorted(profile["groups"], key=lambda g: g["order"])
+def _topological(deps, label):
+    followers = {key: [] for key in deps}
+    counts = {key: len(values) for key, values in deps.items()}
+    for key, values in deps.items():
+        for dep in values:
+            if dep not in deps:
+                raise ValueError(f"Unknown {label} prerequisite {dep!r} for {key!r}")
+            followers[dep].append(key)
+    order = [key for key in deps if not counts[key]]
+    for key in order:
+        for child in followers[key]:
+            counts[child] -= 1
+            if counts[child] == 0:
+                order.append(child)
+    if len(order) != len(deps):
+        raise ValueError(f"Dependency cycle in {label} graph")
+    return order
+
+
+def _group_order(groups):
+    by_id = {group["id"]: group for group in groups}
+    edges = {gid: group["depends_on"] for gid, group in by_id.items()}
+    order = _topological(edges, "group")
+    for gid in order:
+        if len(set(edges[gid])) != len(edges[gid]):
+            raise ValueError(f"Duplicate group prerequisite for {gid!r}")
+    return [by_id[gid] for gid in order]
+
+
+def _dependencies(ordered_groups, members, include_disabled):
+    ends, required, ordering = {}, {}, {}
+    for group in ordered_groups:
+        gid = group["id"]
+        upstream = frozenset().union(*(ends[dep] for dep in group["depends_on"]))
+        steps = members.get(gid, ())
+        items = {item["app_id"]: item for item in group["items"]}
+        nodes = items if include_disabled else steps
+        ends[gid] = frozenset(nodes) or upstream
+        for app in nodes:
+            explicit = items[app]["depends_on"]
+            required[app] = upstream if upstream.issuperset(explicit) else upstream.union(explicit)
+            ordering[app] = required[app]
+        if group["mode"] == "sequential":
+            for before, after in zip(steps, steps[1:]):
+                if before not in required[after]:
+                    ordering[after] = required[after].union((before,))
+    _topological(ordering, "app and group")
+    return required, ordering
+
+
+class _ProfilePlan(NamedTuple):
+    stages: List[dict]
+    members: dict
+    required: dict
+    ordering: dict
+
+
+def _plan(profile, groups):
     owners = {}
     ids = set()
     for n, group in enumerate(groups):
@@ -279,17 +355,24 @@ def _plan(profile):
             if app in owners:
                 raise ValueError(f"Duplicate app_id {app!r} in profile {profile['name']!r}")
             owners[app] = (n, group["enabled"] and item["enabled"])
-    stages = []
+    stages_by_id = {}
     for n, group in enumerate(groups):
         batches = _batches(group, owners, n)
         if group["enabled"]:
-            stages.append({"group_id": group["id"], "batches": batches})
-    return stages
+            gid = group["id"]
+            stages_by_id[gid] = {"group_id": gid, "batches": batches}
+    ordered = _group_order(groups)
+    stages = [stages_by_id[g["id"]] for g in ordered if g["enabled"]]
+    members = {stage["group_id"]: [app for batch in stage["batches"] for app in batch] for stage in stages}
+    # Filtering disabled members can change the barriers propagated through empty stages.
+    _dependencies(ordered, members, include_disabled=True)
+    required, ordering = _dependencies(ordered, members, include_disabled=False)
+    return _ProfilePlan(stages, members, required, ordering)
 
 
 def build_execution_plan(profile: dict) -> List[dict]:
     """Return enabled groups and topological batches; raise ValueError on invalid input."""
-    return _plan(_profile(profile, "profile"))
+    return _plan(*_profile(profile, "profile")).stages
 
 
 def build_stop_plan(profile: dict) -> List[dict]:
@@ -302,31 +385,41 @@ def reverse_plan(plan):
             for stage in reversed(plan)]
 
 
-def _config(raw, check_graph=True) -> Tuple[dict, dict, List[str]]:
+_ALL_PREVIEWS = object()
+
+
+def _config(raw, check_graph=True, execution_profile=_ALL_PREVIEWS) -> Tuple[dict, dict, List[str]]:
+    """Validate all profiles. Keep the public previews or the one plan requested for execution."""
     raw = _object(raw, ("version", "takeover_autostart", "default_profile", "profiles"), "config")
     version = _integer(raw.get("version"), "config.version")
     if version < 0:
         raise ValueError("config.version must not be negative")
     default = _text(raw.get("default_profile"), "config.default_profile")
     takeover = _bool(raw.get("takeover_autostart", False), "config.takeover_autostart")
-    profiles, seen, preview, errors = [], set(), {}, []
-    for i, raw_profile in enumerate(_array(raw.get("profiles"), "config.profiles")):
+    profiles, seen, plans, errors = [], set(), {}, []
+    selected = default if execution_profile is None else execution_profile
+    raw_profiles = _array(raw.get("profiles"), "config.profiles")
+    for i, raw_profile in enumerate(raw_profiles):
         path = f"config.profiles[{i}]"
         try:
-            profile = _profile(raw_profile, path)
+            profile, ranked = _profile(raw_profile, path, for_plan=check_graph)
             name = profile["name"]
             if name in seen:
                 raise ValueError(f"Duplicate profile name {name!r}")
             seen.add(name)
             profiles.append(profile)
             if check_graph:
-                preview[name] = _plan(profile)
+                plan = _plan(profile, ranked)
+                if selected is _ALL_PREVIEWS:
+                    plans[name] = plan.stages
+                elif selected == name:
+                    plans[name] = profile, plan
         except ValueError as exc:
             errors.append(str(exc))
-    if default not in seen:
+    if not any(isinstance(p, dict) and p.get("name") == default for p in raw_profiles):
         errors.append("config.default_profile must name an existing profile")
     return ({"version": version, "default_profile": default, "takeover_autostart": takeover,
-             "profiles": profiles}, preview, errors)
+             "profiles": profiles}, plans, errors)
 
 
 def validate_config(config: dict) -> Dict[str, Any]:
@@ -338,8 +431,8 @@ def validate_config(config: dict) -> Dict[str, Any]:
     return {"valid": not errors, "errors": errors, "preview": {} if errors else preview}
 
 
-def _checked(raw, check_graph=True) -> Tuple[dict, dict]:
-    config, plans, errors = _config(raw, check_graph=check_graph)
+def _checked(raw, check_graph=True, execution_profile=_ALL_PREVIEWS) -> Tuple[dict, dict]:
+    config, plans, errors = _config(raw, check_graph=check_graph, execution_profile=execution_profile)
     if errors:
         raise ValueError("; ".join(errors))
     return config, plans
@@ -367,8 +460,40 @@ class PipelineStore:
         return config
 
     def load_with_plans(self) -> Tuple[dict, dict]:
-        """Read and validate one snapshot for both phases of an operation."""
+        """Return the normalized snapshot and stage previews for every profile."""
         return _checked(self._read())
+
+    def load_for_execution(self, profile: Optional[str]) -> Tuple[dict, _ProfilePlan]:
+        """Validate the whole snapshot and keep the selected profile's execution data."""
+        config, plans = _checked(self._read(), execution_profile=profile)
+        name = config['default_profile'] if profile is None else profile
+        if name not in plans:
+            raise ValueError('Unknown pipeline profile: {}'.format(name))
+        return plans[name]
+
+    def detach_app(self, app_id):
+        """Remove obsolete assignments and references from the latest locked snapshot."""
+        if not self.path.exists():
+            return
+        lock_path = self.path.with_name(self.path.name + ".lock")
+        with lock_path.open("a+b") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            config = self.load(for_editing=True)
+            changed = False
+            for profile in config["profiles"]:
+                if profile.get("layout", {}).pop("app:" + app_id, None) is not None:
+                    changed = True
+                for group in profile["groups"]:
+                    items = group["items"]
+                    group["items"] = [item for item in items if item["app_id"] != app_id]
+                    changed |= len(items) != len(group["items"])
+                    for item in group["items"]:
+                        if app_id in item["depends_on"]:
+                            item["depends_on"].remove(app_id)
+                            changed = True
+            if changed:
+                config["version"] += 1
+                atomic_write_text(self.path, yaml.safe_dump(config, allow_unicode=True, sort_keys=False))
 
     def save(self, config: dict, before_replace: Optional[Callable[[dict, dict], None]] = None) -> dict:
         """Compare and increment version; return the normalized saved snapshot.
@@ -378,7 +503,12 @@ class PipelineStore:
         rollback of external effects, including if atomic replacement later fails.
         The callback must not re-enter save() on this path.
         """
-        new, _ = _checked(config)
+        saved, _ = self.save_with_preview(config, before_replace)
+        return saved
+
+    def save_with_preview(self, config: dict, before_replace: Optional[Callable[[dict, dict], None]] = None) -> Tuple[dict, dict]:
+        """Commit a checked snapshot and return its already validated stage previews."""
+        new, preview = _checked(config)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Lock a stable sidecar, not the YAML inode that os.replace() exchanges.
         lock_path = self.path.with_name(self.path.name + ".lock")
@@ -393,4 +523,4 @@ class PipelineStore:
             if before_replace is not None:
                 before_replace(old, deepcopy(new))
             atomic_write_text(self.path, text)
-        return new
+        return new, preview

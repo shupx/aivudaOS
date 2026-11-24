@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from weakref import WeakValueDictionary
 
+from aivudaos.core.apps.pipeline_config import PipelineStore
 from aivudaos.core.apps.process_cleanup import process_stat, processes, remember, terminate
 from aivudaos.core.apps.caddy_config import CaddyConfigService
 from aivudaos.core.apps.config_validation import validate_config_data
@@ -21,6 +22,7 @@ from aivudaos.core.apps.models import AppManifest, AppRuntimeState
 from aivudaos.core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from aivudaos.core.apps.systemd_runtime import SystemdRuntimeBackend
 from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.config.filelock import atomic_write_text
 from aivudaos.core.config.ros_domain import effective_domain, has_ros2
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.db.connection import db_conn
@@ -31,7 +33,7 @@ from aivudaos.core.errors import (
     NotFoundError,
     OperationCanceledError,
 )
-from aivudaos.core.paths import APP_LOG_DIR
+from aivudaos.core.paths import APP_LOG_DIR, CONFIG_DIR
 from aivudaos.core.paths import SHELL_HELPERS_DIR
 from aivudaos.core.paths import SYSTEMD_RUNTIME_DIR
 from aivudaos.core.paths import UI_DEFAULT_ICON_PATH
@@ -100,6 +102,8 @@ class RuntimeService:
         self._app_locks = WeakValueDictionary()
         self._guardian = None
         self._closing = False
+        self._snapshot_lock = threading.Lock()
+        self._process_snapshot = (0, {})
 
     def _app_lock(self, app_id: str):
         # Serialize lifecycle operations for one app without blocking other apps' shutdown.
@@ -184,7 +188,10 @@ class RuntimeService:
                 "FROM app_runtime WHERE app_id = ?",
                 (app_id,),
             ).fetchone()
-        if not row:
+        return self._state_from_row(app_id, row, backend)
+
+    def _state_from_row(self, app_id, row, backend, live_states=None):
+        if not row or row["running"] is None:
             return AppRuntimeState(
                 app_id=app_id,
                 running=False,
@@ -207,19 +214,20 @@ class RuntimeService:
             scope, using_systemd = backend
         if using_systemd:
             try:
-                live = self._systemd.get_state(app_id, scope)
+                live = self._systemd.get_state(app_id, scope) if live_states is None else live_states.get(app_id)
+                if live is None:
+                    raise OSError("No live unit snapshot")
                 running = live.running
                 pid = live.pid
                 identity = None  # Unit state is authoritative; this is not a Popen PID.
                 if not self._pipeline_autostart:
                     autostart = live.enabled
-                self._sync_runtime_row(
-                    app_id,
-                    running=running,
-                    pid=pid,
-                    autostart=autostart,
-                    last_stopped_at=int(time.time()) if not running else None,
-                )
+                if (running, pid, autostart, identity) != (
+                        bool(row["running"]), row["pid"], bool(row["autostart"]), row["process_identity"]):
+                    if row["running"] and not running:
+                        stopped_at = int(time.time())
+                    self._sync_runtime_row(app_id, running=running, pid=pid, autostart=autostart,
+                                           last_stopped_at=stopped_at)
             except (subprocess.SubprocessError, OSError):
                 # A failed systemd query is not evidence that its unit has stopped.
                 pass
@@ -307,7 +315,7 @@ class RuntimeService:
             rows = conn.execute(
                 """
                 SELECT i.app_id, i.version, i.install_path, i.status, i.installed_at,
-                       r.running, r.autostart, r.pid,
+                       r.running, r.autostart, r.pid, r.process_identity,
                        r.last_started_at, r.last_stopped_at
                 FROM app_installation i
                 LEFT JOIN app_runtime r ON r.app_id = i.app_id
@@ -316,6 +324,14 @@ class RuntimeService:
             ).fetchall()
 
         # Group by app_id, return one entry per app with version list
+        scope = self._systemd_scope()
+        backend = (scope, self._should_use_systemd(scope))
+        live_states = None
+        if backend[1]:
+            try:
+                live_states = self._systemd.get_states({r["app_id"] for r in rows}, scope)
+            except (subprocess.SubprocessError, OSError):
+                live_states = {}
         seen: Dict[str, dict] = {}
         for row in rows:
             aid = row["app_id"]
@@ -329,7 +345,7 @@ class RuntimeService:
                     name = manifest.name
                 except Exception:
                     pass
-                runtime_state = self.get_runtime_state(aid)
+                runtime_state = self._state_from_row(aid, row, backend, live_states)
                 install_path = self._versioning.active_install_path(aid)
                 built_in_ui_entry = self._resolve_app_ui_entry_path(install_path, manifest)
                 panelhub_mountable = bool(
@@ -410,7 +426,7 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.daemon_reload(scope)
+                self._systemd.reload_changed_units(scope)
                 self._systemd.start(app_id, scope)
                 live = self._systemd.get_state(app_id, scope)
             except (OSError, subprocess.SubprocessError, ValueError) as exc:
@@ -430,6 +446,7 @@ class RuntimeService:
                 raise AppRuntimeError("Runtime is shutting down")
             self._ensure_guardian()
             try:
+                log_path.with_suffix(".exit").unlink(missing_ok=True)
                 with log_path.open("wb") as log_file:
                     proc = subprocess.Popen(
                         command,
@@ -447,6 +464,7 @@ class RuntimeService:
                 if identity is None:
                     if proc.poll() is None:
                         raise AppRuntimeError("Cannot identify the launched application process")
+                    self._record_exit(app_id, proc.returncode)
                     self._sync_runtime_row(
                         app_id, running=False, pid=None, autostart=runtime_state.autostart,
                         last_started_at=now, last_stopped_at=int(time.time()),
@@ -579,7 +597,7 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.daemon_reload(scope)
+                self._systemd.reload_changed_units(scope)
                 self._systemd.restart(app_id, scope)
                 live = self._systemd.get_state(app_id, scope)
             except (subprocess.SubprocessError, OSError):
@@ -668,7 +686,7 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.daemon_reload(scope)
+                self._systemd.reload_changed_units(scope)
                 self._systemd.set_enabled(app_id, scope, enabled)
             except (subprocess.SubprocessError, OSError, ValueError):
                 pass
@@ -964,6 +982,9 @@ class RuntimeService:
                     conn.commit()
                 if purge:
                     self._config.delete_app_config(app_id)
+
+        if version is None or not remaining:
+            PipelineStore(CONFIG_DIR / "startup_pipeline.yaml").detach_app(app_id)
 
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
@@ -1299,6 +1320,13 @@ class RuntimeService:
             "AIVUDA_OS_AVAHI_HOSTNAME": str(settings.get("avahi_hostname") or "").strip().lower(),
         }
 
+    def readiness_state_reader(self, app_id):
+        """Pin the selected backend for one probe and read systemd liveness directly."""
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            return lambda app: self._systemd.get_state(app, scope)
+        return lambda app: self.get_runtime_state(app, backend=(scope, False))
+
     def readiness_context(self, app_id: str) -> Tuple[dict, dict, dict, dict]:
         """Launch environment and active config inputs for a readiness command."""
         version = self._versioning.active_version(app_id)
@@ -1428,11 +1456,28 @@ class RuntimeService:
             return None
         return resolved
 
+    def _record_exit(self, app_id, code):
+        atomic_write_text(self._app_log_path(app_id).with_suffix(".exit"), f"exited {code} popen\n")
+
+    def exit_result(self, app_id):
+        try:
+            fields = self._app_log_path(app_id).with_suffix(".exit").read_text().split()
+        except FileNotFoundError:
+            return None
+        if len(fields) != 3:
+            return None
+        return 0 if fields[0:2] == ["exited", "0"] and fields[2] in ("success", "popen") else " ".join(fields)
+
     def _watch_process_exit(self, app_id: str, owned: tuple, identity: str) -> None:
         proc, stamp, tree = owned
         try:
             while proc.poll() is None:
-                remember(tree, proc.pid, stamp)
+                with self._snapshot_lock:
+                    when, table = self._process_snapshot
+                    if time.monotonic() - when >= .09:
+                        table = processes()
+                        self._process_snapshot = (time.monotonic(), table)
+                remember(tree, proc.pid, stamp, table)
                 time.sleep(0.1)
             with self._app_lock(app_id):
                 if self._owned_processes.get(app_id) is not owned:
@@ -1441,6 +1486,7 @@ class RuntimeService:
                 with self._process_lock:
                     self._guardian_message("remove", proc.pid, stamp)
                     self._owned_processes.pop(app_id, None)
+                self._record_exit(app_id, proc.returncode)
                 self._mark_stopped_if_pid_matches(app_id, proc.pid, identity, int(time.time()))
         except Exception:
             # Keep the tracked PID/state until cleanup can be retried.

@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppCard from '../components/apps/AppCard.vue'
+import PipelineLogs from '../components/apps/PipelineLogs.vue'
 import AppGroupSection from '../components/apps/AppGroupSection.vue'
 import UploadInstallModal from '../components/apps/UploadInstallModal.vue'
 import { useAppsPanel } from '../composables/useAppsPanel'
@@ -51,7 +52,6 @@ const {
   jumpToAppCard,
   openSearchDropdown,
   handleSearchKeydown,
-  refresh,
   toggleCompactMode,
   isFavoriteApp,
   toggleFavoriteApp,
@@ -86,9 +86,9 @@ const {
   cancelCurrentUpload,
   submitInteractiveInput,
   listSections, hasPipelineGroups, groupedView, pipelineGroupName,
-  pipelineBusy, pipelineOperation, pipelineCancelPending, pipelineError, pipelineConfigReady, pipelineConfigLoading,
+  pipelineLogs, pipelineBusy, pipelineOperation, pipelineCancelPending, pipelineError, pipelineConfigReady, pipelineConfigLoading,
   runGroup, restartGroup, stopGroup, runDefaultPipeline, restartDefaultPipeline, stopDefaultPipeline,
-  cancelPipelineOperation, refreshList, acceptPipelineConfig, operationRevision,
+  cancelPipelineOperation, refreshList, acceptPipelineConfig, pipeline,
 } = useAppsPanel(view)
 
 const editor = ref(null)
@@ -127,8 +127,7 @@ const sortOptions = computed(() => [
       <NTab name="pipeline">{{ t('pipeline.title') }}</NTab>
     </NTabs>
     <KeepAlive>
-      <StartupPipelinePanel v-if="view === 'pipeline'" ref="editor" :apps="apps" :operation-revision="operationRevision"
-        @saved="acceptPipelineConfig" @operation-finished="refresh" />
+      <StartupPipelinePanel v-if="view === 'pipeline'" ref="editor" :apps="apps" :pipeline="pipeline" @saved="acceptPipelineConfig" />
     </KeepAlive>
     <template v-if="view === 'apps'">
     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
@@ -176,7 +175,7 @@ const sortOptions = computed(() => [
       </NButton>
 
       <div style="margin-left: auto;">
-        <NSpace v-if="pipelineOperation && !pipelineOperation.done" align="center" :size="8">
+        <NSpace v-if="pipelineOperation" align="center" :size="8">
           <span role="status">{{ t(`pipeline.states.${pipelineOperation.status}`) }}</span>
           <NButton size="small" :disabled="pipelineCancelPending" @click="cancelPipelineOperation">{{ t('pipeline.cancelRun') }}</NButton>
         </NSpace>
@@ -229,13 +228,14 @@ const sortOptions = computed(() => [
     <NAlert v-if="error" type="error" style="margin-bottom: 24px;">{{ error }}</NAlert>
 
     <NAlert v-if="pipelineError" type="error" style="margin-bottom: 16px;">{{ pipelineError }}</NAlert>
+    <PipelineLogs :lines="pipelineLogs" />
     <NEmpty v-if="!apps.length && !loading" :description="t('apps.noInstalledApps')" style="margin-top: 48px;" />
 
     <AppGroupSection v-for="section in listSections" :key="section.group ? `group:${section.group.id}` : 'apps'"
       :section="section" :name="section.group ? pipelineGroupName(section.group) : ''"
       :busy="listControlsDisabled" :cancel-pending="pipelineCancelPending"
       @run="runGroup" @restart="restartGroup" @stop="stopGroup" @cancel="cancelPipelineOperation">
-      <div class="apps-grid" :class="{ 'apps-grid-compact': compactMode }">
+      <div class="apps-grid installed-apps-grid" :class="{ 'apps-grid-compact': compactMode }">
         <AppCard
           v-for="app in section.apps"
           :key="app.app_id"

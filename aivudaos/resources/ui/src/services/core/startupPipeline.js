@@ -1,3 +1,4 @@
+import { graphIssue } from './pipelineDependencies.js'
 import { deepClone } from './configTransfer.js'
 
 // Keep the wire format in the editor: profiles, groups and items are ordered arrays.
@@ -15,6 +16,13 @@ export function createStartupPipelineApi(request) {
   }
 }
 
+export function pipelineSaveError(error, t) {
+  if (error.status === 422 && /config\.profiles\[\d+\]\.groups\[\d+\] contains an unknown field: 'depends_on'/.test(error.message)) {
+    return t('pipeline.updateBackendForGroups')
+  }
+  return error.message
+}
+
 export const ros2Stages = [
   ['middleware', 'Middleware & Transport'], ['hardware', 'Hardware & Drivers'],
   ['perception', 'Perception & Localization'], ['planning', 'Planning & Control'],
@@ -28,15 +36,16 @@ export function pipelineGroupLabel(group, t) {
 export const failurePolicies = ['abort', 'skip_dependents', 'continue']
 export const readinessFields = {
   started: [], delay: ['delay_sec'], tcp: ['host', 'port'], http: ['url'],
-  ros2_node: ['node_name'], ros2_topic: ['topic', 'require_publisher'],
+  ros2_node: ['node_name'], ros2_topic: ['topic', 'require_publisher', 'require_message'],
+  log_contains: ['pattern'], log_regex: ['pattern'], exited_zero: [],
   ros2_lifecycle: ['node_name', 'lifecycle_state'], command: ['command'],
 }
 export const cloneConfig = deepClone
 export const newNode = app_id => ({ app_id, order: 0, enabled: true, depends_on: [], readiness: { type: 'started' } })
-export const newGroup = (id, name) => ({ id, name, order: 0, enabled: true, mode: 'parallel', items: [] })
+export const newGroup = (id, name) => ({ id, name, order: 0, enabled: true, mode: 'parallel', depends_on: [], items: [] })
 export function newReadiness(type) {
   const defaults = { delay_sec: 1, host: '127.0.0.1', port: null, url: '', node_name: '',
-    topic: '', require_publisher: false, lifecycle_state: 'active', command: '' }
+    pattern: '', require_message: false, topic: '', require_publisher: false, lifecycle_state: 'active', command: '' }
   const result = { type }
   for (const field of readinessFields[type] || []) result[field] = defaults[field]
   if (type !== 'started') Object.assign(result, { timeout_sec: 30, interval_sec: 1 })
@@ -52,11 +61,8 @@ export function normalizeOrder(groups) {
 }
 export function editableConfig(config) {
   const result = cloneConfig(config)
-  const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0)
   for (const profile of result.profiles) {
-    profile.groups.sort(byOrder)
-    for (const group of profile.groups) group.items.sort(byOrder)
-    normalizeOrder(profile.groups)
+    profile.groups = normalizeOrder(orderedGroups(profile.groups))
   }
   return result
 }
@@ -90,28 +96,51 @@ function inPipelineOrder(rows) {
   return sorted
 }
 
-export function buildAppListGroups(apps, pipelineConfig) {
-  const profile = pipelineConfig?.profiles?.find(p => p.name === pipelineConfig.default_profile)
-  const remaining = new Map(apps.map(app => [app.app_id, app]))
-  const groups = inPipelineOrder(profile?.groups || []).map(group => {
-    const groupedApps = [], nodeSummaries = new Map()
-    let runningCount = 0
-    for (const item of inPipelineOrder(group.items || [])) {
+function orderedGroups(groups) {
+  const legacy = !groups.some(group => Array.isArray(group.depends_on))
+  let previous = []
+  return inPipelineOrder(groups).map(group => {
+    const depends_on = group.depends_on ?? (legacy && group.enabled !== false ? previous : [])
+    if (legacy && group.enabled !== false) previous = [group.id]
+    return { ...group, depends_on, items: inPipelineOrder(group.items || []) }
+  })
+}
+
+export function prepareAppListGroups(config) {
+  const profile = config?.profiles?.find(profile => profile.name === config.default_profile)
+  return orderedGroups(profile?.groups || []).map(group => {
+    const nodeSummaries = new Map()
+    for (const item of group.items) {
       nodeSummaries.set(item.app_id, {
         enabled: item.enabled !== false,
         readiness: item.readiness || { type: 'started' },
         depends_on: item.depends_on || [],
       })
-      const app = remaining.get(item.app_id)
+    }
+    return { id: group.id, name: group.name, order: group.order ?? 0, mode: group.mode || 'parallel',
+      depends_on: group.depends_on, enabled: group.enabled !== false, nodeSummaries }
+  })
+}
+
+export function joinAppListInventory(apps, preparedGroups) {
+  const remaining = new Map(apps.map(app => [app.app_id, app]))
+  const groups = preparedGroups.map(group => {
+    const groupedApps = []
+    let runningCount = 0
+    for (const id of group.nodeSummaries.keys()) {
+      const app = remaining.get(id)
       if (!app) continue
-      remaining.delete(item.app_id)
+      remaining.delete(id)
       groupedApps.push(app)
       if (app.running) runningCount++
     }
-    return { id: group.id, name: group.name, order: group.order ?? 0, mode: group.mode || 'parallel',
-      enabled: group.enabled !== false, apps: groupedApps, runningCount, nodeSummaries }
+    return { ...group, apps: groupedApps, runningCount }
   })
   return { groups, unassignedApps: [...remaining.values()] }
+}
+
+export function buildAppListGroups(apps, pipelineConfig) {
+  return joinAppListInventory(apps, prepareAppListGroups(pipelineConfig))
 }
 
 export function unassignedNodes(profile, installed) {
@@ -122,29 +151,11 @@ export function unassignedNodes(profile, installed) {
 // Check the draft immediately after a move. Do not silently remove or invert an edge.
 // The server independently validates the entire config (including probe parameters).
 export function profileIssues(profile, installed) {
-  const errors = [], nodes = new Map(), state = new Map(), stack = []
-  const ids = new Set(installed.map(a => a.app_id))
-  const issue = (code, apps, dependency) => errors.push({ code, apps, dependency })
-  profile.groups.forEach((group, stage) => group.items.forEach(node => {
-    const id = node.app_id
-    if (nodes.has(id)) issue('duplicate', [id])
-    if (!ids.has(id)) issue('notInstalled', [id])
-    nodes.set(id, { stage, node, active: group.enabled !== false && node.enabled !== false })
-  }))
-  function visit(id) {
-    state.set(id, 1); stack.push(id)
-    const entry = nodes.get(id)
-    for (const dep of entry.node.depends_on || []) {
-      const upstream = nodes.get(dep)
-      if (!upstream) { issue('missing', [id], dep); continue }
-      if (upstream.stage > entry.stage) issue('reverse', [id, dep], dep)
-      if (entry.active && !upstream.active) issue('disabled', [id, dep], dep)
-      if (state.get(dep) === 1) issue('cycle', stack.slice(stack.indexOf(dep)), dep)
-      else if (!state.has(dep)) visit(dep)
-    }
-    stack.pop(); state.set(id, 2)
-  }
-  for (const id of nodes.keys()) if (!state.has(id)) visit(id)
+  const installedIds = new Set(installed.map(a => a.app_id))
+  const errors = profile.groups.flatMap(g => g.items.filter(n => !installedIds.has(n.app_id))
+    .map(n => ({ code: 'notInstalled', apps: [n.app_id] })))
+  const issue = graphIssue(profile.groups)
+  if (issue) errors.unshift(issue)
   return errors
 }
 

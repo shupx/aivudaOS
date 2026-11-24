@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildAppListGroups, createStartupPipelineApi } from '../aivudaos/resources/ui/src/services/core/startupPipeline.js'
+import { buildAppListGroups, createStartupPipelineApi, editableConfig, joinAppListInventory,
+  prepareAppListGroups } from '../aivudaos/resources/ui/src/services/core/startupPipeline.js'
 
 const group = (id, order, items, options) => ({ id, order, items, name: id, ...options })
 const item = (app_id, order, options) => ({ app_id, order, ...options })
@@ -42,6 +43,27 @@ test('list groups preserve pipeline rank, inventory identity, summaries and disa
   assert.deepEqual(unassignedApps, [apps[0], apps[3]])
   assert.deepEqual(profile, original)
   assert.deepEqual(buildAppListGroups(apps, null), { groups: [], unassignedApps: apps })
+})
+
+test('inventory refresh reuses group summaries and both views honor an explicitly disconnected group', () => {
+  const snapshot = config([group('last', 2, [item('sensor', 0)]),
+    group('off', 1, [], { enabled: false }), group('first', 0, [])])
+  const groupDeps = groups => groups.map(group => [group.id, group.depends_on])
+  const prepared = prepareAppListGroups(snapshot)
+  assert.deepEqual(groupDeps(prepared), [['first', []], ['off', []], ['last', ['first']]])
+  assert.deepEqual(groupDeps(editableConfig(snapshot).profiles[1].groups), groupDeps(prepared))
+
+  const installed = app('sensor', true)
+  const first = joinAppListInventory([], prepared).groups[2]
+  const next = joinAppListInventory([installed], prepared).groups[2]
+  assert.equal(next.nodeSummaries, first.nodeSummaries)
+  assert.equal(first.runningCount, 0)
+  assert.equal(next.runningCount, 1)
+  assert.equal(next.apps[0], installed)
+
+  snapshot.profiles[1].groups[0].depends_on = []
+  assert.deepEqual(groupDeps(prepareAppListGroups(snapshot)), [['first', []], ['off', []], ['last', []]])
+  assert.deepEqual(groupDeps(editableConfig(snapshot).profiles[1].groups), groupDeps(prepareAppListGroups(snapshot)))
 })
 
 test('rank ties keep their wire order even with negative and sparse out-of-order nodes', () => {

@@ -1,6 +1,6 @@
 import { nextTick, shallowRef } from 'vue'
 import {
-  GRAPH_SIZE, applyConnect, applyDisconnect, applyGroupOrder, applyMoveToGroup, isEdgeAnimated, toFlowGraph,
+  GRAPH_SIZE, applyConnect, applyDisconnect, applyMoveToGroup, isEdgeAnimated, toFlowGraph,
 } from '../services/core/pipelineGraph.js'
 
 const poolType = 'application/x-aivuda-pipeline-app'
@@ -58,7 +58,7 @@ export function usePipelineCanvas({ profile, profileProgress, locked, changed, r
     for (const change of changes) {
       if (change.type !== 'remove' || locked.value) continue
       const edge = flow?.findEdge(change.id)
-      if (edge?.data.kind === 'dependency' && applyDisconnect(profile.value, edge).ok) removed = true
+      if (edge && edge.data.kind !== 'sequence' && applyDisconnect(profile.value, edge).ok) removed = true
     }
     flow?.applyEdgeChanges(changes.filter(change => change.type !== 'remove'))
     if (removed) changed(true)
@@ -71,13 +71,6 @@ export function usePipelineCanvas({ profile, profileProgress, locked, changed, r
   }
   function dragGroup(node) {
     const boxes = containers()
-    const center = node.position.x + node.dimensions.width / 2
-    const rank = boxes.filter(b => b.id !== node.id && b.position.x + b.width / 2 < center).length
-    const from = profile.value.groups.findIndex(g => g.id === node.data.groupId)
-    if (rank !== from) {
-      const result = applyGroupOrder(profile.value, node.data.groupId, rank)
-      if (!result.ok) return finish(result)
-    }
     // Freeze default positions before moving a parent so its siblings stay in place.
     const layout = profile.value.layout ??= {}
     for (const box of boxes) if (!layout[box.id]) layout[box.id] = { ...box.position }

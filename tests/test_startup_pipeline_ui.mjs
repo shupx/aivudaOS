@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import './startup_pipeline_list_cases.mjs'
 import {
-  applyOperationEvent, applyRos2Template, createStartupPipelineApi, editableConfig, profileIssues,
+  applyOperationEvent, applyRos2Template, createStartupPipelineApi, editableConfig, pipelineSaveError, profileIssues,
   newGroup, newNode, newProgress, newReadiness, normalizeOrder, readinessFields, ros2Stages, unassignedNodes,
 } from '../aivudaos/resources/ui/src/services/core/startupPipeline.js'
 import {
@@ -121,11 +121,11 @@ test('preview respects stage barriers and selects newly ready lower-ranked nodes
   assert.deepEqual(analyze().preview[1].batches, [['b'], ['a'], ['c']])
 })
 
-test('conflicts identify cycle members, reverse-stage edges, unassigned and disabled prerequisites', () => {
+test('conflicts identify cycle members, unrestricted group positions, unassigned and disabled prerequisites', () => {
   const analysis = (...groups) => analyzeProfile({ groups }, apps('a', 'b', 'c'))
   assert.deepEqual(analysis(group('one', node('a', ['b']), node('b', ['a']))).errors[0].apps, ['a', 'b'])
   assert.equal(analysis(group('one', node('a', ['a']))).errors[0].code, 'cycle')
-  assert.equal(analysis(group('one', node('a', ['b'])), group('two', node('b'))).errors[0].code, 'reverse')
+  assert.deepEqual(analysis(group('one', node('a', ['b'])), group('two', node('b'))).errors, [])
   assert.equal(analysis(group('one', node('a', ['b']))).errors[0].code, 'missing')
   assert.equal(analysis(group('one', { ...node('b'), enabled: false }, node('a', ['b']))).errors[0].code, 'disabled')
   assert.equal(analysis({ ...group('off', node('b')), enabled: false }, group('on', node('a', ['b']))).errors[0].code, 'disabled')
@@ -142,20 +142,20 @@ function rejectsUnchanged(p, code, act) {
   assert.deepEqual(act(), { ok: false, code }); assert.deepEqual(p, before)
 }
 
-test('Flow projection uses parent-relative app positions and read-only stage edges without serializing graph state', () => {
-  const p = profile(group('a', node('a')), { ...group('off'), enabled: false }, group('b', node('b', ['a'])))
+test('Flow projection uses parent-relative app positions and editable stage edges without serializing graph state', () => {
+  const p = profile(group('a', node('a')), { ...group('off'), enabled: false }, { ...group('b', node('b', ['a'])), depends_on: ['a'] })
   p.layout = { 'group:a': { x: -40, y: 27, w: 400, h: 300 }, 'app:a': { x: 29, y: 81, w: 210 } }
   const before = structuredClone(p), graph = toFlowGraph(p, apps('a', 'pool')), nodes = byId(graph)
   assert.deepEqual([...nodes.keys()], ['group:a', 'app:a', 'group:off', 'group:b', 'app:b'])
   const stage = nodes.get('group:a'), child = nodes.get('app:a')
   assert.deepEqual(stage.data, { groupId: 'a' }); assert.equal(stage.type, 'pipelineGroup')
   assert.deepEqual(stage.position, { x: -40, y: 27 }); assert.equal(stage.width, 400); assert.equal(stage.height, 300)
-  assert.equal(stage.connectable, false); assert.equal(stage.dragHandle, '.group-header')
+  assert.notEqual(stage.connectable, false); assert.equal(stage.dragHandle, '.group-header')
   assert.deepEqual(child.data, { appId: 'a', groupId: 'a' }); assert.equal(child.type, 'pipelineApp')
-  assert.deepEqual(child.position, { x: 29, y: 81 }); assert.equal(child.width, 210); assert.equal(child.height, GRAPH_SIZE.appHeight)
+  assert.deepEqual(child.position, { x: 29, y: 81 }); assert.equal(child.width, GRAPH_SIZE.appWidth); assert.equal(child.height, GRAPH_SIZE.appHeight)
   assert.equal(child.parentNode, stage.id); assert.equal(child.extent, undefined)
   const signatures = graph.edges.map(e => [e.data.kind, e.source, e.target, e.deletable])
-  assert.deepEqual(signatures, [['dependency', 'app:a', 'app:b', true], ['stage', 'group:a', 'group:b', false]])
+  assert.deepEqual(signatures, [['dependency', 'app:a', 'app:b', true], ['stage', 'group:a', 'group:b', true]])
   for (const e of graph.edges) assert.deepEqual(e.markerEnd, { type: 'arrowclosed' })
   child.position.x = 999; assert.deepEqual(p, before)
 })
@@ -169,13 +169,18 @@ test('draw and delete modify only the prerequisite; invalid edits leave the draf
   rejectsUnchanged(p, 'duplicate', () => add('a', 'b'))
   rejectsUnchanged(p, 'cycle', () => add('c', 'a'))
   rejectsUnchanged(p, 'cycle', () => add('a', 'a'))
-  rejectsUnchanged(p, 'reverse', () => add('end', 'a'))
+  assert.ok(add('end', 'a').ok)
+  assert.ok(applyDisconnect(p, connection('end', 'a')).ok)
   rejectsUnchanged(p, 'disabled', () => add('off', 'a'))
   rejectsUnchanged(p, 'missing', () => add('pool', 'a'))
   rejectsUnchanged(p, 'endpoint', () => applyConnect(p, { source: 'group:first', target: 'app:a' }))
   assert.deepEqual(add('b', 'end'), { ok: true })
   const graph = toFlowGraph(p), dep = graph.edges.find(e => e.target === 'app:end')
-  rejectsUnchanged(p, 'derived', () => applyDisconnect(p, graph.edges.find(e => e.data.kind === 'stage')))
+  const stage = { source: 'group:first', target: 'group:last' }
+  assert.ok(applyConnect(p, stage).ok)
+  rejectsUnchanged(p, 'cycle', () => applyConnect(p, { source: stage.target, target: stage.source }))
+  assert.ok(applyDisconnect(p, stage).ok)
+  assert.equal(toFlowGraph(p).edges.some(e => e.data.kind === 'stage'), false)
   assert.deepEqual(applyDisconnect(p, dep), { ok: true }); assert.deepEqual(p.groups[1].items[0].depends_on, [])
   rejectsUnchanged(p, 'missing', () => applyDisconnect(p, dep))
   assert.deepEqual(applyDisconnect(p, connection('a', 'b')), { ok: true }); assert.deepEqual(p, before)
@@ -188,7 +193,7 @@ test('assignment, stage transfers and explicit index edits preserve fields and s
   worker.readiness = { type: 'tcp', host: 'localhost', port: 3010, timeout_sec: 9 }; worker.note = 'preserve item metadata'
   p.layout = { 'app:worker': { x: 12, y: 70, w: 239, h: 84 } }
   const move = (id, g, pos, idx) => applyMoveToGroup(p, id, g, pos, idx)
-  rejectsUnchanged(p, 'reverse', () => move('worker', 'after', { x: 0, y: 0 }))
+  assert.ok(applyMoveToGroup(structuredClone(p), 'worker', 'after', { x: 0, y: 0 }).ok)
   rejectsUnchanged(p, 'disabled', () => move('worker', 'off', { x: 0, y: 0 }))
   rejectsUnchanged(p, 'index', () => move('worker', 'work', undefined, 7))
   rejectsUnchanged(p, 'position', () => move('worker', 'work', { x: Infinity, y: 0 }))
@@ -199,7 +204,7 @@ test('assignment, stage transfers and explicit index edits preserve fields and s
   assert.deepEqual(worker.depends_on, ['base']); assert.equal(worker.note, 'preserve item metadata'); assert.equal(worker.readiness.port, 3010)
   assert.deepEqual(move('pool', 'work', { x: 15, y: 88 }), { ok: true }); assert.deepEqual(p.groups[1].items[1], { ...newNode('pool'), order: 1 })
   assert.deepEqual(p.groups.flatMap(g => g.items.map(n => [n.app_id, n.order])), [['worker', 0], ['base', 1], ['sibling', 0], ['pool', 1], ['end', 0]])
-  rejectsUnchanged(p, 'reverse', () => applyGroupOrder(p, 'last', 0))
+  assert.ok(applyGroupOrder(structuredClone(p), 'last', 0).ok)
   assert.deepEqual(applyGroupOrder(p, 'work', 0), { ok: true }); assert.deepEqual(p.groups.map(g => [g.id, g.order]),
     [['work', 0], ['first', 1], ['off', 2], ['last', 3], ['after', 4]])
   assert.deepEqual(move('worker', 'last'), { ok: true })
@@ -270,7 +275,7 @@ test('node status uses live running state after completion and preserves unresol
 })
 
 test('animated edges derive transient activity from the matching node or stage operation statuses', () => {
-  const p = profile(group('up', node('up')), group('down', node('down', ['up'])))
+  const p = profile(group('up', node('up')), { ...group('down', node('down', ['up'])), depends_on: ['up'] })
   const graph = toFlowGraph(p), dependency = graph.edges.find(e => e.data.kind === 'dependency'), stage = graph.edges.find(e => e.data.kind === 'stage')
   const state = newProgress({ operation_id: 'run' })
   state.nodes.set('up', 'active'); state.nodes.set('down', 'waiting_ready')
@@ -315,4 +320,11 @@ test('all readiness fields, states and stage names are available in both languag
   }
   assert.equal(newReadiness('tcp').host, '127.0.0.1'); assert.equal(newReadiness('ros2_topic').require_publisher, false)
   assert.equal(newReadiness('delay').delay_sec, 1); assert.equal(newReadiness('ros2_lifecycle').lifecycle_state, 'active')
+})
+
+
+test('an older backend rejecting group dependencies gives a retryable upgrade message', () => {
+  const message = "config.profiles[0].groups[1] contains an unknown field: 'depends_on'; config.default_profile must name an existing profile"
+  assert.equal(pipelineSaveError({ status: 422, message }, key => key), 'pipeline.updateBackendForGroups')
+  assert.equal(pipelineSaveError({ status: 422, message: 'Dependency cycle' }, key => key), 'Dependency cycle')
 })

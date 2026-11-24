@@ -1,3 +1,4 @@
+import { graphIssue, schedule } from './pipelineDependencies.js'
 // A projection of an editableConfig profile (arrays are already in execution rank order).
 // Nothing here stores Flow nodes or edges in the execution model.
 import { newNode, normalizeOrder } from './startupPipeline.js'
@@ -11,77 +12,12 @@ const ok = () => ({ ok: true })
 const fail = code => ({ ok: false, code })
 const validPosition = p => Number.isFinite(p?.x) && Number.isFinite(p?.y)
 const validIndex = (index, end) => Number.isInteger(index) && index >= 0 && index <= end
-const findGroup = (groups, id) => groups.find(g => g.items.some(n => n.app_id === id))
+export const findGroup = (groups, id) => groups.find(g => g.items.some(n => n.app_id === id))
 const findItem = (group, id) => group?.items.find(n => n.app_id === id)
 const size = (value, fallback) => Number.isFinite(value) && value > 0 ? value : fallback
 
-// A newly ready item can precede every item already waiting. Select the lowest rank
-// without rescanning the queue or sorting. Each summary bit denotes a nonempty word
-// below it; at most seven 32-bit levels cover every possible JavaScript array index.
-function rankedQueue(count) {
-  const levels = []
-  do { count = Math.ceil(count / 32); levels.push(new Uint32Array(count || 1)) } while (count > 1)
-  return {
-    add(rank) {
-      for (const words of levels) {
-        const word = rank >>> 5, old = words[word]
-        words[word] |= 1 << (rank & 31)
-        if (old) break
-        rank = word
-      }
-    },
-    take() {
-      if (!levels[levels.length - 1][0]) return undefined
-      let rank = 0
-      for (let k = levels.length - 1; k >= 0; k--) {
-        const bits = levels[k][rank]
-        rank = rank * 32 + (31 - Math.clz32(bits & -bits))
-      }
-      let cursor = rank
-      for (const words of levels) {
-        const word = cursor >>> 5
-        words[word] &= ~(1 << (cursor & 31))
-        if (words[word]) break
-        cursor = word
-      }
-      return rank
-    },
-  }
-}
-
-// Kahn traversal, ignoring cross-stage dependencies already satisfied by a barrier.
-// Parallel items of equal depth retain array order; sequential items use ready rank.
-function schedule(group) {
-  const items = group.items, serial = group.mode === 'sequential'
-  const rank = new Map(items.map((item, i) => [item.app_id, i]))
-  const waiting = items.map(() => 0), next = items.map(() => []), depth = items.map(() => 0)
-  const batches = [], ready = [], ranked = serial ? rankedQueue(items.length) : null
-  const enqueue = i => serial ? ranked.add(i) : ready.push(i)
-  items.forEach((item, i) => {
-    for (const dep of item.depends_on || []) if (rank.has(dep)) {
-      next[rank.get(dep)].push(i); waiting[i]++
-    }
-  })
-  waiting.forEach((n, i) => { if (!n) enqueue(i) })
-  let visited = 0, cursor = 0
-  for (let i; (i = serial ? ranked.take() : ready[cursor++]) !== undefined;) {
-    visited++
-    if (serial && items[i].enabled !== false) batches.push([items[i]])
-    for (const j of next[i]) {
-      depth[j] = Math.max(depth[j], depth[i] + 1)
-      if (--waiting[j] === 0) enqueue(j)
-    }
-  }
-  const unscheduled = []
-  items.forEach((item, i) => {
-    if (waiting[i] || item.enabled === false) unscheduled.push(item)
-    else if (!serial) (batches[depth[i]] ??= []).push(item)
-  })
-  return { batches: batches.filter(Boolean), unscheduled, cycle: visited !== items.length }
-}
-
 function edge(kind, source, target) {
-  const editable = kind === 'dependency'
+  const editable = kind !== 'sequence'
   return { id: `${kind}:${source}:${target}`, source, target, data: { kind },
     class: editable ? '' : 'pipeline-derived-edge', selectable: editable, focusable: editable,
     deletable: editable, markerEnd: { type: 'arrowclosed' } }
@@ -101,35 +37,33 @@ function flowNode(id, type, data, { x, y, w, h }) {
 export function toFlowGraph(profile) {
   const layout = profile?.layout || {}, nodes = [], edges = [], assigned = new Set(), s = GRAPH_SIZE
   for (const g of profile?.groups || []) for (const item of g.items) assigned.add(item.app_id)
-  let stageX = 0, previousGroup
+  let stageX = 0
   for (const group of profile?.groups || []) {
-    const id = groupKey(group.id), { batches, unscheduled, cycle } = schedule(group), children = []
-    let previousApp, columnX = s.padding, right = 0, bottom = 0
+    const id = groupKey(group.id), children = []
+    const { batches, unscheduled, sequentialPredecessors, cycle } = schedule(group)
+    let columnX = s.padding, right = 0, bottom = 0
     for (const batch of [...batches, unscheduled]) {
       let rowY = s.header, columnWidth = 0
       for (const item of batch) {
         const key = appKey(item.app_id), deps = item.depends_on || []
-        const rect = box(layout[key], columnX, rowY, s.appWidth, s.appHeight)
+        const rect = { ...box(layout[key], columnX, rowY, s.appWidth, s.appHeight), w: s.appWidth, h: s.appHeight }
         children.push({ ...flowNode(key, 'pipelineApp', { appId: item.app_id, groupId: group.id }, rect), parentNode: id })
         rowY = Math.max(rowY, rect.y) + rect.h + s.rowGap
         columnWidth = Math.max(columnWidth, rect.x + rect.w - columnX)
         right = Math.max(right, rect.x + rect.w); bottom = Math.max(bottom, rect.y + rect.h)
         for (const dep of deps) if (assigned.has(dep)) edges.push(edge('dependency', appKey(dep), key))
-        if (!cycle && group.enabled !== false && group.mode === 'sequential' && batch !== unscheduled) {
-          if (previousApp !== undefined && !deps.includes(previousApp)) edges.push(edge('sequence', appKey(previousApp), key))
-          previousApp = item.app_id
+        const previous = sequentialPredecessors.get(item)
+        if (!cycle && group.enabled !== false && previous !== undefined && !deps.includes(previous)) {
+          edges.push(edge('sequence', appKey(previous), key))
         }
       }
       columnX += columnWidth + s.columnGap
     }
     const rect = box(layout[id], stageX, 0, s.groupWidth, s.groupHeight)
     rect.w = Math.max(rect.w, right + s.padding); rect.h = Math.max(rect.h, bottom + s.padding)
-    nodes.push({ ...flowNode(id, 'pipelineGroup', { groupId: group.id }, rect), connectable: false, dragHandle: '.group-header' })
+    nodes.push({ ...flowNode(id, 'pipelineGroup', { groupId: group.id }, rect), dragHandle: '.group-header' })
     for (const child of children) nodes.push(child) // Parents must precede their children in Flow.
-    if (group.enabled !== false) {
-      if (previousGroup) edges.push(edge('stage', previousGroup, id))
-      previousGroup = id
-    }
+    for (const dep of group.depends_on || []) edges.push(edge('stage', groupKey(dep), id))
     stageX = Math.max(stageX, rect.x + rect.w + s.stageGap)
   }
   return { nodes, edges }
@@ -149,23 +83,22 @@ export function pipelineNodeStatus(active, status, enabled, running) {
 }
 
 // Validate a shallow candidate before touching any mutable (possibly reactive) array.
-function issue(groups) {
-  const owners = new Map(), stages = new Set()
-  for (const [stage, group] of groups.entries()) {
-    if (stages.has(group.id)) return 'duplicate'
-    stages.add(group.id)
-    for (const item of group.items) {
-      if (owners.has(item.app_id)) return 'duplicate'
-      owners.set(item.app_id, { item, stage, enabled: group.enabled !== false && item.enabled !== false })
-    }
+function issue(groups) { return graphIssue(groups)?.code }
+
+function groupConnection(profile, connection, remove) {
+  const from = connection.source.slice(6), to = connection.target.slice(6)
+  const target = profile.groups.find(g => g.id === to)
+  if (!target || !profile.groups.some(g => g.id === from)) return fail('missing')
+  const current = target.depends_on || []
+  if (remove && !current.includes(from)) return fail('missing')
+  if (!remove && current.includes(from)) return fail('duplicate')
+  const depends_on = remove ? current.filter(id => id !== from) : [...current, from]
+  if (!remove) {
+    const error = issue(profile.groups.map(g => g === target ? { ...g, depends_on } : g))
+    if (error) return fail(error)
   }
-  for (const { item, stage, enabled } of owners.values()) for (const dep of item.depends_on || []) {
-    const source = owners.get(dep)
-    if (!source) return 'missing'
-    if (source.stage > stage) return 'reverse'
-    if (enabled && !source.enabled) return 'disabled'
-  }
-  if (groups.some(g => schedule(g).cycle)) return 'cycle'
+  target.depends_on = depends_on
+  return ok()
 }
 
 function appEnds(connection) {
@@ -174,6 +107,7 @@ function appEnds(connection) {
 }
 
 export function applyConnect(profile, connection) {
+  if (connection?.source?.startsWith('group:') && connection.target?.startsWith('group:')) return groupConnection(profile, connection, false)
   const [from, to] = appEnds(connection), groups = profile.groups
   if (!from || !to) return fail('endpoint')
   const target = findGroup(groups, to), item = findItem(target, to)
@@ -190,6 +124,7 @@ export function applyConnect(profile, connection) {
 }
 
 export function applyDisconnect(profile, connection) {
+  if (connection?.source?.startsWith('group:') && connection.target?.startsWith('group:')) return groupConnection(profile, connection, true)
   if (connection?.data?.kind && connection.data.kind !== 'dependency') return fail('derived')
   const [from, to] = appEnds(connection)
   if (!from || !to) return fail('endpoint')

@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 
 // Each PUT carries the version acknowledged by the preceding PUT. Carry only that
 // acknowledgement forward: an older response must never replace the current draft.
-export function usePipelineAutosave(config, api, error, onSaved) {
+export function usePipelineAutosave(config, api, error, onSaved, formatError = e => e.message) {
   const revision = ref(0), acknowledged = ref(0), saveState = ref('idle')
   const dirty = computed(() => acknowledged.value !== revision.value)
   let timer, inFlight, due = 0, paused = false, disposed = false
@@ -26,7 +26,7 @@ export function usePipelineAutosave(config, api, error, onSaved) {
     }).catch(e => {
       if (e.status === 409) saveState.value = 'conflict'
       else saveState.value = revision.value === sent ? 'error' : 'pending'
-      if (saveState.value !== 'pending') error.value = e.message
+      if (saveState.value !== 'pending') error.value = formatError(e)
     }).finally(() => { inFlight = undefined; schedule() })
     return inFlight
   }

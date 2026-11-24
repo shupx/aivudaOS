@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, StrictStr
+from pydantic import BaseModel, StrictBool, StrictStr
 
 from aivudaos.core.apps.pipeline import PipelineConflict
 from aivudaos.core.errors import AppOperationConflictError, AppRuntimeError
@@ -16,6 +16,7 @@ router = APIRouter(prefix='/api/apps/pipeline', tags=['apps'], dependencies=[Dep
 class PipelineSelection(BaseModel, extra='forbid'):
     profile: Optional[StrictStr] = None
     group_id: Optional[StrictStr] = None
+    with_deps: StrictBool = False
 
 
 @contextmanager
@@ -56,7 +57,8 @@ def validate_startup_pipeline(config: Dict[str, Any]):
 def _queue(action, selection):
     with pipeline_errors():
         return get_pipeline_service().queue(action, selection.profile if selection else None,
-                                             selection.group_id if selection else None)
+                                             selection.group_id if selection else None,
+                                             with_deps=selection.with_deps if selection else False)
 
 
 @router.post('/run', status_code=202)

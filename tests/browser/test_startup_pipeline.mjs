@@ -15,12 +15,15 @@ const events = entries => entries.map(([type, payload], i) => `event: ${type}\nd
 // Browser-only gateway stub. Observe real request bodies; the test never mutates
 // application state or calls Vue Flow's internal move/connect methods.
 async function appsPage(t, { active = false, conflict = false, stream, cfg = initial() } = {}) {
-  const state = { cfg, installed: [...installed], writes: [], runs: [], actions: [], configViews: [], faults: [], canceled: false }
+  const state = { cfg, installed: [...installed], writes: [], runs: [], actions: [], configViews: [], faults: [], canceled: false,
+    active, eventStreams: [], inventoryReads: 0 }
   const page = await dashboardPage(t, '/dashboard/apps', async (route, { pathname, searchParams }) => {
     const req = route.request()
     let json = { items: [] }
-    if (pathname.endsWith('/apps/installed')) json = { items: state.installed }
-    else if (pathname.endsWith('/apps/pipeline')) {
+    if (pathname.endsWith('/apps/installed')) {
+      state.inventoryReads++
+      json = { items: state.installed }
+    } else if (pathname.endsWith('/apps/pipeline')) {
       if (req.method() === 'PUT') {
         const draft = req.postDataJSON(); state.writes.push(draft)
         if (conflict) { state.cfg.version++; return route.fulfill({ status: 409, json: { detail: 'Pipeline version conflict' } }) }
@@ -29,8 +32,8 @@ async function appsPage(t, { active = false, conflict = false, stream, cfg = ini
       }
       const list = searchParams.get('view') === 'list'
       if (req.method() === 'GET') state.configViews.push(list ? 'list' : 'editor')
-      json = { config: state.cfg, active_operation: active && !state.canceled ? {
-        operation_id: 'boot', profile: 'default', action: 'run', ...(typeof active === 'object' ? active : {}),
+      json = { config: state.cfg, active_operation: state.active && !state.canceled ? {
+        operation_id: 'boot', profile: 'default', action: 'run', ...(typeof state.active === 'object' ? state.active : {}),
       } : null }
       if (!list) Object.assign(json, { installed_apps: state.installed, unassigned_apps: [], validation: valid })
     } else if (pathname.endsWith('/pipeline/validate')) json = valid
@@ -41,7 +44,9 @@ async function appsPage(t, { active = false, conflict = false, stream, cfg = ini
       json = { operation_id: `${action}-${state.actions.length}` }
     }
     else if (/\/operations\/[^/]+\/events$/.test(pathname)) {
-      if (stream) return route.fulfill({ contentType: 'text/event-stream', body: await stream() })
+      const id = pathname.split('/').at(-2)
+      state.eventStreams.push(id)
+      if (stream) return route.fulfill({ contentType: 'text/event-stream', body: await stream(id) })
       return route.abort()
     } else if (pathname.endsWith('/boot/cancel') && req.method() === 'POST') state.canceled = true
     else if (pathname.endsWith('/operations/boot')) json = { status: state.canceled ? 'canceled' : 'running', done: state.canceled }
@@ -66,6 +71,7 @@ test('App list loads only the lightweight config and sends group and global acti
   const first = page.getByRole('region', { name: 'first', exact: true })
   await first.locator('#app-card-alpha').waitFor()
   await page.getByRole('region', { name: 'Unassigned apps' }).locator('#app-card-gamma').waitFor()
+  const groupedCard = await first.locator('#app-card-alpha').boundingBox()
   assert.deepEqual(state.configViews, ['list'])
   assert.equal(await page.locator('.stage-connector').count(), 1)
   const search = page.getByPlaceholder('Search by app name and jump')
@@ -82,6 +88,8 @@ test('App list loads only the lightweight config and sends group and global acti
   await page.getByRole('button', { name: 'Group by pipeline', exact: true }).click()
   await first.waitFor({ state: 'detached' })
   assert.equal(await page.locator('.apps-grid .apps-app-card').count(), 3)
+  const flatCard = await page.locator('#app-card-alpha').boundingBox()
+  assert.deepEqual([flatCard.width, flatCard.height], [groupedCard.width, groupedCard.height])
   for (const [label, action] of [['Start default pipeline', 'run'], ['Restart default pipeline', 'restart'], ['Stop default pipeline in reverse order', 'stop']]) {
     await Promise.all([
       page.waitForRequest(r => r.method() === 'POST' && r.url().includes(`/pipeline/${action}?`)),
@@ -101,6 +109,73 @@ test('the list can cancel an attached group restart and restores its controls on
   await group.getByRole('button', { name: 'Cancel', exact: true }).click()
   await group.getByRole('button', { name: 'Restart group first', exact: true }).waitFor()
   assert.ok(state.canceled)
+  assert.deepEqual(state.faults, [])
+})
+
+test('switching tabs shares one operation stream, completion refresh and log history', async t => {
+  let finish
+  const terminal = new Promise(resolve => { finish = resolve })
+  t.after(finish)
+  const { page, state } = await appsPage(t, { stream: id => id === 'boot' ? terminal : events([
+    ['log', { message: 'Next run' }], ['completed', { done: true, status: 'completed' }],
+  ]) })
+  // Install before reload so the background inventory poll uses this clock too.
+  await page.getByRole('button', { name: 'Start default pipeline', exact: true }).waitFor()
+  await page.clock.install()
+  state.active = { group_id: 'first' }
+  await page.reload()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).first().waitFor()
+  await page.getByText('Startup pipeline', { exact: true }).click()
+  await canvasApp(page, 'alpha').waitFor()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).waitFor()
+  assert.deepEqual(state.eventStreams, ['boot'])
+
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 100))
+  const reads = state.inventoryReads
+  state.active = false
+  const refresh = page.waitForResponse(r => r.url().includes('/apps/installed?'))
+  finish(events([['log', { message: 'Checking sensor' }], ['error', { done: true, status: 'failed', message: 'Sensor timed out' }]]))
+  await refresh
+  const log = page.getByRole('log')
+  await log.getByText('Sensor timed out', { exact: true }).waitFor()
+  assert.equal(state.inventoryReads, reads + 1)
+  await page.clock.resume()
+
+  await page.getByText('App list', { exact: true }).click()
+  await log.getByText('Checking sensor', { exact: true }).waitFor()
+  assert.equal(await log.getByText('Sensor timed out', { exact: true }).count(), 1)
+  await page.getByRole('button', { name: 'Start default pipeline', exact: true }).click()
+  await log.getByText('Next run', { exact: true }).waitFor()
+  assert.equal(await log.getByText('Sensor timed out', { exact: true }).count(), 0)
+  assert.deepEqual(state.eventStreams, ['boot', 'run-1'])
+  assert.deepEqual(state.faults, [])
+})
+
+test('a delayed editor config response cannot replace a newer run from the list', async t => {
+  const { page, state } = await appsPage(t, { stream: id => events([
+    ['log', { message: id }], ['completed', { done: true, status: 'completed' }],
+  ]) })
+  await page.getByRole('button', { name: 'Start default pipeline', exact: true }).waitFor()
+  let release
+  const held = new Promise(resolve => { release = resolve })
+  t.after(release)
+  const fullRead = r => r.url().includes('/api/apps/pipeline?') && !new URL(r.url()).searchParams.has('view')
+  await page.route('**/api/apps/pipeline?*', async route => {
+    if (!fullRead(route.request())) return route.fallback()
+    await held
+    return route.fulfill({ json: { config: state.cfg, validation: valid, installed_apps: state.installed,
+      active_operation: { operation_id: 'old', profile: 'default', action: 'run' } } })
+  })
+  await Promise.all([page.waitForRequest(fullRead), page.getByText('Startup pipeline', { exact: true }).click()])
+  await page.getByText('App list', { exact: true }).click()
+  await page.getByRole('button', { name: 'Start default pipeline', exact: true }).click()
+  await page.getByRole('log').getByText('run-1', { exact: true }).waitFor()
+  const response = page.waitForResponse(fullRead)
+  release()
+  await response
+  await page.getByText('Startup pipeline', { exact: true }).click()
+  await page.getByRole('log').getByText('run-1', { exact: true }).waitFor()
+  assert.deepEqual(state.eventStreams, ['run-1'])
   assert.deepEqual(state.faults, [])
 })
 
@@ -288,5 +363,31 @@ test('cancel an attached run over the polling fallback and recover from a settin
   await page.getByText('Pipeline version conflict', { exact: true }).waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await takeover.waitFor(); assert.equal(await takeover.isChecked(), false)
+  assert.deepEqual(state.faults, [])
+})
+
+
+test('legacy group links can be deleted, reversed and saved while dragging only changes layout', async t => {
+  const { page, state } = await editor(t)
+  const first = canvasGroup(page, 'first'), second = canvasGroup(page, 'second')
+  const line = page.locator('.vue-flow__edge[data-id^="stage:"] .vue-flow__edge-path')
+  const cleared = await editAndSave(page, async () => {
+    const p = await line.evaluate(el => {
+      const point = el.getPointAtLength(el.getTotalLength() / 2).matrixTransform(el.getScreenCTM())
+      return { x: point.x, y: point.y }
+    })
+    await page.mouse.click(p.x, p.y)
+    await page.keyboard.press('Delete')
+  })
+  assert.deepEqual(cleared.profiles[0].groups.map(g => g.depends_on), [[], []])
+  const linked = await editAndSave(page, async () => {
+    await drag(page, await center(second.locator('.stage-anchor.source')), await center(first.locator('.stage-anchor.target')))
+  })
+  assert.deepEqual(linked.profiles[0].groups.map(g => g.depends_on), [['second'], []])
+  const moved = await editAndSave(page, async () => {
+    const start = await center(first.locator('.group-name'))
+    await drag(page, start, { x: start.x + 52, y: start.y + 64 })
+  })
+  assert.deepEqual(moved.profiles[0].groups, linked.profiles[0].groups)
   assert.deepEqual(state.faults, [])
 })

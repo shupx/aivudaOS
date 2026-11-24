@@ -23,13 +23,15 @@
 
 ## 启动流水线
 
-`useAppListGroups.js` 通过 `GET /pipeline?view=list` 读取分组配置和当前操作，`buildAppListGroups` 将其与实时安装列表合并，`AppGroupSection.vue` 用 CSS 虚线框包裹原有 `AppCard`。列表切回时重读配置，执行结束后刷新运行数。分组控制与全局控制共用 operation、事件和取消接口。
+`useAppListGroups.js` 通过 `GET /pipeline?view=list` 读取分组配置和当前操作。`prepareAppListGroups` 在配置变化时整理顺序、依赖和探活摘要；安装列表刷新时，`joinAppListInventory` 匹配最新的 App 对象并统计运行数。`AppGroupSection.vue` 用 CSS 虚线框包裹原有 `AppCard`。列表和编辑器共享同一操作的事件订阅，操作结束后刷新应用状态。
 
 切换标签会提交待保存的改动，版本冲突的草稿保留在编辑器中。运行结束后，节点以 App 的实时运行状态为准，失败、降级和跳过会保留到下一次操作。拖出原组边界但没有进入其他组时，原组会扩展。自动整理重新生成坐标和组框尺寸。
 
-打开「启动流水线」后才加载 `@vue-flow/core` 及其样式。新建分组，展开未分组托盘，点击 App 加入首组，或拖入目标分组。将上游 App 的右锚点连到下游 App 的左锚点即可添加依赖。选中依赖线并按 Delete 或 Backspace 删除。双击组名可重命名，点组内的 ▶ 可单独启动该组，点 App 可编辑就绪探活。设置中可切换 profile、应用 ROS 2 分层模板、设置失败策略和开机自启。
+打开「启动流水线」后才加载 `@vue-flow/core` 及其样式。新建分组，展开未分组托盘，点击 App 加入首组，或拖入目标分组。组间和 App 间均可从右锚点连至另一节点左锚点。独立组可保持断开，拖动组框只改变位置。列表和托盘卡片进入分组时保持各自的尺寸。选中依赖线并按 Delete 或 Backspace 删除。双击组名可重命名，点组内的 ▶ 可单独启动该组，点 App 可编辑就绪探活。设置中可切换 profile、应用 ROS 2 分层模板、设置失败策略和开机自启。
 
-`src/services/core/pipelineGraph.js` 将执行模型投影为画布，也校验连线和移动。`usePipelineCanvas.js` 用 `shallowRef` 保存节点与边，按节点索引更新相邻边动画。`useStartupPipeline.js` 管理编辑和运行，`usePipelineAutosave.js` 在松手或连线变更后等待 500 ms 再提交，同一时间只发送一个 PUT。版本冲突会保留本地草稿，确认重新加载后才读取服务器版本。自动整理仅更新当前 profile 的布局。
+`src/services/core/pipelineDependencies.js` 校验跨组与 App 的混合依赖，`pipelineGraph.js` 将其投影为画布。单组操作可选择连带启动上游。列表和画布通过 `PipelineLogs.vue` 展示运行日志和失败原因。`usePipelineCanvas.js` 用 `shallowRef` 保存节点与边，按节点索引更新相邻边动画。`useStartupPipeline.js` 管理编辑和运行，`usePipelineAutosave.js` 在松手或连线变更后等待 500 ms 再提交，同一时间只发送一个 PUT。版本冲突会保留本地草稿，确认重新加载后才读取服务器版本。自动整理仅更新当前 profile 的布局。
+
+如果桌面端提示后端版本过旧，先保留编辑器中的草稿。更新提供当前页面 API 的网关后，可点击「重新保存」。重启整个桌面进程前需另行备份尚未保存的编辑。
 
 逻辑验证：在仓库根目录运行 `node --test tests/test_startup_pipeline_ui.mjs`，在本目录运行 `npm run build`。后端规则见[应用管理](../../../docs/app-management.md#启动流水线)。
 

@@ -21,7 +21,7 @@ const node = computed(() => ui.nodeDraft)
             </select>
           </label>
           <template v-for="field in readinessFields[node.readiness.type]" :key="field">
-            <label v-if="field === 'require_publisher'" class="check">
+            <label v-if="field === 'require_publisher' || field === 'require_message'" class="check">
               <input type="checkbox" v-model="node.readiness[field]">{{ t(`pipeline.fields.${field}`) }}
             </label>
             <label v-else class="field">{{ t(`pipeline.fields.${field}`) }}

@@ -18,15 +18,19 @@ App 的 `start / stop / restart` 与批量 `restart-running / restart-autostart 
 
 应用列表读取 `default_profile`。默认方案含非空分组时，列表按阶段显示分组框，未分组应用放在底部。组标题显示执行模式和运行数。使用标题右侧按钮启动、重启或停止单组，使用列表工具栏操作整条流程。执行中可取消。搜索仍可跳转到卡片，切换平铺或紧凑布局后也可使用。
 
-在 Apps 顶部切换到「启动流水线」，新建分组并展开未分组托盘。点击 App 可加入首组，也可以直接拖入目标分组。虚线框表示分组，组间箭头表示执行顺序。将上游 App 的右锚点连到下游 App 的左锚点，即可添加就绪依赖。选中依赖线后按 Delete 或 Backspace 可删除。串行组中按执行次序推导的箭头会随模式和顺序自动调整。创建环路或反向跨组依赖时，画布会提示原因并保留原配置。
+在 Apps 顶部切换到「启动流水线」，新建分组并展开未分组托盘。点击 App 可加入首组，也可以拖入目标分组。托盘和画布的 App 卡片均为 200 × 76。应用列表的标准卡片宽 300 px，紧凑模式宽 240 px，窄屏按可用空间收缩。
 
-双击组名可重命名，分组标题上的 ▶ 只运行该组。点击 App 可设置探活、目标分组和组内次序。「自动整理」按分层排列画布。拖动松手和连线变更后等待 500 ms 自动保存，出现版本冲突时可保留当前草稿查看，或确认重新加载服务器版本。
+在两组之间，从上游组框右侧的圆点拖到下游组框左侧的圆点。选中连线后按 Delete 或 Backspace 可断开。可以保留多个独立分组、分支和汇合。移动组框只改变位置。App 之间也可用同样的方式创建就绪依赖，包括从画布右侧连向左侧。串行组内的顺序箭头随组内次序和 App 依赖自动生成。
 
-齿轮设置中可切换 profile、调整失败策略、选择开机自启接管或应用 ROS 2 分层模板。模板依次为 Middleware & Transport、Hardware & Drivers、Perception & Localization、Planning & Control、Telemetry & Tools。每个 profile 独立维护分组、依赖和布局。
+双击组名可重命名。「自动整理」重新排列卡片。拖动结束或修改连线后，编辑器等待 500 ms 自动保存。设置中可切换方案、选择失败策略和开机接管，或应用 ROS 2 分组模板。
 
-**编排规则**：组按 `order` 排列，是严格的执行屏障。组内 `parallel` 将当时所有无未完成依赖的 App 放入同一批（最多 8 个同时执行）；`sequential` 每次只选当前就绪且排序最靠前的一项。`order` 相同按数组顺序决定。只有整批通过探活，才会正常放行下一批。同一 profile 内禁止重复 App、环、自依赖、未知依赖、前组依赖后组，以及启用项依赖禁用项。禁用的组和节点不执行。单组启动只检查其他组的前置节点是否已经就绪，不会代为启动它们。
+每组的 `depends_on` 保存前置组 ID，每个 App 的 `depends_on` 保存前置 App ID。新建组的前置组为空。读取整份未声明组依赖的旧方案时，系统按旧的 `order` 将启用组串接，首次保存时写入这些显式连线。停用或空的中间组在调度时传递其上游约束。最后一个版本卸载后，系统清理各方案的节点、布局和引用。
 
-`on_failure` 决定启动失败后的调度：`abort` 在当前批次收尾后跳过其余批次；`skip_dependents` 跳过失败节点的直接及间接后继，独立分支继续；`continue` 仍尝试启动后继，有未就绪前置项的后继标为 `degraded`。有节点失败时整个操作报告失败，即使其他分支成功。逆序停止会反转组和批次，先停依赖方；如果某批停止失败，不再停更早的前置项。取消可中断正在等待的探活、阻止后续调度，但不强行中断已经提交给 RuntimeService 的启停，也不回滚正在运行的进程。
+并行组中的节点在自身前置条件满足后即可提交，全方案最多同时执行 8 个任务。串行组按拓扑次序逐个执行。组间依赖要求上游组启用的成员就绪。只需等待某个 App 时可仅连接 App。单组启动默认检查外部前置条件。画布的「连带启动上游依赖」按钮和列表的「连带启动上游」选项可补启缺少的前置 App。单组重启会先检查上游，预检失败时保留整组运行状态。
+
+`abort` 在观察到失败后停止提交后续节点。`skip_dependents` 跳过失败项的后继并继续运行独立分支。`continue` 尝试启动后继并将受影响的节点标为降级。停止按实际依赖逆序执行，停止失败会阻止提交剩余任务。取消会中断探活和后续调度，已运行的进程继续运行。列表和画布均可查看运行日志及探活失败原因。
+
+旧版后端拒绝分组的 `depends_on` 字段时，编辑器保留草稿并提示更新当前网关。若使用 ACEswarm，本机页面和无人机页面各有独立后端，分别部署和验证。
 
 ### 配置和开机行为
 
@@ -41,14 +45,16 @@ profiles:
     on_failure: skip_dependents
     groups:
       - id: hardware
+        depends_on: []
         name: Hardware & Drivers
         order: 0
         mode: parallel
         enabled: true
         items:
           - app_id: driver
-            readiness: {type: ros2_topic, topic: /odom, require_publisher: true, timeout_sec: 30}
+            readiness: {type: ros2_topic, topic: /scan, require_message: true, timeout_sec: 30}
       - id: localization
+        depends_on: []
         name: Localization
         order: 1
         items:
@@ -69,12 +75,14 @@ profiles:
 | `delay` | 存活满 `delay_sec`（默认 1 秒） |
 | `tcp` | 本机 `host:port` 可连接，host 限 `localhost` 或回环 IP，默认 `127.0.0.1` |
 | `http` | GET `url` 收到 HTTP 2xx；不跟随重定向 |
-| `ros2_node` | `ros2 node list` 包含 `node_name` |
-| `ros2_topic` | `ros2 topic list` 包含 `topic`；`require_publisher: true` 还要求发布者数大于 0 |
-| `ros2_lifecycle` | `ros2 lifecycle get` 返回目标 `lifecycle_state`（默认 `active`） |
-| `command` | 自定义 shell 命令 `command` 返回 0 |
+| `log_contains` / `log_regex` | 本次启动的 `current.log` 中出现指定的 `pattern`。两种后端在启动新进程时清空日志，增量匹配保留上一块末尾 64 KiB |
+| `exited_zero` | 运行后端记录到退出码 0，可用于一次性脚本。非零退出或信号终止会报告失败 |
+| `ros2_node` | 发现完整名称与 `node_name` 相同的节点 |
+| `ros2_topic` | 发现 `topic`。勾选 `require_publisher` 检查发布者数量。勾选 `require_message` 后，必须在探活期间实际收到一条消息 |
+| `ros2_lifecycle` | 节点的 GetState 服务返回目标 `lifecycle_state`，默认 `active` |
+| `command` | 应用安装目录中的 shell 命令 `command` 成功退出 |
 
-`timeout_sec` 默认 30 秒，`interval_sec` 默认 1 秒；探活期间应用退出会提前判为失败。ROS CLI 和命令继承 `os.yaml.runtime_environment`，并使用该 App 激活版本配置对应的 `ROS_DOMAIN_ID`；未覆盖时继承全局域。同一 App 声明多个不一致的有效域时，探活报错而非猜测。网关运行环境须能找到所需 ROS CLI 及其运行库。`command` 以网关服务账号权限在 App 安装目录中执行，可能被重试；仅填写受信任、无副作用的探活命令，不应包含密码。
+`timeout_sec` 默认 30 秒，`interval_sec` 默认 1 秒。流水线按运行域及中间件环境复用短生命周期的 rclpy 子进程，结束后回收。ROS 探活使用 App 的有效域与运行环境。若网关 PATH 中缺少 ros2，但可在 `/opt/ros` 中唯一确定发行版，探针会加载该发行版的 setup.bash。自定义消息需要在探针运行环境提供对应的消息包及类型支持。首帧探活使用 best-effort、volatile 订阅。命令探活以网关账号运行，仅填写可以重试的探测命令。
 
 ### HTTP 与事件
 
@@ -85,12 +93,12 @@ profiles:
 | `GET /pipeline` | 返回 `config`、`installed_apps`、默认 profile 的 `unassigned_apps`、`validation`（含各 profile 的分组批次预览）和 `active_operation` |
 | `POST /pipeline/validate` | 请求体为完整草稿；只返回 `{valid, errors, preview}`，不改变文件或运行状态 |
 | `PUT /pipeline` | 请求体为完整配置，携带最近读取的 `version`。成功后原子替换并返回新版本；旧版本返回 409，无效配置返回 422 |
-| `POST /pipeline/run` | 空请求体运行默认 profile；`{"profile":"robot","group_id":"hardware"}` 只运行指定组 |
+| `POST /pipeline/run` | 空请求体运行默认 profile；`{"profile":"robot","group_id":"hardware"}` 只运行指定组；添加 `"with_deps": true` 可启动未运行的前置项 |
 | `POST /pipeline/stop` | 逆序停止整条方案，也可传 `group_id` 仅停止一组。若组外下游节点仍在运行，事件流会给出英文提示 |
 | `POST /pipeline/restart` | 请求体同 `run`。在同一操作及同一套 App 锁内先逆序停止，停止全部成功后按依赖启动并执行就绪探活 |
 | `GET /pipeline?view=list` | 应用列表轻量读取 `config` 和 `active_operation`，实时安装清单由已有列表接口提供 |
 
-启动、停止和重启均返回 202 和 `operation_id`。`GET /operations/{operation_id}/events` 可从头回放 `pipeline_stage`、`pipeline_node`、`log` 及终态事件；节点状态与实际进程状态独立。`POST /operations/{operation_id}/cancel` 请求取消。运行中的流水线会占用所涉及 App 的 operation 名额，冲突返回 409。同一网关只允许一条流水线操作同时执行，操作记录与 SSE 回放仅保存在该网关进程内。
+启动、停止和重启均返回 202 和 `operation_id`。`GET /operations/{operation_id}/events` 可从头回放 `pipeline_stage`、`pipeline_node`、`log` 及终态事件；节点状态与实际进程状态独立。在应用列表与流水线编辑器间切换时，页面继续订阅同一个操作，两个标签共用进度和日志。`POST /operations/{operation_id}/cancel` 请求取消。运行中的流水线会占用所涉及 App 的 operation 名额，冲突返回 409。同一网关只允许一条流水线操作同时执行，操作记录与 SSE 回放仅保存在该网关进程内。
 
 MCP 提供 `get_startup_pipeline`、`run_startup_pipeline`、`restart_startup_pipeline` 和 `stop_startup_pipeline`。内置 HTTP MCP 的流水线接口要求调用方显式提供 session token，见 [MCP 认证说明](mcp.md#认证与请求隔离)。
 

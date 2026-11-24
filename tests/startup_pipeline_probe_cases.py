@@ -1,4 +1,5 @@
 """Import TestReadinessProbes into test_startup_pipeline for suite discovery."""
+import io
 import json
 import os
 import shlex
@@ -9,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from concurrent.futures import Future
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +40,7 @@ class TestReadinessProbes(unittest.TestCase):
         version.active_version.return_value = "1.0"
         self.runtime = RuntimeService(version, config, Mock())
         self.runtime.get_runtime_state = Mock(side_effect=lambda app: SimpleNamespace(running=self.alive))
+        self.runtime.readiness_state_reader = lambda app: self.runtime.get_runtime_state
         self.manifest = SimpleNamespace(config_schema={}, default_config={})
         self.runtime._get_manifest = Mock(return_value=self.manifest)
         self.runtime._build_config_env = Mock(return_value={"AIVUDA_APP_INSTALL_PATH": str(self.root)})
@@ -158,7 +161,7 @@ elif args == ["topic", "info", "/pose", "--no-daemon"]:
     count = sum('"info"' in line for line in Path("calls").read_text().splitlines())
     print("Type: geometry_msgs/msg/Pose\\nPublisher count:", int(count > 1))
     print("Subscription count: 4")
-elif args == ["lifecycle", "get", "/driver"]:
+elif args == ["lifecycle", "get", "/driver", "--no-daemon"]:
     print("inactive [2]" if Path("inactive").exists() else "active [3]")
 else:
     sys.exit(2)
@@ -171,9 +174,9 @@ else:
         self.wait("ros2_topic", topic="/pose", require_publisher=True)
         self.wait("ros2_lifecycle", node_name="driver")
         calls = [json.loads(line) for line in (self.root / "calls").read_text().splitlines()]
-        self.assertEqual([c[0] for c in calls], [["node", "list", "--no-daemon"], ["topic", "list", "--no-daemon"],
-                         ["topic", "info", "/pose", "--no-daemon"], ["topic", "list", "--no-daemon"], ["topic", "info", "/pose", "--no-daemon"],
-                         ["lifecycle", "get", "/driver"]])
+        self.assertEqual([c[0] for c in calls], [["node", "list", "--no-daemon"],
+                         ["topic", "info", "/pose", "--no-daemon"], ["topic", "info", "/pose", "--no-daemon"],
+                         ["lifecycle", "get", "/driver", "--no-daemon"]])
         self.assertTrue(all(c[1:] == ["42", "two words"] for c in calls))
         with self.assertRaisesRegex(AppRuntimeError, "timed out"):
             self.wait("ros2_node", node_name="/robot", timeout_sec=.3)
@@ -181,6 +184,52 @@ else:
         with self.assertRaisesRegex(AppRuntimeError, "timed out"):
             self.wait("ros2_lifecycle", node_name="driver", timeout_sec=.3)
         self.wait("ros2_lifecycle", node_name="driver", lifecycle_state="inactive")
+
+    def test_ros_worker_wakes_for_batched_requests_and_idle_eof(self):
+        from aivudaos.core.apps.pipeline_ros_worker import serve
+
+        triggered = threading.Event()
+        batch_queued = threading.Event()
+        close_input = threading.Event()
+        response = io.StringIO()
+        node = Mock()
+        node.create_guard_condition.return_value.trigger.side_effect = triggered.set
+        node.get_node_names_and_namespaces.return_value = [("driver", "/")]
+
+        def lines():
+            for name in ("driver", "missing"):
+                yield json.dumps({"token": name, "spec": {"type": "ros2_node", "node_name": name}})
+            batch_queued.set()
+            close_input.wait(5)
+
+        def spin_until_eof(registered_node, eof):
+            self.assertIs(registered_node, node)
+            dispatch = node.create_guard_condition.call_args[0][0]
+            self.assertTrue(batch_queued.wait(2))  # Two triggers coalesced into one wake.
+            self.assertTrue(triggered.is_set())
+            triggered.clear()
+            dispatch()
+            self.assertEqual([json.loads(line) for line in response.getvalue().splitlines()], [
+                {"token": "driver", "ready": True}, {"token": "missing", "ready": False}])
+            self.assertFalse(eof.done())
+            close_input.set()
+            self.assertTrue(triggered.wait(2))  # EOF wakes an otherwise idle executor.
+            dispatch()
+            self.assertTrue(eof.done())
+
+        ros = Mock()
+        ros.create_node.return_value = node
+        ros.spin_until_future_complete.side_effect = spin_until_eof
+        modules = {"rclpy": ros, "rclpy.task": SimpleNamespace(Future=Future),
+                   "rclpy.qos": Mock(), "lifecycle_msgs.srv": Mock(), "rosidl_runtime_py.utilities": Mock()}
+        try:
+            with patch.dict(sys.modules, modules):
+                serve(lines(), response)
+        finally:
+            close_input.set()
+        ros.spin_until_future_complete.assert_called_once()
+        node.destroy_node.assert_called_once()
+        ros.shutdown.assert_called_once()
 
     def test_ros_fields_are_never_shell_code(self):
         self.fake_ros()
@@ -268,3 +317,28 @@ time.sleep(30)
                         except (ProcessLookupError, FileNotFoundError):
                             pass
                         pidfile.unlink()
+
+    def test_log_probes_match_split_output_and_ignore_previous_invocation(self):
+        path = self.root / "current.log"
+        self.runtime._app_log_path = Mock(return_value=path)
+        path.write_text("old READY")
+        path.write_text("new RE")
+        def append():
+            with path.open("a") as stream:
+                stream.write("ADY")
+        self.later(.1, append)
+        self.wait("log_contains", pattern="READY")
+        self.wait("log_regex", pattern="new R[A-Z]+")
+        with self.assertRaisesRegex(AppRuntimeError, "timed out"):
+            self.wait("log_contains", pattern="old", timeout_sec=.12)
+
+    def test_exited_zero_requires_recorded_success_even_if_no_process_is_running(self):
+        self.alive = False
+        self.runtime._app_log_path = Mock(return_value=self.root / "current.log")
+        with self.assertRaisesRegex(AppRuntimeError, "timed out"):
+            self.wait("exited_zero", timeout_sec=.1)
+        self.runtime._record_exit("camera", 3)
+        with self.assertRaisesRegex(AppRuntimeError, "unsuccessfully"):
+            self.wait("exited_zero")
+        self.runtime._record_exit("camera", 0)
+        self.wait("exited_zero")

@@ -96,7 +96,7 @@ def test_plans_follow_barriers_and_newly_ready_items():
 
 @pytest.mark.parametrize('groups,reason', [
     ([group('x', node('a', 'b'), node('b', 'a'))], 'cycle'),
-    ([group('x', node('a', 'b')), group('y', node('b'))], 'later group'),
+    ([group('x', node('a', 'b')), group('y', node('b'))], 'cycle'),
     ([group('x', node('a')), group('y', node('a'))], 'Duplicate app_id'),
     ([group('x', node('a', 'b'))], 'unknown prerequisite'),
     ([group('x', node('a', 'b'), node('b', enabled=False))], 'disabled prerequisite'),
@@ -106,6 +106,52 @@ def test_invalid_plans(groups, reason):
     result = validate_config(config(*groups))
     assert not result['valid'] and result['preview'] == {}
     assert reason in ' '.join(result['errors'])
+
+
+def test_save_and_run_each_validate_both_graphs_once(service, monkeypatch):
+    from aivudaos.core.apps import pipeline_config
+
+    topological = pipeline_config._topological
+    checks = []
+
+    def record(deps, label):
+        checks.append((label, set(deps)))
+        return topological(deps, label)
+
+    monkeypatch.setattr(pipeline_config, '_topological', record)
+    draft = config(group('after', node('b'), node('c', enabled=False), depends_on=['before']),
+                   group('before', node('a'), depends_on=[]))
+    expected = [('group', {'before', 'after'}), ('app and group', {'a', 'b', 'c'}),
+                ('app and group', {'a', 'b'})]
+    saved = service.save(draft)
+    assert checks == expected
+    assert saved['validation']['preview'] == {'robot': [dict(group_id='before', batches=[['a']]),
+                                                        dict(group_id='after', batches=[['b']])]}
+    assert service.store.load_with_plans() == (saved['config'], saved['validation']['preview'])
+
+    checks.clear()
+    service.prober.wait = Mock()
+    service.runtime.get_runtime_state = Mock(wraps=service.runtime.get_runtime_state)
+    assert finish(service, service.queue('run', group_id='after'))[-1]['status'] == 'completed'
+    assert checks == expected
+    assert [call.args[0] for call in service.prober.wait.call_args_list] == ['a', 'b']
+    service.runtime.get_runtime_state.assert_not_called()
+    assert service.runtime.calls == [('run', 'b')]
+
+
+def test_save_preview_checks_latest_inventory(service):
+    service.runtime.get_installed_list = Mock(return_value=[])
+    response = service.save(config(group('one', node('a'))))
+    assert response['config']['version'] == 1
+    assert response['validation'] == {'valid': False, 'errors': ['App is not installed: a'], 'preview': {}}
+
+
+def test_invalid_group_reports_default_missing_only_when_name_is_absent():
+    draft = config(group('one', unknown=True))
+    errors = validate_config(draft)['errors']
+    assert errors == ["config.profiles[0].groups[0] contains an unknown field: 'unknown'"]
+    draft['default_profile'] = 'absent'
+    assert validate_config(draft)['errors'] == errors + ["config.default_profile must name an existing profile"]
 
 
 def test_layout_round_trip_is_optional_and_does_not_change_plans(tmp_path):
@@ -226,7 +272,10 @@ def test_restart_uses_one_operation_for_reverse_stop_and_forward_readiness(servi
 
     def wait(node_id, spec, cancel):
         assert node_id in service.runtime.running
-        assert service.runtime.calls[:len(targets)] == [('stop', n) for n in reversed(targets)]
+        if group_id and node_id == 'a':
+            assert service.runtime.calls == []  # External readiness before touching the target group.
+        else:
+            assert service.runtime.calls[:len(targets)] == [('stop', n) for n in reversed(targets)]
         probed.append(node_id)
 
     service.prober.wait = wait
@@ -292,8 +341,8 @@ def test_restart_preserves_stop_failure_barrier(service):
 
 @pytest.mark.parametrize('policy,expected', [
     ('abort', ['failed', 'skipped', 'skipped', 'skipped']),
-    ('skip_dependents', ['failed', 'skipped', 'skipped', 'active']),
-    ('continue', ['failed', 'degraded', 'degraded', 'active']),
+    ('skip_dependents', ['failed', 'skipped', 'skipped', 'skipped']),
+    ('continue', ['failed', 'degraded', 'degraded', 'degraded']),
 ])
 def test_failure_policies(service, policy, expected):
     service.save(config(group('one', node('a')), group('two', node('b', 'a'), node('c', 'b'), node('d')),
@@ -477,3 +526,45 @@ def test_mcp_names_and_explicit_pipeline_credentials():
     for tool in ('run_startup_pipeline', 'restart_startup_pipeline'):
         with pytest.raises(ValueError, match='session token'):
             server.call_tool(tool, {})
+
+
+def test_independent_groups_and_ready_successors_ignore_slow_branch(service):
+    slow = threading.Event()
+    service.save(config(group('left', node('c', 'a'), depends_on=[]),
+                        group('right', node('a'), node('b'), node('d', 'a'), depends_on=[])))
+    ready = set()
+    lock = threading.Lock()
+
+    def probe(app, spec, cancel):
+        if app == 'b':
+            assert slow.wait(2)
+        with lock:
+            ready.add(app)
+            if {'c', 'd'} <= ready:
+                slow.set()
+
+    service.prober.wait = probe
+    assert finish(service, service.queue('run'))[-1]['status'] == 'completed'
+    assert ready == set('abcd')
+
+
+def test_restart_preserves_group_on_failed_preflight_and_optionally_starts_upstream(service):
+    service.save(config(group('second', node('b'), depends_on=['empty']),
+                        group('empty', depends_on=['first']), group('first', node('a'), depends_on=[])))
+    service.runtime.running.add('b')
+    assert finish(service, service.queue('restart', group_id='second'))[-1]['status'] == 'failed'
+    assert service.runtime.calls == [] and service.runtime.running == {'b'}
+    assert finish(service, service.queue('restart', group_id='second', with_deps=True))[-1]['status'] == 'completed'
+    assert service.runtime.calls == [('run', 'a'), ('stop', 'b'), ('run', 'b')]
+
+
+def test_store_detaches_last_uninstalled_version_without_losing_other_edits(service):
+    data = service.save(config(group('one', node('a')), group('two', node('b', 'a'))))['config']
+    service.store.detach_app('a')
+    updated = service.store.load()
+    assert updated['version'] == data['version'] + 1
+    first, second = updated['profiles'][0]['groups']
+    assert not first['items'] and second['items'][0]['depends_on'] == []
+    assert second['depends_on'] == ['one']
+    service.store.detach_app('a')
+    assert updated == service.store.load()

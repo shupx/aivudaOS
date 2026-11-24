@@ -16,9 +16,13 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 应用列表与启动流水线编辑器读取同一份 `${AIVUDAOS_WS_ROOT}/config/startup_pipeline.yaml`。列表调用 `GET /pipeline?view=list` 获取默认方案及当前操作，用 CSS 虚线框和 `AppCard` 展示分组。只有进入编辑器才加载 Vue Flow。未配置分组时沿用原列表的批量操作，开机接管默认关闭。
 
-`core/apps/pipeline_config.py` 负责版本锁、校验和拓扑分批。`pipeline.py` 支持整条方案和单组启动、停止、重启。重启在同一个 operation 内持有 App 预留锁，逆序停止成功后再正序启动并执行 `pipeline_probes.py` 的就绪检测。HTTP 与 MCP 共用运行时和操作管理器，沿用单 worker 部署。
+`core/apps/pipeline_config.py` 负责版本锁、组与 App 的联合依赖校验和分组预览。`pipeline.py` 支持整条方案和单组启动、停止、重启。重启在同一个 operation 内持有 App 预留锁，单组重启预检组外依赖后逆序停止，成功后按依赖启动并执行 `pipeline_probes.py` 的就绪检测。HTTP 与 MCP 共用运行时和操作管理器，沿用单 worker 部署。
 
-画布随「启动流水线」标签懒加载，只依赖 `@vue-flow/core`。`pipelineGraph.js` 从 `groups`、`items` 和 `depends_on` 派生分组节点、依赖边与执行顺序箭头。可选的 `profile.layout` 保存节点坐标和尺寸。拖拽结束或连线变更后，编辑器以 500 ms 防抖串行保存，运行事件按 App 或组 ID 更新对应状态及相邻边。
+组的 `depends_on` 保存组间箭头，App 的同名字段保存节点前置条件。旧方案在读取时还原原有组间连线。运行时按实际完成事件释放后继，独立组和分支共享 8 个执行槽。就绪探活支持本次启动的日志、一次性任务退出码和 ROS 首帧。`pipeline_ros.py` 按运行环境复用 `pipeline_ros_worker.py` 中的 ROS 参与者。worker 空闲时等待 ROS 事件，新的探活请求和输入关闭通过 guard condition 唤醒它。列表状态查询合并 systemctl 调用，只在状态变化时同步数据库。
+
+画布随「启动流水线」标签懒加载。组框位置与依赖独立，组和 App 连线支持删除与反向重连。`pipelineDependencies.js` 按依赖及就绪节点的排序生成串行次序，校验器和 `pipelineGraph.js` 画布共用这些前驱关系。卡片保持固定尺寸，布局和连线按 500 ms 防抖保存。列表、画布均显示运行日志。
+
+开发态 ACEswarm 直接提供本仓库的前端构建产物。修改分组配置字段后，需要重启提供该页面 API 的内嵌后端，并在桌面端使用同一个 API 校验保存和读回。
 
 行为、接口及 ROS 2 探活示例见[应用管理](docs/app-management.md#启动流水线)。验证：在仓库根目录运行 `pytest tests/test_startup_pipeline.py`（测试环境需要 `pytest` 和 `httpx`）及 `node --test tests/test_startup_pipeline_ui.mjs`，在 UI 目录运行 `npm ci`、`npm run build`。探活测试使用临时工作区、回环服务和模拟 ROS CLI，不启动真实机器人。
 

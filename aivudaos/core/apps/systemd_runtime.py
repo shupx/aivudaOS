@@ -4,6 +4,10 @@ import re
 import shlex
 import shutil
 import subprocess
+import threading
+import time
+
+from aivudaos.core.config.filelock import atomic_write_text
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -32,8 +36,19 @@ class SystemdRuntimeBackend:
     def __init__(self, shell_helpers_dir: Path, runtime_dir: Path) -> None:
         self._shell_helpers_dir = shell_helpers_dir
         self._runtime_dir = runtime_dir
+        self._availability = {}
+        self._lock = threading.RLock()
+        self._dirty_scopes = set()
 
     def is_available(self, scope: str) -> bool:
+        with self._lock:
+            expiry, value = self._availability.get(scope, (0, False))
+            if time.monotonic() >= expiry:
+                value = self._check_available(scope)
+                self._availability[scope] = (time.monotonic() + 5, value)
+            return value
+
+    def _check_available(self, scope):
         if shutil.which("systemctl") is None:
             return False
         try:
@@ -90,6 +105,7 @@ class SystemdRuntimeBackend:
             safe_val = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
             env_lines.append(f'Environment="{safe_key}={safe_val}"')
 
+        receipt = shlex.quote(str(log_path.with_suffix(".exit")))
         unit_lines = [
             "[Unit]",
             f"Description={description}",
@@ -98,11 +114,13 @@ class SystemdRuntimeBackend:
             "[Service]",
             "Type=simple",
             f"WorkingDirectory={escaped_workdir}",
+            f"ExecStartPre=/bin/rm -f {receipt}",
             f"ExecStartPre={exec_start_pre}",
             *env_lines,
             f"ExecStart={exec_start}",
             f"StandardOutput=append:{escaped_log}",
             f"StandardError=append:{escaped_log}",
+            f"""ExecStopPost=/bin/sh -c 'echo "$$EXIT_CODE $$EXIT_STATUS $$SERVICE_RESULT" > "$$1"' sh {receipt}""",
             "KillMode=control-group",
             "Restart=no",
             "",
@@ -111,11 +129,21 @@ class SystemdRuntimeBackend:
             "",
         ]
         unit_content = "\n".join(unit_lines)
-        unit_path.write_text(unit_content, encoding="utf-8")
+        with self._lock:
+            if not unit_path.exists() or unit_path.read_text(encoding="utf-8") != unit_content:
+                atomic_write_text(unit_path, unit_content)
+                self._dirty_scopes.add(scope)
         return unit_path
 
     def daemon_reload(self, scope: str) -> None:
-        self._run_systemctl(scope, ["daemon-reload"], check=True)
+        with self._lock:
+            self._run_systemctl(scope, ["daemon-reload"], check=True)
+            self._dirty_scopes.discard(scope)
+
+    def reload_changed_units(self, scope):
+        with self._lock:
+            if scope in self._dirty_scopes:
+                self.daemon_reload(scope)
 
     def start(self, app_id: str, scope: str) -> None:
         self._run_systemctl(scope, ["start", self.unit_name(app_id)], check=True)
@@ -134,34 +162,25 @@ class SystemdRuntimeBackend:
         self._run_systemctl(scope, args, check=True)
 
     def get_state(self, app_id: str, scope: str) -> SystemdState:
-        unit_name = self.unit_name(app_id)
-        proc = self._run_systemctl(
-            scope,
-            [
-                "show",
-                unit_name,
-                "--property=ActiveState,MainPID,UnitFileState",
-                "--no-pager",
-            ],
-            check=False,
-        )
-        data: Dict[str, str] = {}
-        for line in (proc.stdout or "").splitlines():
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            data[key.strip()] = value.strip()
+        return self.get_states([app_id], scope)[app_id]
 
-        active_state = data.get("ActiveState", "inactive")
-        raw_pid = data.get("MainPID", "0")
-        pid = int(raw_pid) if raw_pid.isdigit() and int(raw_pid) > 0 else None
-        unit_state = data.get("UnitFileState", "disabled")
-
-        return SystemdState(
-            running=active_state == "active",
-            enabled=unit_state == "enabled",
-            pid=pid,
-        )
+    def get_states(self, app_ids, scope):
+        names = {self.unit_name(app): app for app in app_ids}
+        if not names:
+            return {}
+        result = self._run_systemctl(scope, ["show", *names, "--all",
+            "--property=Id,ActiveState,MainPID,UnitFileState", "--no-pager"], check=False)
+        states = {}
+        for block in result.stdout.strip().split("\n\n"):
+            data = dict(line.split("=", 1) for line in block.splitlines() if "=" in line)
+            app = names.get(data.get("Id"))
+            if app is not None and "ActiveState" in data:
+                pid = int(data.get("MainPID") or 0)
+                states[app] = SystemdState(data["ActiveState"] == "active",
+                                          data.get("UnitFileState") == "enabled", pid or None)
+        if len(states) != len(names):
+            raise OSError("Incomplete systemctl show response")
+        return states
 
     def remove_unit(self, app_id: str, scope: str) -> None:
         unit_path = self.unit_file_path(app_id, scope)

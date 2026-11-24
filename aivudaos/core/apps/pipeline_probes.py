@@ -1,5 +1,7 @@
 """Cancellable readiness checks for startup-pipeline members (Linux)."""
-import queue
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from contextlib import contextmanager
+import shutil
 import os
 import re
 import signal
@@ -39,6 +41,24 @@ def _network_attempt(kind, args):
         conn.close()
 
 
+def _helper_children():
+    parent = os.getpid()
+    try:
+        return [int(pid) for pid in Path("/proc/self/task/{}/children".format(parent)).read_text().split()]
+    except FileNotFoundError:
+        # Tegra kernels can omit CONFIG_PROC_CHILDREN. Only scan when waitpid
+        # confirms live children remain during helper teardown.
+        children = []
+        for path in Path("/proc").glob("[0-9]*/stat"):
+            try:
+                fields = path.read_bytes().rsplit(b")", 1)[1].split()
+                if int(fields[1]) == parent:
+                    children.append(int(path.parent.name))
+            except (OSError, ValueError, IndexError):
+                continue
+        return children
+
+
 def _supervise(argv):
     """Own even double-forked/setsid probe children, without adopting any app PID."""
     import ctypes
@@ -56,7 +76,6 @@ def _supervise(argv):
                 return 1
         return child.returncode
     finally:
-        children = Path("/proc/self/task/{}/children".format(os.getpid()))
         while True:
             try:
                 pid, _ = os.waitpid(-1, os.WNOHANG)
@@ -66,9 +85,9 @@ def _supervise(argv):
                 continue
             # Killing a direct child reparents its surviving children here.
             # Unreaped child PIDs cannot have been recycled by another process.
-            for pid in children.read_text().split():
+            for pid in _helper_children():
                 try:
-                    os.kill(int(pid), signal.SIGKILL)
+                    os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
             time.sleep(0.01)
@@ -85,6 +104,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
 
+from aivudaos.core.apps.pipeline_ros import RosProbeSession
 from aivudaos.core.apps.pipeline_config import normalize_readiness
 from aivudaos.core.config.ros_domain import is_ros_domain_field
 from aivudaos.core.errors import AppRuntimeError, OperationCanceledError
@@ -133,6 +153,7 @@ def _environment(context):
 
 
 # A wedged systemctl or DB read must not create an unbounded queue of threads.
+_READ_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="pipeline-read")
 _RUNTIME_READS = threading.BoundedSemaphore(16)
 
 
@@ -144,6 +165,7 @@ class _Wait:
         self.cancel = cancel
         self.deadline = time.monotonic() + timeout
         self.next_live = 0.0
+        self.read_state = None
 
     def clock(self):
         if self.cancel.is_set():
@@ -156,38 +178,31 @@ class _Wait:
     def runtime_read(self, method):
         # RuntimeService can wait on e.g. systemctl or a database lock. Do not
         # hold a probe child or cancellation hostage to a stalled read.
-        result = queue.Queue(maxsize=1)
-
-        def read():
-            try:
-                result.put((method(self.app_id), None))
-            except Exception as exc:
-                result.put((None, exc))
-            finally:
-                _RUNTIME_READS.release()
-
         while not _RUNTIME_READS.acquire(timeout=min(_TICK, self.clock())):
             pass
         try:
-            threading.Thread(target=read, daemon=True).start()
+            result = _READ_POOL.submit(method, self.app_id)
         except RuntimeError:
             _RUNTIME_READS.release()
             raise
-        while True:
+        result.add_done_callback(lambda _: _RUNTIME_READS.release())
+        while not result.done():
+            remaining = self.clock()
             try:
-                value, error = result.get(timeout=min(_TICK, self.clock()))
-            except queue.Empty:
+                result.result(timeout=min(remaining, _TICK))
+            except FutureTimeout:
                 continue
-            if error:
-                raise AppRuntimeError("Cannot read runtime state or configuration for {}".format(self.app_id)) from error
-            return value
+        return result.result()
 
     def check(self, force=False):
         self.clock()
-        if force or time.monotonic() >= self.next_live:
-            if not self.runtime_read(self.runtime.get_runtime_state).running:
+        if self.kind != "exited_zero" and (force or time.monotonic() >= self.next_live):
+            if self.read_state is None:
+                factory = getattr(self.runtime, "readiness_state_reader", None)
+                self.read_state = self.runtime_read(factory) if factory else self.runtime.get_runtime_state
+            if not self.runtime_read(self.read_state).running:
                 raise AppRuntimeError("App {} exited before readiness".format(self.app_id))
-            self.next_live = time.monotonic() + 0.2
+            self.next_live = time.monotonic() + 0.75
         return self.clock()
 
     def sleep(self, seconds):
@@ -254,22 +269,71 @@ def _attempt(wait, spec, env):
     name = "/" + spec["topic" if kind == "ros2_topic" else "node_name"].lstrip("/")
     if kind == "ros2_lifecycle":
         # ROS CLI format: active [3]. Do not match 'inactive' or diagnostic text.
-        match = re.fullmatch(r"([^\s]+)(?:\s+\[[0-9]+\])?", ros("lifecycle", "get", name))
+        match = re.fullmatch(r"([^\s]+)(?:\s+\[[0-9]+\])?", ros("lifecycle", "get", name, "--no-daemon"))
         return bool(match and match.group(1) == spec.get("lifecycle_state", "active"))
     entity = "topic" if kind == "ros2_topic" else "node"
     # Discover directly in this app's environment. A freshly spawned ROS CLI
     # daemon would be reaped with the probe before it could warm its graph.
-    if name not in ros(entity, "list", "--no-daemon").splitlines():
-        return False
-    if kind == "ros2_topic" and spec.get("require_publisher", False):
+    if kind == "ros2_topic" and spec.get("require_message"):
+        return wait.run("exec", ["ros2", "topic", "echo", name, "--once",
+                                 "--qos-reliability", "best_effort"], env)[0]
+    if kind == "ros2_topic" and spec.get("require_publisher"):
         return bool(re.search(r"(?im)^Publisher count:[ \t]*0*[1-9][0-9]*[ \t]*$",
                               ros("topic", "info", name, "--no-daemon")))
-    return True
+    return name in ros(entity, "list", "--no-daemon").splitlines()
+
+
+def _wait_log(wait, spec, path):
+    import regex
+
+    # Both runtime backends truncate current.log at launch. Starting at zero
+    # includes output emitted before start() returned, even for an already-live app.
+    pattern = spec["pattern"]
+    expression = regex.compile(pattern) if wait.kind == "log_regex" else None
+    offset, identity, tail = 0, None, b""
+    while True:
+        wait.check()
+        chunk = b""
+        try:
+            with path.open("rb") as stream:
+                stat = os.fstat(stream.fileno())
+                if identity != (stat.st_dev, stat.st_ino) or stat.st_size < offset:
+                    offset, tail = 0, b""
+                identity = (stat.st_dev, stat.st_ino)
+                stream.seek(offset)
+                chunk = stream.read(65536)
+                offset += len(chunk)
+        except FileNotFoundError:
+            pass
+        if chunk:
+            data = tail + chunk
+            if expression:
+                try:
+                    matched = expression.search(data.decode("utf-8", errors="replace"), timeout=min(.1, wait.clock()))
+                except TimeoutError as exc:
+                    raise AppRuntimeError("Log regular expression exceeded its match budget") from exc
+            else:
+                matched = pattern.encode() in data
+            if matched:
+                return
+            tail = data[-65536:]
+            continue
+        wait.sleep(spec["interval_sec"])
 
 
 class ReadinessProber:
     def __init__(self, runtime):
         self.runtime = runtime
+        self.ros = None
+
+    @contextmanager
+    def session(self):
+        self.ros = RosProbeSession()
+        try:
+            yield
+        finally:
+            self.ros.close()
+            self.ros = None
 
     def wait(self, app_id: str, readiness_dict: dict, cancel: threading.Event) -> None:
         """Return once ready and still running, or raise on exit, timeout or cancel."""
@@ -277,14 +341,31 @@ class ReadinessProber:
         kind = spec["type"]
         wait = _Wait(self.runtime, app_id, kind, cancel, spec["timeout_sec"])
         wait.check()
+        if kind == "exited_zero":
+            while True:
+                result = self.runtime.exit_result(app_id)
+                if result == 0:
+                    return
+                if result is not None:
+                    raise AppRuntimeError("App {} exited unsuccessfully: {}".format(app_id, result))
+                wait.sleep(spec["interval_sec"])
         if kind == "started":
             return
-        if kind == "delay":
+        if kind in ("log_contains", "log_regex"):
+            _wait_log(wait, spec, self.runtime._app_log_path(app_id))
+        elif kind == "delay":
             wait.sleep(spec["delay_sec"])
         else:
             env = None
             if kind.startswith("ros2_") or kind == "command":
                 env = _environment(wait.runtime_read(self.runtime.readiness_context))
+            if kind.startswith("ros2_"):
+                if self.ros is not None:
+                    self.ros.wait(wait, spec, env)
+                    wait.check(force=True)
+                    return
+                if not shutil.which("ros2", path=env.get("PATH", "")):
+                    raise AppRuntimeError("ros2 was not found on the app PATH. Load the ROS environment.")
             while not _attempt(wait, spec, env):
                 wait.sleep(spec["interval_sec"])
         wait.check(force=True)

@@ -3,7 +3,7 @@ import { computed, inject, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Handle, Position } from '@vue-flow/core'
 import { NPopconfirm } from 'naive-ui'
-import { Columns2, ListOrdered, Play, Trash2 } from 'lucide-vue-next'
+import { GitPullRequest, Columns2, ListOrdered, Play, Trash2 } from 'lucide-vue-next'
 
 const props = defineProps({ data: { type: Object, required: true } })
 const ui = inject('pipelineEditor'), { t } = useI18n()
@@ -30,8 +30,8 @@ function finishRename(apply, restoreFocus = false) {
 
 <template>
   <div v-if="group" class="pipeline-group" :data-group-id="data.groupId" :data-disabled="group.enabled === false">
-    <Handle class="stage-anchor" type="target" :position="Position.Left" :connectable="false" />
-    <Handle class="stage-anchor" type="source" :position="Position.Right" :connectable="false" />
+    <Handle class="stage-anchor" type="target" :position="Position.Left" :connectable="!ui.locked" />
+    <Handle class="stage-anchor" type="source" :position="Position.Right" :connectable="!ui.locked" />
     <header class="group-header">
       <span class="order" :title="t('pipeline.groupOrder', { n: group.order + 1 })">{{ group.order + 1 }}</span>
       <input v-if="edit" ref="input" v-model="text" class="name-input nodrag nopan" type="text"
@@ -48,6 +48,8 @@ function finishRename(apply, restoreFocus = false) {
         </button>
         <button type="button" :aria-label="t('pipeline.runGroup', { name })" :title="t('pipeline.runGroup', { name })"
           :disabled="!ui.canRun || !group.enabled" @click.stop="ui.execute('run', data.groupId)"><Play :size="14" aria-hidden="true" /></button>
+        <button type="button" :aria-label="t('pipeline.runWithDeps')" :title="t('pipeline.runWithDeps')"
+          :disabled="!ui.canRun || !group.enabled" @click.stop="ui.execute('run', data.groupId, true)"><GitPullRequest :size="14" /></button>
         <NPopconfirm :disabled="ui.locked" @positive-click="ui.removeGroup(data.groupId)">
           <template #trigger>
             <button type="button" :aria-label="t('pipeline.deleteGroup', { name })" :title="t('pipeline.deleteGroup', { name })"
@@ -63,7 +65,7 @@ function finishRename(apply, restoreFocus = false) {
 
 <style scoped>
 .pipeline-group { position: relative; box-sizing: border-box; width: 100%; height: 100%; border: 1.5px dashed color-mix(in srgb, var(--muted) 65%, transparent); border-radius: 9px; color: var(--ink); }
-.pipeline-group :deep(.stage-anchor) { opacity: 0; pointer-events: none; }
+.pipeline-group :deep(.stage-anchor) { width: 11px; height: 11px; border: 2px solid var(--accent); background: var(--surface); }
 .group-header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; box-sizing: border-box; height: 39px; background: color-mix(in srgb, var(--surface) 85%, transparent); border-radius: 8px 8px 0 0; }
 .order { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 650; color: var(--muted); padding-inline-end: 6px; border-inline-end: 1px solid var(--line); }
 .group-header :is(button, input) { color: inherit; font-family: inherit; border: 0; background: transparent; }
