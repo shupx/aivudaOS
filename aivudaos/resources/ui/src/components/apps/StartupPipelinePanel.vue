@@ -6,7 +6,7 @@ import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { NButton, NPopconfirm, NSpin, useThemeVars } from 'naive-ui'
-import { ChevronRight, LayoutGrid, Play, Plus, Settings, Square, X } from 'lucide-vue-next'
+import { ChevronRight, LayoutGrid, Play, Plus, RotateCcw, Settings, Square, X } from 'lucide-vue-next'
 import { useStartupPipeline } from '../../composables/useStartupPipeline'
 import PipelineLogs from './PipelineLogs.vue'
 import PipelineAppNode from './PipelineAppNode.vue'
@@ -48,9 +48,14 @@ defineExpose({ flush: ui.flush })
             <NButton v-if="ui.active" size="small" :disabled="ui.cancelPending" @click="ui.cancel()">
               <template #icon><X :size="15" aria-hidden="true" /></template>{{ t('pipeline.cancelRun') }}
             </NButton>
-            <NButton v-else size="small" :disabled="!ui.canRun" @click="ui.execute('stop')">
-              <template #icon><Square :size="13" aria-hidden="true" /></template>{{ t('pipeline.stop') }}
-            </NButton>
+            <template v-else>
+              <NButton size="small" :disabled="!ui.canRun" @click="ui.execute('restart')">
+                <template #icon><RotateCcw :size="15" aria-hidden="true" /></template>{{ t('pipeline.restart') }}
+              </NButton>
+              <NButton size="small" :disabled="!ui.canRun" @click="ui.execute('stop')">
+                <template #icon><Square :size="13" aria-hidden="true" /></template>{{ t('pipeline.stop') }}
+              </NButton>
+            </template>
           </div>
           <div class="actions layout-actions">
             <NButton size="small" quaternary :disabled="ui.locked" @click="ui.addGroup()">
@@ -65,6 +70,13 @@ defineExpose({ flush: ui.flush })
             <Settings :size="17" aria-hidden="true" />
           </NButton>
         </div>
+
+        <div class="editor-status" role="status" aria-live="polite">
+          <span v-if="ui.profileProgress" :class="{ failed: ui.profileProgress.status === 'failed' }">{{ ui.statusName(ui.profileProgress.status) }}</span>
+          <span v-if="ui.connectionLost">{{ t('pipeline.reconnecting') }}</span>
+          <span v-if="['pending', 'saving', 'saved'].includes(ui.saveState)">{{ t(`pipeline.saveStates.${ui.saveState}`) }}</span>
+        </div>
+        <PipelineLogs :lines="ui.profileProgress?.logs" />
 
         <div class="pipeline-canvas" :aria-label="t('pipeline.canvas')" role="region"
           @dragover.prevent @drop.prevent="ui.onDrop">
@@ -101,12 +113,6 @@ defineExpose({ flush: ui.flush })
           </div>
         </div>
       </div>
-      <div class="editor-status" role="status" aria-live="polite">
-        <span v-if="ui.profileProgress">{{ ui.statusName(ui.profileProgress.status) }}</span>
-        <span v-if="ui.connectionLost">{{ t('pipeline.reconnecting') }}</span>
-        <span v-if="['pending', 'saving', 'saved'].includes(ui.saveState)">{{ t(`pipeline.saveStates.${ui.saveState}`) }}</span>
-      </div>
-      <PipelineLogs :lines="ui.profileProgress?.logs" />
       <PipelineSettingsDrawer />
       <PipelineNodeConfigDrawer />
     </template>
@@ -146,7 +152,9 @@ defineExpose({ flush: ui.flush })
 .feedback, .editor-status { font-size: 13px; color: var(--muted); }
 .feedback { border-inline-start: 3px solid var(--danger); padding-inline-start: 8px; overflow-wrap: anywhere; }
 .editor-status:empty { display: none; }
-.editor-status { justify-content: flex-end; }
+.editor-status { padding: 6px 12px; }
+.editor-status .failed { color: var(--danger); }
+.editor-frame :deep(.pipeline-log) { margin-inline: 12px; }
 @media (max-width: 640px) {
   .toolbar { gap: 4px; padding: 8px; }
   .layout-actions { padding-inline-start: 0; border: none; }

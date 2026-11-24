@@ -11,10 +11,13 @@ export function usePipelineOperation({ revision, onAction, onFinished, t }) {
   const actionError = ref('')
   let stream, epoch = 0, disposed = false
 
-  function clearFinishedNodeStates() {
-    if (progress.value?.done) progress.value.nodes.clear()
+  function clearFinishedNodeStates(keepCompleted = false) {
+    if (!progress.value?.done) return
+    const states = progress.value.nodes
+    if (!keepCompleted) states.clear()
+    else for (const [id, status] of states) if (status !== 'completed') states.delete(id)
   }
-  watch(revision, clearFinishedNodeStates)
+  watch(revision, () => clearFinishedNodeStates())
 
   function attach(operation, expectedEpoch = epoch) {
     if (!operation || disposed || expectedEpoch !== epoch) return

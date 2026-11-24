@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildAppListGroups, createStartupPipelineApi, editableConfig, joinAppListInventory,
-  prepareAppListGroups } from '../aivudaos/resources/ui/src/services/core/startupPipeline.js'
+  listStageStatus, prepareAppListGroups } from '../aivudaos/resources/ui/src/services/core/startupPipeline.js'
 
 const group = (id, order, items, options) => ({ id, order, items, name: id, ...options })
 const item = (app_id, order, options) => ({ app_id, order, ...options })
@@ -64,6 +64,19 @@ test('inventory refresh reuses group summaries and both views honor an explicitl
   snapshot.profiles[1].groups[0].depends_on = []
   assert.deepEqual(groupDeps(prepareAppListGroups(snapshot)), [['first', []], ['off', []], ['last', []]])
   assert.deepEqual(groupDeps(editableConfig(snapshot).profiles[1].groups), groupDeps(prepareAppListGroups(snapshot)))
+})
+
+test('single-group operations display active upstream stages in the same profile', () => {
+  const op = { profile: 'field', group_id: 'consumer', status: 'queued', with_deps: true, stages: new Map() }
+  assert.equal(listStageStatus(op, 'field', 'consumer'), 'queued')
+  for (const status of ['starting', 'stopping']) {
+    op.stages.set('driver', status)
+    assert.equal(listStageStatus(op, 'field', 'driver'), status)
+    assert.equal(listStageStatus(op, 'other', 'driver'), '')
+    assert.equal(listStageStatus(op, 'field', 'unrelated'), '')
+  }
+  op.stages.set('driver', 'completed')
+  assert.equal(listStageStatus(op, 'field', 'driver'), '')
 })
 
 test('rank ties keep their wire order even with negative and sparse out-of-order nodes', () => {

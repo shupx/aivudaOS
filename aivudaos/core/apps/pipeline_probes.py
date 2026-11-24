@@ -284,12 +284,20 @@ def _attempt(wait, spec, env):
 
 
 def _wait_log(wait, spec, path):
-    import regex
-
     # Both runtime backends truncate current.log at launch. Starting at zero
     # includes output emitted before start() returned, even for an already-live app.
     pattern = spec["pattern"]
-    expression = regex.compile(pattern) if wait.kind == "log_regex" else None
+    expression = None
+    bounded_search = False
+    if wait.kind == "log_regex":
+        try:
+            import regex
+        except ImportError:
+            expression = re.compile(pattern)
+        else:
+            expression = regex.compile(pattern)
+            bounded_search = True
+    literal = pattern.encode()
     offset, identity, tail = 0, None, b""
     while True:
         wait.check()
@@ -309,14 +317,15 @@ def _wait_log(wait, spec, path):
             data = tail + chunk
             if expression:
                 try:
-                    matched = expression.search(data.decode("utf-8", errors="replace"), timeout=min(.1, wait.clock()))
+                    options = {"timeout": min(.1, wait.clock())} if bounded_search else {}
+                    matched = expression.search(data.decode("utf-8", errors="replace"), **options)
                 except TimeoutError as exc:
                     raise AppRuntimeError("Log regular expression exceeded its match budget") from exc
             else:
-                matched = pattern.encode() in data
+                matched = literal in data
             if matched:
                 return
-            tail = data[-65536:]
+            tail = data[-4096:]
             continue
         wait.sleep(spec["interval_sec"])
 

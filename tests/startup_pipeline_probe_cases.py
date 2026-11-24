@@ -1,4 +1,5 @@
 """Import TestReadinessProbes into test_startup_pipeline for suite discovery."""
+import builtins
 import io
 import json
 import os
@@ -202,34 +203,124 @@ else:
             batch_queued.set()
             close_input.wait(5)
 
-        def spin_until_eof(registered_node, eof):
+        def spin_for_input(registered_node, incoming):
             self.assertIs(registered_node, node)
-            dispatch = node.create_guard_condition.call_args[0][0]
-            self.assertTrue(batch_queued.wait(2))  # Two triggers coalesced into one wake.
-            self.assertTrue(triggered.is_set())
+            if response.tell():
+                self.assertEqual([json.loads(line) for line in response.getvalue().splitlines()], [
+                    {"token": "driver", "ready": True}, {"token": "missing", "ready": False}])
+                close_input.set()
+            else:
+                self.assertTrue(batch_queued.wait(2))  # Two triggers coalesced into one wake.
+            self.assertTrue(triggered.wait(2))
             triggered.clear()
-            dispatch()
-            self.assertEqual([json.loads(line) for line in response.getvalue().splitlines()], [
-                {"token": "driver", "ready": True}, {"token": "missing", "ready": False}])
-            self.assertFalse(eof.done())
-            close_input.set()
-            self.assertTrue(triggered.wait(2))  # EOF wakes an otherwise idle executor.
-            dispatch()
-            self.assertTrue(eof.done())
+            node.create_guard_condition.call_args[0][0]()
+            self.assertTrue(incoming.done())
 
         ros = Mock()
         ros.create_node.return_value = node
-        ros.spin_until_future_complete.side_effect = spin_until_eof
-        modules = {"rclpy": ros, "rclpy.task": SimpleNamespace(Future=Future),
-                   "rclpy.qos": Mock(), "lifecycle_msgs.srv": Mock(), "rosidl_runtime_py.utilities": Mock()}
+        ros.spin_until_future_complete.side_effect = spin_for_input
+        modules = {"rclpy": ros, "rclpy.task": SimpleNamespace(Future=Future), "lifecycle_msgs.srv": None}
         try:
             with patch.dict(sys.modules, modules):
                 serve(lines(), response)
         finally:
             close_input.set()
-        ros.spin_until_future_complete.assert_called_once()
+        self.assertEqual(ros.spin_until_future_complete.call_count, 2)
         node.destroy_node.assert_called_once()
         ros.shutdown.assert_called_once()
+
+    def test_message_overlays_load_in_order_and_metadata_probes_share_a_worker(self):
+        from aivudaos.core.apps.pipeline_ros import RosProbeSession
+
+        app = self.root / "app $(unused)"
+        scripts = ["install/local_setup.bash", "install/setup.bash", "nested/install/local_setup.bash"]
+        system = self.root / "system.bash"
+        system.write_text("export LOADED=system\n")
+        for i, name in enumerate(scripts):
+            script = app / name
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_text('export LOADED="${LOADED},%d"\necho "overlay diagnostic"\n' % i)
+        # This executable stands in for the ROS Python interpreter, after Bash setup.
+        interpreter = self.root / "fixture-python"
+        interpreter.write_text("#!" + sys.executable + "\n" + """
+import json, os, sys
+for line in sys.stdin:
+    req = json.loads(line)
+    if "spec" in req:
+        print("native diagnostic", flush=True)
+        print("[]", flush=True)
+        ok = os.environ["LOADED"] == req["spec"]["expected"]
+        print(json.dumps({"token": req["token"], "ready": ok, "error": None if ok else os.environ["LOADED"]}), flush=True)
+""")
+        interpreter.chmod(0o755)
+        ros = self.root / "ros2"
+        ros.write_text("#!" + str(interpreter) + "\n")
+        session = RosProbeSession()
+        self.addCleanup(session.close)
+        env = dict(os.environ, AIVUDA_APP_INSTALL_PATH=str(app))
+        wait = Mock()
+        wait.check.return_value = 1
+        with patch("aivudaos.core.apps.pipeline_ros.ros_installation", return_value=(str(ros), str(system))):
+            for path, message, expected in [(app, True, "system,0,1,2"), (app, False, "system"),
+                                            (self.root / "empty", False, "system"), (app, True, "system,0,1,2")]:
+                session.wait(wait, {"require_message": message, "expected": expected}, dict(env, AIVUDA_APP_INSTALL_PATH=str(path)))
+        self.assertEqual(len(session.workers), 2)
+
+    def test_ros_worker_uses_publisher_qos_and_checks_fast_lifecycle_reply(self):
+        from aivudaos.core.apps.pipeline_ros_worker import serve
+
+        qos = SimpleNamespace(DurabilityPolicy=SimpleNamespace(TRANSIENT_LOCAL="latched"),
+                              ReliabilityPolicy=SimpleNamespace(RELIABLE="reliable"),
+                              HistoryPolicy=SimpleNamespace(KEEP_LAST="last"), QoSProfile=SimpleNamespace,
+                              qos_profile_sensor_data=object())
+        def publisher(durability, reliability, kind="pkg/msg/T"):
+            return SimpleNamespace(topic_type=kind, qos_profile=SimpleNamespace(durability=durability, reliability=reliability))
+        volatile = publisher("volatile", "reliable")
+        best_effort = publisher("latched", "best_effort")
+        latched = publisher("latched", "reliable")
+        class NoTypeSupportImportedException(Exception):
+            pass
+
+        node, ros, utilities = Mock(), Mock(), Mock()
+        node.create_subscription.side_effect = [object(), object(), NoTypeSupportImportedException()]
+        ros.create_node.return_value = node
+        node.get_publishers_info_by_topic.side_effect = [[], [volatile, best_effort], [volatile, latched],
+                                                          [latched, publisher("latched", "reliable", "other/msg/T")], [latched], [latched]]
+        utilities.get_message.side_effect = [object(), object(), ModuleNotFoundError("pkg"), object()]
+        future = Future()
+        node.create_client.return_value.call_async.return_value = future
+        queued = threading.Event()
+        def spin(registered_node, result, timeout_sec=None):
+            self.assertIs(registered_node, node)
+            if result is future:
+                self.assertEqual(timeout_sec, .1)
+                result.set_result(SimpleNamespace(current_state=SimpleNamespace(label="active")))
+            else:
+                self.assertTrue(queued.wait(2))
+                node.create_guard_condition.call_args[0][0]()
+        ros.spin_until_future_complete.side_effect = spin
+        topic = {"type": "ros2_topic", "topic": "/map", "require_message": True}
+        def lines():
+            for token in ["waiting", "waiting", "waiting", "multiple", "missing", "no_extension"]:
+                yield json.dumps({"token": token, "spec": topic})
+            yield json.dumps({"token": "state", "spec": {"type": "ros2_lifecycle", "node_name": "/driver", "lifecycle_state": "active"}})
+            queued.set()
+
+        response = io.StringIO()
+        modules = {"rclpy": ros, "rclpy.task": SimpleNamespace(Future=Future), "rclpy.qos": qos,
+                   "rclpy.exceptions": SimpleNamespace(NoTypeSupportImportedException=NoTypeSupportImportedException),
+                   "lifecycle_msgs.srv": Mock(), "rosidl_runtime_py.utilities": utilities}
+        with patch.dict(sys.modules, modules):
+            serve(lines(), response)
+        replies = [json.loads(line) for line in response.getvalue().splitlines()]
+        self.assertEqual([r["ready"] for r in replies[:3]], [False] * 3)
+        self.assertIn("Multiple message types", replies[3]["error"])
+        self.assertRegex(replies[4]["error"], "Python typesupport.*pkg/msg/T.*log_contains.*require_publisher")
+        self.assertEqual(replies[4]["error"], replies[5]["error"])
+        self.assertTrue(replies[6]["ready"])
+        first, second = node.create_subscription.call_args_list[:2]
+        self.assertIs(first[0][3], qos.qos_profile_sensor_data)
+        self.assertEqual(vars(second[0][3]), dict(history="last", depth=1, reliability="reliable", durability="latched"))
 
     def test_ros_fields_are_never_shell_code(self):
         self.fake_ros()
@@ -331,6 +422,23 @@ time.sleep(30)
         self.wait("log_regex", pattern="new R[A-Z]+")
         with self.assertRaisesRegex(AppRuntimeError, "timed out"):
             self.wait("log_contains", pattern="old", timeout_sec=.12)
+
+    def test_log_contains_never_imports_regex_and_log_regex_falls_back_to_re(self):
+        path = self.root / "current.log"
+        self.runtime._app_log_path = Mock(return_value=path)
+        path.write_bytes(b"x" * 65534 + b"READY")
+        imports = []
+        real_import = builtins.__import__
+        def without_regex(name, *args, **kwargs):
+            if name == "regex":
+                imports.append(name)
+                raise ImportError(name)
+            return real_import(name, *args, **kwargs)
+        with patch("builtins.__import__", side_effect=without_regex):
+            self.wait("log_contains", pattern="READY")
+            self.assertEqual(imports, [])
+            self.wait("log_regex", pattern="RE[A-Z]{3}")
+            self.assertEqual(imports, ["regex"])
 
     def test_exited_zero_requires_recorded_success_even_if_no_process_is_running(self):
         self.alive = False

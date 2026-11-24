@@ -190,7 +190,7 @@ class _Execution:
         self.external = set()
         self.downstream = set()
         if group_id is not None and action in ('run', 'restart'):
-            self.external = self._reachable_outside(self.targets, self.required)
+            self.external = self._reachable_outside(self.targets, self.ordering if with_deps else self.required)
         if group_id is not None and action in ('stop', 'restart'):
             followers = defaultdict(set)
             for node, deps in self.required.items():
@@ -232,6 +232,7 @@ class _Execution:
                 return self.update(group, node, 'stopped')
             if phase == 'external':
                 if self.with_deps and not self.runtime.get_runtime_state(node).running:
+                    self.update(group, node, 'starting')
                     self.runtime.start(node)
             else:
                 self.update(group, node, 'starting')

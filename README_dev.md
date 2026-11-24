@@ -18,13 +18,13 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 `core/apps/pipeline_config.py` 负责版本锁、组与 App 的联合依赖校验和分组预览。`pipeline.py` 支持整条方案和单组启动、停止、重启。重启在同一个 operation 内持有 App 预留锁，单组重启预检组外依赖后逆序停止，成功后按依赖启动并执行 `pipeline_probes.py` 的就绪检测。HTTP 与 MCP 共用运行时和操作管理器，沿用单 worker 部署。
 
-组的 `depends_on` 保存组间箭头，App 的同名字段保存节点前置条件。旧方案在读取时还原原有组间连线。运行时按实际完成事件释放后继，独立组和分支共享 8 个执行槽。就绪探活支持本次启动的日志、一次性任务退出码和 ROS 首帧。`pipeline_ros.py` 按运行环境复用 `pipeline_ros_worker.py` 中的 ROS 参与者。worker 空闲时等待 ROS 事件，新的探活请求和输入关闭通过 guard condition 唤醒它。列表状态查询合并 systemctl 调用，只在状态变化时同步数据库。
+组的 `depends_on` 保存组间箭头，App 的同名字段保存节点前置条件。旧方案在读取时还原原有组间连线。运行时按实际完成事件释放后继，独立组和分支共享 8 个执行槽。就绪探活支持本次启动的日志、一次性任务退出码和 ROS 首帧。`pipeline_ros.py` 按运行环境复用 `pipeline_ros_worker.py` 中的 ROS 参与者。worker 空闲时等待 ROS 事件，新的探活请求和输入关闭通过 guard condition 唤醒它。首帧探活按 App overlay 路径复用进程，并依据在线发布者选择锁存或传感器 QoS。元数据探活共享基础 ROS 环境。生命周期探活仅在查询状态时加载服务类型。日志探活保留 4 KiB 跨块缓存，纯文本匹配只使用标准库。显式停止会清除一次性任务的退出回执。列表状态查询合并 systemctl 调用，只在状态变化时同步数据库。
 
-画布随「启动流水线」标签懒加载。组框位置与依赖独立，组和 App 连线支持删除与反向重连。`pipelineDependencies.js` 按依赖及就绪节点的排序生成串行次序，校验器和 `pipelineGraph.js` 画布共用这些前驱关系。卡片保持固定尺寸，布局和连线按 500 ms 防抖保存。列表、画布均显示运行日志。
+画布随「启动流水线」标签懒加载。组框位置与依赖独立，组和 App 连线支持删除与反向重连。`pipelineDependencies.js` 按依赖及就绪节点的排序生成串行次序，校验器和 `pipelineGraph.js` 画布共用这些前驱关系。卡片保持固定尺寸，布局和连线按 500 ms 防抖保存。ROS 2 模板给新增阶段添加前序组连线，保留已有依赖。单组连带启动会包括上游串行前序，列表同步显示其进度。画布工具栏支持重启，失败日志显示于画布上方，一次性节点保留完成态。
 
 开发态 ACEswarm 直接提供本仓库的前端构建产物。修改分组配置字段后，需要重启提供该页面 API 的内嵌后端，并在桌面端使用同一个 API 校验保存和读回。
 
-行为、接口及 ROS 2 探活示例见[应用管理](docs/app-management.md#启动流水线)。验证：在仓库根目录运行 `pytest tests/test_startup_pipeline.py`（测试环境需要 `pytest` 和 `httpx`）及 `node --test tests/test_startup_pipeline_ui.mjs`，在 UI 目录运行 `npm ci`、`npm run build`。探活测试使用临时工作区、回环服务和模拟 ROS CLI，不启动真实机器人。
+行为、接口及 ROS 2 探活示例见[应用管理](docs/app-management.md#启动流水线)。验证：在仓库根目录运行 `pytest tests/test_startup_pipeline.py`（测试环境需要 `pytest` 和 `httpx`）及 `node --test tests/test_startup_pipeline_ui.mjs tests/startup_pipeline_list_cases.mjs`，在 UI 目录运行 `npm ci`、`npm run build`。探活测试使用临时工作区、回环服务和模拟 ROS CLI，不启动真实机器人。
 
 ## Python 兼容性约束
 

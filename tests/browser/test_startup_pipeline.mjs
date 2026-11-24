@@ -103,6 +103,28 @@ test('App list loads only the lightweight config and sends group and global acti
   assert.deepEqual(state.faults, [])
 })
 
+test('a group run with prerequisites exposes upstream progress in the list', async t => {
+  const { page, state } = await appsPage(t, { stream: () => events([
+    ['pipeline_stage', { group_id: 'first', status: 'starting' }],
+  ]) })
+  const consumer = page.getByRole('region', { name: 'second', exact: true })
+  await consumer.getByRole('checkbox', { name: 'Include prerequisites' }).check()
+  await consumer.getByRole('button', { name: 'Start group second', exact: true }).click()
+  await page.getByRole('region', { name: 'first', exact: true }).getByText('Starting', { exact: true }).waitFor()
+  assert.deepEqual(state.runs, [{ profile: 'default', group_id: 'second', with_deps: true }])
+})
+
+test('editor restarts the selected pipeline and applies only missing ROS stage connections', async t => {
+  const { page, state } = await editor(t, { stream: () => events([['completed', { done: true, status: 'completed' }]]) })
+  await page.getByRole('button', { name: 'Restart pipeline', exact: true }).click()
+  await page.locator('.editor-status').getByText('Completed').waitFor()
+  assert.deepEqual(state.actions, [{ action: 'restart', scope: { profile: 'default' } }])
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  const draft = await editAndSave(page, () => page.getByRole('button', { name: 'Apply ROS 2 template' }).click())
+  assert.deepEqual(draft.profiles[0].groups.map(g => g.depends_on),
+    [[], ['middleware'], ['hardware'], ['perception'], ['planning'], [], ['first']])
+})
+
 test('the list can cancel an attached group restart and restores its controls on completion', async t => {
   const { page, state } = await appsPage(t, { active: { group_id: 'first', action: 'restart' } })
   const group = page.getByRole('region', { name: 'first', exact: true })
@@ -139,6 +161,16 @@ test('switching tabs shares one operation stream, completion refresh and log his
   const log = page.getByRole('log')
   await log.getByText('Sensor timed out', { exact: true }).waitFor()
   assert.equal(state.inventoryReads, reads + 1)
+  const failed = page.locator('.editor-status .failed')
+  assert.equal(await failed.textContent(), 'Failed')
+  assert.ok(await failed.evaluate(el => {
+    const color = getComputedStyle(el).color
+    el.style.color = 'var(--danger)'
+    const danger = getComputedStyle(el).color
+    el.style.removeProperty('color')
+    return color === danger
+  }))
+  assert.ok(await log.evaluate(el => el.getBoundingClientRect().bottom <= document.querySelector('.pipeline-canvas').getBoundingClientRect().top))
   await page.clock.resume()
 
   await page.getByText('App list', { exact: true }).click()
@@ -312,10 +344,10 @@ test('collapsed tray assigns an installed app to the canvas and persists its con
 })
 
 test('a group run consumes named SSE without remounting graph nodes', async t => {
-  const cfg = initial(); item(cfg, 'beta').depends_on = ['alpha']
+  const cfg = initial(); item(cfg, 'beta').depends_on = ['alpha']; item(cfg, 'alpha').readiness = { type: 'exited_zero' }
   const frames = [
     ['pipeline_stage', { group_id: 'second', status: 'starting' }],
-    ['pipeline_node', { group_id: 'first', app_id: 'alpha', status: 'active' }],
+    ['pipeline_node', { group_id: 'first', app_id: 'alpha', status: 'completed' }],
     ['pipeline_node', { group_id: 'second', app_id: 'beta', status: 'waiting_ready' }],
     ['log', { message: 'Waiting for probe' }],
   ]
@@ -337,7 +369,7 @@ test('a group run consumes named SSE without remounting graph nodes', async t =>
   await animated.waitFor({ state: 'attached' }) // A horizontal SVG path can have zero bounding-box height.
   finish()
   await page.getByText('Completed', { exact: true }).waitFor()
-  await alpha.locator('[data-status="idle"]').waitFor() // The live inventory has alpha stopped.
+  await alpha.locator('[data-status="completed"]').waitFor() // A successful one-shot has no live process.
   await animated.waitFor({ state: 'detached' })
   assert.deepEqual(state.runs, [{ profile: 'default', group_id: 'second' }])
   assert.ok(await beta.evaluate((node, old) => node === old, oldBeta)); assert.ok(await alpha.evaluate((node, old) => node === old, oldAlpha))

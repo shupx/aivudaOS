@@ -50,7 +50,7 @@ export default {
   },
   pipeline: {
     title: '启动流水线', appList: '应用列表', loading: '正在加载启动编排…',
-    run: '启动流程', stop: '停止', cancelRun: '取消', addGroup: '新建分组', arrange: '自动整理', settings: '设置',
+    run: '启动流程', stop: '停止', restart: '重启流程', cancelRun: '取消', addGroup: '新建分组', arrange: '自动整理', settings: '设置',
     profile: '方案', profileName: '新方案名称', defaultProfile: '默认方案', makeDefault: '设为默认', addProfile: '添加方案',
     onFailure: '失败时', policies: { abort: '中止流程', skip_dependents: '跳过依赖此应用的节点', continue: '继续执行' },
     takeover: '接管应用自启动', takeoverHint: '网关启动时执行默认方案，不再逐个启动应用。',
@@ -66,7 +66,7 @@ export default {
     groupKeys: '{name}：双击或按回车键重命名；按 Alt 加上、下方向键调整分组顺序。',
     modes: { parallel: '并行', sequential: '串行' }, runGroup: '运行「{name}」', renameGroup: '重命名「{name}」', deleteGroup: '删除「{name}」',
     confirmRemove: '删除「{name}」？其中的应用将返回未分组列表。', dropHere: '将应用拖到此处',
-    orderSettings: '分组顺序与启用状态', earlier: '前移「{name}」', later: '后移「{name}」', enableGroup: '启用「{name}」',
+    orderSettings: '分组显示顺序与启用状态（执行依赖由连线决定）', earlier: '前移「{name}」', later: '后移「{name}」', enableGroup: '启用「{name}」',
     unassigned: '未分组应用', poolHint: '点击添加应用，或将应用拖入分组。', assign: '添加 {app}', noUnassigned: '没有未分组的应用。',
     editApp: '配置 {app}', configureNode: '应用流程设置', dependsOn: '前置依赖', noDeps: '此方案中没有其他应用。',
     position: '组内位置', includeNode: '在流程中启用', apply: '应用', probeType: '就绪检测方式',

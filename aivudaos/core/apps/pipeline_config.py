@@ -43,7 +43,7 @@ def ros2_template() -> List[dict]:
         ("telemetry", "Telemetry & Tools"),
     )
     return [{"id": key, "name": name, "order": i, "mode": "parallel", "enabled": True,
-             "depends_on": [], "items": []} for i, (key, name) in enumerate(groups)]
+             "depends_on": [groups[i - 1][0]] if i else [], "items": []} for i, (key, name) in enumerate(groups)]
 
 
 def _default_config() -> dict:

@@ -1,7 +1,7 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { request } from '../services/core/api'
 import {
-  joinAppListInventory, prepareAppListGroups, createStartupPipelineApi, pipelineGroupLabel,
+  joinAppListInventory, listStageStatus, prepareAppListGroups, createStartupPipelineApi, pipelineGroupLabel,
 } from '../services/core/startupPipeline.js'
 
 export function useAppListGroups({ apps, view, refresh, pipeline, t }) {
@@ -30,12 +30,7 @@ export function useAppListGroups({ apps, view, refresh, pipeline, t }) {
     const names = new Map(appListGroups.value.map(g => [g.id, pipelineGroupLabel(g, t)]))
     let previousEnabled
     const sections = appListGroups.value.map((group, index) => {
-      let status = ''
-      if (operation?.profile === pipelineConfig.value.default_profile) {
-        const stage = operation.stages.get(group.id)
-        if (operation.group_id === group.id) status = stage || operation.status
-        else if (!operation.group_id && (stage === 'starting' || stage === 'stopping')) status = stage
-      }
+      const status = listStageStatus(operation, pipelineConfig.value.default_profile, group.id)
       const showConnector = group.enabled && group.depends_on.includes(previousEnabled)
       if (group.enabled) previousEnabled = group.id
       return { group, index, apps: group.apps, showConnector, status, prerequisites: group.depends_on.map(id => names.get(id) || id) }

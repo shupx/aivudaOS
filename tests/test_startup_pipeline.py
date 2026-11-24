@@ -91,7 +91,14 @@ def test_plans_follow_barriers_and_newly_ready_items():
                                         dict(group_id='one', batches=[['c'], ['b', 'a']])]
     early['mode'] = 'sequential'
     assert build_execution_plan(profile)[0]['batches'] == [['a'], ['c'], ['b']]
-    assert [g['id'] for g in ros2_template()] == ['middleware', 'hardware', 'perception', 'planning', 'telemetry']
+
+
+def test_ros2_template_links_the_five_standard_groups():
+    stages = ros2_template()
+    ids = ['middleware', 'hardware', 'perception', 'planning', 'telemetry']
+    assert [g['id'] for g in stages] == ids
+    assert [g['depends_on'] for g in stages] == [[], ['middleware'], ['hardware'], ['perception'], ['planning']]
+    assert validate_config(config(*stages))['valid']
 
 
 @pytest.mark.parametrize('groups,reason', [
@@ -247,6 +254,37 @@ def test_sequential_and_external_prerequisites(service):
     assert service.runtime.calls == [('run', 'b'), ('run', 'c')]
     finish(service, service.queue('stop'))
     assert service.runtime.calls[-3:] == [('stop', 'c'), ('stop', 'b'), ('stop', 'a')]
+
+
+def test_single_group_with_deps_starts_serial_predecessors_before_external_prerequisite(service):
+    service.save(config(group('drivers', node('a'), node('b'), node('d'), mode='sequential', depends_on=[]),
+                        group('consumers', node('c', 'b'), depends_on=[])))
+    events = finish(service, service.queue('run', group_id='consumers', with_deps=True))
+    assert events[-1]['status'] == 'completed'
+    assert service.runtime.calls == [('run', 'a'), ('run', 'b'), ('run', 'c')]
+    for app in ('a', 'b'):
+        assert [e['status'] for e in events if e['type'] == 'pipeline_node' and e['app_id'] == app] == [
+            'queued', 'starting', 'waiting_ready', 'active']
+
+
+def test_explicit_stop_invalidates_completed_external_one_shot(service, tmp_path):
+    runtime = RuntimeService(Mock(), Mock(), Mock())
+    runtime._app_log_path = lambda app: tmp_path / (app + '.log')
+    runtime.get_runtime_state = Mock(return_value=SimpleNamespace(pid=None, running=False, autostart=False))
+    runtime._should_use_systemd = Mock(return_value=False)
+    runtime._systemd_scope = Mock(return_value='user')
+    runtime._sync_runtime_row = Mock()
+    service.runtime.exit_result = runtime.exit_result
+    service.save(config(group('setup', node('a', readiness={'type': 'exited_zero', 'timeout_sec': .15})),
+                        group('consumers', node('b', 'a'))))
+    runtime._record_exit('a', 0)
+    assert finish(service, service.queue('run', group_id='consumers'))[-1]['status'] == 'completed'
+    runtime.stop('a')
+    assert runtime.exit_result('a') is None
+    service.runtime.calls.clear()
+    events = finish(service, service.queue('run', group_id='consumers', with_deps=False))
+    assert events[-1]['status'] == 'failed'
+    assert not service.runtime.calls
 
 
 def test_group_stop_warns_about_running_downstream_without_stopping_it(service):

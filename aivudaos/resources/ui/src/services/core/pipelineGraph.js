@@ -77,7 +77,7 @@ export function applyAutoLayout(profile, graph = toFlowGraph({ groups: profile.g
 }
 
 export function pipelineNodeStatus(active, status, enabled, running) {
-  if (status && (active || ['failed', 'degraded', 'skipped'].includes(status))) return status
+  if (status && (active || ['failed', 'degraded', 'skipped', 'completed'].includes(status))) return status
   if (!enabled) return 'disabled'
   return running ? 'running' : 'idle'
 }
@@ -182,6 +182,6 @@ export function isEdgeAnimated(edge, statuses) {
     const key = id.slice(prefix.length)
     return states instanceof Map ? states.get(key) : states?.[key]
   }
-  return ['active', 'ready'].includes(state(edge?.source)) &&
+  return ['active', 'completed', 'ready'].includes(state(edge?.source)) &&
     ['starting', 'waiting_ready', 'waiting'].includes(state(edge?.target))
 }

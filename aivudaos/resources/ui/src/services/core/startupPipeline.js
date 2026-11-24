@@ -68,12 +68,20 @@ export function editableConfig(config) {
 }
 export function applyRos2Template(profile) {
   const remaining = new Map(profile.groups.map(g => [g.id, g]))
+  const added = new Set()
   const standard = ros2Stages.map(([id, name]) => {
+    if (!remaining.has(id)) added.add(id)
     const group = remaining.get(id) || newGroup(id, name)
     remaining.delete(id)
     return group
   })
   profile.groups = normalizeOrder([...standard, ...remaining.values()])
+  for (let i = 1; i < standard.length; i++) {
+    const group = standard[i]
+    if (!added.has(group.id)) continue
+    group.depends_on.push(standard[i - 1].id)
+    if (graphIssue(profile.groups)) group.depends_on.pop()
+  }
 }
 // The editor writes ranked arrays in order. External configs may use unsorted,
 // negative or sparse integer ranks. Stable byte buckets keep projection linear
@@ -104,6 +112,13 @@ function orderedGroups(groups) {
     if (legacy && group.enabled !== false) previous = [group.id]
     return { ...group, depends_on, items: inPipelineOrder(group.items || []) }
   })
+}
+
+export function listStageStatus(operation, profileName, groupId) {
+  if (!operation || operation.profile !== profileName) return ''
+  const stage = operation.stages.get(groupId)
+  if (operation.group_id === groupId) return stage || operation.status
+  return stage === 'starting' || stage === 'stopping' ? stage : ''
 }
 
 export function prepareAppListGroups(config) {

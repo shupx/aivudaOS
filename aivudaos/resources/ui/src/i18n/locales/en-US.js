@@ -50,7 +50,7 @@ export default {
   },
   pipeline: {
     title: 'Startup pipeline', appList: 'App list', loading: 'Loading pipeline…',
-    run: 'Run pipeline', stop: 'Stop', cancelRun: 'Cancel', addGroup: 'Add group', arrange: 'Auto arrange', settings: 'Settings',
+    run: 'Run pipeline', stop: 'Stop', restart: 'Restart pipeline', cancelRun: 'Cancel', addGroup: 'Add group', arrange: 'Auto arrange', settings: 'Settings',
     profile: 'Profile', profileName: 'New profile name', defaultProfile: 'Default profile', makeDefault: 'Set as default', addProfile: 'Add profile',
     onFailure: 'On failure', policies: { abort: 'Abort pipeline', skip_dependents: 'Skip dependents', continue: 'Continue' },
     takeover: 'Use pipeline for autostart', takeoverHint: 'When the gateway starts, it runs the default profile instead of starting apps individually.',
@@ -66,7 +66,7 @@ export default {
     groupKeys: '{name}: double-click or press Enter to rename. Alt + Up or Down changes the group order.',
     modes: { parallel: 'Parallel', sequential: 'Sequential' }, runGroup: 'Run {name}', renameGroup: 'Rename {name}', deleteGroup: 'Delete {name}',
     confirmRemove: 'Delete {name}? Its apps return to the unassigned pool.', dropHere: 'Drop apps here',
-    orderSettings: 'Group order and activation', earlier: 'Move {name} earlier', later: 'Move {name} later', enableGroup: 'Enable {name}',
+    orderSettings: 'Group display order and enabled state (connections set execution dependencies)', earlier: 'Move {name} earlier', later: 'Move {name} later', enableGroup: 'Enable {name}',
     unassigned: 'Unassigned apps', poolHint: 'Click to add an app, or drag it into a group.', assign: 'Add {app}', noUnassigned: 'No unassigned apps.',
     editApp: 'Configure {app}', configureNode: 'App pipeline settings', dependsOn: 'Depends on', noDeps: 'No other apps in this profile.',
     position: 'Position in group', includeNode: 'Enable in pipeline', apply: 'Apply', probeType: 'Readiness check',

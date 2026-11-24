@@ -26,8 +26,18 @@ def ros_installation(env):
     raise AppRuntimeError("ros2 was not found on the app PATH. Load the intended ROS environment.")
 
 
+def _message_overlays(env):
+    install_path = env.get("AIVUDA_APP_INSTALL_PATH")
+    if not install_path:
+        return ()
+    root = Path(install_path)
+    scripts = [root / "install/local_setup.bash", root / "install/setup.bash"]
+    scripts.extend(sorted(root.glob("*/install/local_setup.bash")))
+    return tuple(str(script.absolute()) for script in scripts if script.is_file())
+
+
 class _Participant:
-    def __init__(self, ros, setup, env):
+    def __init__(self, ros, setup, overlays, env):
         with open(ros, "rb") as entry:
             shebang = entry.readline(512).decode().strip()
         interpreter = shlex.split(shebang[2:]) if shebang.startswith("#!") else []
@@ -35,11 +45,16 @@ class _Participant:
             raise AppRuntimeError("Cannot identify ROS Python interpreter from " + ros)
         worker = str(Path(__file__).with_name("pipeline_ros_worker.py"))
         command = interpreter + [worker]
-        if setup:
-            command = ["/bin/bash", "--noprofile", "--norc", "-c",
-                       'source "$1" >&2 && shift && exec "$@"', "ros-probe", setup] + command
+        scripts = ([setup] if setup else []) + list(overlays)
+        if scripts:
+            # Keep filesystem paths as arguments. Give each sourced script an empty $@.
+            bootstrap = ('load_setup() { local file="$1"; shift; source "$file" >&2; }; '
+                         'while [[ "$1" != -- ]]; do load_setup "$1" || exit $?; shift; done; '
+                         'shift; exec "$@"')
+            command = ["/bin/bash", "--noprofile", "--norc", "-c", bootstrap,
+                       "ros-probe", *scripts, "--", *command]
         self.proc = subprocess.Popen(command, env=env, stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE, text=True, bufsize=1)
+                                     stdout=subprocess.PIPE, text=True, errors="replace", bufsize=1)
         self.lock = threading.Lock()
         self.requests = {}
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -48,7 +63,14 @@ class _Participant:
     def _read(self):
         try:
             for line in self.proc.stdout:
-                reply = json.loads(line)
+                try:
+                    reply = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(reply, dict) or not isinstance(reply.get("token"), str):
+                    continue
+                if "ready" not in reply and "error" not in reply:
+                    continue
                 with self.lock:
                     dest = self.requests.get(reply["token"])
                     if dest is not None:
@@ -116,10 +138,11 @@ class RosProbeSession:
         # Include overlay paths and DDS vendor/security settings in addition to the domain.
         prefixes = ("ROS_", "RMW_", "CYCLONE", "FAST", "RTI_", "NDDS_", "ZENOH_", "AMENT_", "COLCON_")
         paths = {"PATH", "PYTHONPATH", "LD_LIBRARY_PATH"}
-        key = (ros, setup, tuple(sorted((k, v) for k, v in env.items() if k in paths or k.startswith(prefixes))))
+        overlays = _message_overlays(env) if spec.get("require_message") else ()
+        key = (ros, setup, overlays, tuple(sorted((k, v) for k, v in env.items() if k in paths or k.startswith(prefixes))))
         with self.lock:
             if key not in self.workers:
-                self.workers[key] = _Participant(ros, setup, env)
+                self.workers[key] = _Participant(ros, setup, overlays, env)
             worker = self.workers[key]
         worker.wait(wait, spec)
 

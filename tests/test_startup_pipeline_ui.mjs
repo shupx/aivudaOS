@@ -82,12 +82,24 @@ test('autosave keeps a conflict draft and pauses writes until a drag finishes', 
 })
 
 test('ROS 2 template is repeatable and keeps custom stages, stage names and assignments', () => {
-  const p = { groups: [group('other', node('alpha')), { ...group('perception', node('beta')), name: 'Custom vision' }] }
+  const p = { groups: [group('other', node('alpha')), { ...group('perception', node('beta')), name: 'Custom vision', depends_on: ['other'] }] }
   applyRos2Template(p); applyRos2Template(p)
   assert.deepEqual(p.groups.map(g => g.id), ['middleware', 'hardware', 'perception', 'planning', 'telemetry', 'other'])
   assert.equal(p.groups[2].name, 'Custom vision'); assert.equal(p.groups[2].items[0].app_id, 'beta')
   assert.equal(p.groups[5].items[0].app_id, 'alpha')
+  assert.deepEqual(p.groups.map(g => g.depends_on), [[], ['middleware'], ['other'], ['perception'], ['planning'], []])
   assert.deepEqual(p.groups.map(g => g.order), [0, 1, 2, 3, 4, 5])
+})
+
+test('template fills missing stages without closing existing cycles or reconnecting user cuts', () => {
+  const p = { groups: [] }
+  applyRos2Template(p)
+  assert.deepEqual(p.groups.map(g => g.depends_on), [[], ['middleware'], ['hardware'], ['perception'], ['planning']])
+  p.groups[0].depends_on = ['hardware']
+  p.groups[2].depends_on = []
+  p.groups.splice(1, 1)
+  applyRos2Template(p)
+  assert.deepEqual(p.groups.slice(0, 3).map(g => g.depends_on), [['hardware'], [], []])
 })
 
 // Independent, deliberately simple reference for checking the ranked graph scheduler.
@@ -268,6 +280,7 @@ test('node status uses live running state after completion and preserves unresol
   assert.equal(pipelineNodeStatus(true, 'waiting_ready', true, true), 'waiting_ready')
   assert.equal(pipelineNodeStatus(true, 'active', true, false), 'active')
   assert.equal(pipelineNodeStatus(false, 'active', true, false), 'idle')
+  assert.equal(pipelineNodeStatus(false, 'completed', true, false), 'completed')
   assert.equal(pipelineNodeStatus(false, 'stopped', true, true), 'running')
   assert.equal(pipelineNodeStatus(false, 'starting', false, false), 'disabled')
   for (const status of ['failed', 'degraded', 'skipped']) assert.equal(pipelineNodeStatus(false, status, true, true), status)
@@ -281,6 +294,7 @@ test('animated edges derive transient activity from the matching node or stage o
   state.nodes.set('up', 'active'); state.nodes.set('down', 'waiting_ready')
   assert.equal(isEdgeAnimated(dependency, state), true); assert.equal(isEdgeAnimated(stage, state), false)
   assert.equal(isEdgeAnimated(dependency, { nodes: { up: 'ready', down: 'waiting' } }), true)
+  state.nodes.set('up', 'completed'); assert.equal(isEdgeAnimated(dependency, state), true)
   state.stages.set('up', 'active'); state.stages.set('down', 'starting'); assert.equal(isEdgeAnimated(stage, state), true)
   state.nodes.set('down', 'active'); assert.equal(isEdgeAnimated(dependency, state), false)
   state.nodes.set('up', 'degraded'); state.nodes.set('down', 'starting'); assert.equal(isEdgeAnimated(dependency, state), false)

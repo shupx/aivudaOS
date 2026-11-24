@@ -546,6 +546,7 @@ class RuntimeService:
             except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
                 raise AppRuntimeError("Application cleanup failed: " + str(exc)) from exc
 
+        self._app_log_path(app_id).with_suffix(".exit").unlink(missing_ok=True)
         self._sync_runtime_row(
             app_id,
             running=False,

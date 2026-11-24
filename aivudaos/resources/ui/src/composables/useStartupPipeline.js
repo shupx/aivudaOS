@@ -45,7 +45,7 @@ export function useStartupPipeline(liveApps, pipeline, onSaved) {
   }
   const canRun = computed(() => !!profile.value && valid.value && !locked.value && !autosave.dirty.value)
   function changed(graph = false) {
-    pipeline.clearFinishedNodeStates()
+    pipeline.clearFinishedNodeStates(true)
     if (graph) canvas.refresh()
     autosave.mark()
   }
