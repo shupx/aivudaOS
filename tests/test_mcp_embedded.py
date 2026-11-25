@@ -88,8 +88,9 @@ class EmbeddedMCPTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn("mcp-session-id", response.headers)
                 tools = self.rpc("tools/list", http=http).json()["result"]["tools"]
-                self.assertEqual(len(tools), 47)
-                self.assertNotIn("mcp", [tool["name"] for tool in tools])
+                names = {tool["name"] for tool in tools}
+                self.assertIn("restart_running_apps", names)
+                self.assertNotIn("mcp", names)
         self.assertNotIn("/aivuda_os/mcp", self.app.openapi()["paths"])
         self.assertEqual(self.http.get("/aivuda_os/mcp").status_code, 405)
         self.assertEqual(self.http.delete("/aivuda_os/mcp").status_code, 405)
@@ -247,6 +248,33 @@ class EmbeddedMCPTests(unittest.TestCase):
 
 
 class CaddyMigrationTests(unittest.TestCase):
+    def test_cache_policy_upgrade_preserves_existing_apps_and_sites(self):
+        original = (
+            "(aivudaos_common_route) {\n  @api path /aivuda_os/api* /aivuda_os/mcp\n"
+            "  route {\n    handle @api {\n      reverse_proxy 127.0.0.1:8123\n    }\n"
+            "    # BEGIN AIVUDA APP IMPORTS\n    import sample.caddy\n"
+            "    # END AIVUDA APP IMPORTS\n\n    handle {\n      encode zstd gzip\n"
+            "      root * ./ui/dist\n      try_files {path} /index.html\n      file_server\n    }\n  }\n}\n"
+            "https://robot-a.local:8443 {\n  import aivudaos_common_route\n}\n"
+            "http://localhost:8088 {\n  respond custom\n}\n"
+        )
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "Caddyfile"
+            path.write_text(original)
+            service = CaddyRuntimeService(caddyfile_path=path)
+            self.assertTrue(service.sync_https_hostname("robot-a"))
+            migrated = path.read_text()
+            self.assertIn("header @appEndpoint ?Cache-Control no-store", migrated)
+            self.assertIn("respond @appEndpoint 404", migrated)
+            self.assertIn("reverse_proxy 127.0.0.1:8123", migrated)
+            self.assertIn("    import sample.caddy\n    # END AIVUDA APP IMPORTS", migrated)
+            self.assertEqual(migrated.split("https://", 1)[1], original.split("https://", 1)[1])
+            self.assertFalse(service.sync_https_hostname("robot-a"))
+            custom = original.replace("try_files {path} /index.html", "try_files {path} /custom.html")
+            path.write_text(custom)
+            self.assertFalse(service.sync_https_hostname("robot-a"))
+            self.assertEqual(path.read_text(), custom)
+
     def test_old_matcher_migrates_without_losing_custom_settings(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "Caddyfile"

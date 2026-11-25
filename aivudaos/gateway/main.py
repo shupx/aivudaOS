@@ -7,9 +7,9 @@ from fastapi.staticfiles import StaticFiles
 
 from aivudaos.core.db.schema import init_db
 from aivudaos.core.paths import UI_DIST_DIR, ensure_dirs
-from aivudaos.core.config.caddy_runtime import CaddyRuntimeService
-from aivudaos.gateway.deps import get_magnet_service, get_runtime_service
-from aivudaos.gateway.routes import apps, auth, config
+from aivudaos.core.errors import AppOperationConflictError, AppRuntimeError
+from aivudaos.gateway.deps import get_magnet_service, get_pipeline_service, get_runtime_service
+from aivudaos.gateway.routes import include_business_routes, shared_store
 
 
 logger = logging.getLogger(__name__)
@@ -18,17 +18,10 @@ API_PREFIX = "/aivuda_os"
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AivudaOS", version="1.0.0")
-    # app.add_middleware(
-    #     CORSMiddleware,
-    #     allow_origins=["*"], # dangerous in production, should be restricted to specific origins
-    #     allow_credentials=False, # if true, also need to specify allowed origins and cannot be "*"
-    #     allow_methods=["*"],
-    #     allow_headers=["*"],
-    # )
+    include_business_routes(app, prefix=API_PREFIX)
 
-    app.include_router(auth.router, prefix=API_PREFIX)
-    app.include_router(config.router, prefix=API_PREFIX)
-    app.include_router(apps.router, prefix=API_PREFIX)
+    app.include_router(shared_store.router, prefix=API_PREFIX)
+    app.mount(API_PREFIX + "/api/shared-apps", shared_store.shared_store)
 
     from aivudaos.mcp_server import install_mcp
     install_mcp(app)
@@ -38,8 +31,18 @@ def create_app() -> FastAPI:
         ensure_dirs()
         init_db()
         get_magnet_service().recompute(updated_by="system")
+        try:
+            operation = get_pipeline_service().startup()
+        except (ValueError, OSError, AppRuntimeError, AppOperationConflictError):
+            # Keep the gateway available for diagnosis. Never fall back to an
+            # unordered replay when ownership or its execution plan is invalid.
+            logger.exception('Startup pipeline was not launched')
+            return
+        if operation:
+            logger.info('Queued startup pipeline: %s', operation['operation_id'])
+            return
         runtime = get_runtime_service()
-        summary = runtime.start_autostart_apps() # only for popen mode, systemd will manage autostart itself and we skip replay to avoid conflicts
+        summary = runtime.start_autostart_apps()
         mode = summary.get("mode", "popen")
         if mode == "systemd":
             logger.info("Autostart managed by systemd; startup replay skipped")
@@ -51,6 +54,7 @@ def create_app() -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown() -> None:
         from starlette.concurrency import run_in_threadpool
+        await run_in_threadpool(get_pipeline_service().shutdown)
         await run_in_threadpool(get_runtime_service().shutdown)
 
     if UI_DIST_DIR.exists():

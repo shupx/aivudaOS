@@ -101,3 +101,4 @@ class AppRuntimeState:
     pid: Optional[int]
     last_started_at: Optional[int]
     last_stopped_at: Optional[int]
+    process_identity: Optional[str] = None

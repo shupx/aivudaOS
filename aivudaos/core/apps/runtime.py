@@ -10,9 +10,11 @@ import threading
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from weakref import WeakValueDictionary
 
-from aivudaos.core.apps.process_cleanup import processes, remember, terminate
+from aivudaos.core.apps.pipeline_config import PipelineStore
+from aivudaos.core.apps.process_cleanup import process_stat, processes, remember, terminate
 from aivudaos.core.apps.caddy_config import CaddyConfigService
 from aivudaos.core.apps.config_validation import validate_config_data
 from aivudaos.core.apps.magnet import MagnetService
@@ -20,6 +22,8 @@ from aivudaos.core.apps.models import AppManifest, AppRuntimeState
 from aivudaos.core.apps.script_hooks import ScriptHookError, ScriptHookRunner
 from aivudaos.core.apps.systemd_runtime import SystemdRuntimeBackend
 from aivudaos.core.apps.versioning import VersioningService
+from aivudaos.core.config.filelock import atomic_write_text
+from aivudaos.core.config.ros_domain import effective_domain, has_ros2
 from aivudaos.core.config.service import ConfigService
 from aivudaos.core.db.connection import db_conn
 from aivudaos.core.errors import (
@@ -29,7 +33,7 @@ from aivudaos.core.errors import (
     NotFoundError,
     OperationCanceledError,
 )
-from aivudaos.core.paths import APP_LOG_DIR
+from aivudaos.core.paths import APP_LOG_DIR, CONFIG_DIR
 from aivudaos.core.paths import SHELL_HELPERS_DIR
 from aivudaos.core.paths import SYSTEMD_RUNTIME_DIR
 from aivudaos.core.paths import UI_DEFAULT_ICON_PATH
@@ -55,6 +59,24 @@ def _icon_revision(path: Path) -> Optional[str]:
         return None
 
 
+@lru_cache(maxsize=1)
+def _boot_id() -> str:
+    boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    if not boot:
+        raise AppRuntimeError("Cannot identify the current Linux boot")
+    return boot
+
+
+def _process_identity(pid: Optional[int]) -> Optional[str]:
+    if not pid or pid <= 0:
+        return None
+    try:
+        stat = process_stat(Path("/proc") / str(pid) / "stat")
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    return "{}:{}".format(_boot_id(), stat[2]) if stat else None
+
+
 class RuntimeService:
     """App lifecycle management — start / stop / autostart / version switch.
 
@@ -75,8 +97,22 @@ class RuntimeService:
         self._caddy = CaddyConfigService(versioning=versioning)
         self._owned_processes = {}
         self._process_lock = threading.RLock()
+        self._autostart_lock = threading.RLock()
+        self._pipeline_autostart = False
+        self._app_locks = WeakValueDictionary()
         self._guardian = None
         self._closing = False
+        self._snapshot_lock = threading.Lock()
+        self._process_snapshot = (0, {})
+
+    def _app_lock(self, app_id: str):
+        # Serialize lifecycle operations for one app without blocking other apps' shutdown.
+        with self._process_lock:
+            lock = self._app_locks.get(app_id)
+            if lock is None:
+                lock = threading.RLock()
+                self._app_locks[app_id] = lock
+            return lock
 
     def _ensure_guardian(self) -> None:
         if self._guardian is not None:
@@ -143,14 +179,19 @@ class RuntimeService:
     #  Query helpers
     # ------------------------------------------------------------------ #
 
-    def get_runtime_state(self, app_id: str) -> AppRuntimeState:
+    def get_runtime_state(
+        self, app_id: str, *, backend: Optional[Tuple[str, bool]] = None
+    ) -> AppRuntimeState:
         with db_conn() as conn:
             row = conn.execute(
-                "SELECT running, autostart, pid, last_started_at, last_stopped_at "
+                "SELECT running, autostart, pid, process_identity, last_started_at, last_stopped_at "
                 "FROM app_runtime WHERE app_id = ?",
                 (app_id,),
             ).fetchone()
-        if not row:
+        return self._state_from_row(app_id, row, backend)
+
+    def _state_from_row(self, app_id, row, backend, live_states=None):
+        if not row or row["running"] is None:
             return AppRuntimeState(
                 app_id=app_id,
                 running=False,
@@ -162,29 +203,36 @@ class RuntimeService:
 
         running = bool(row["running"])
         pid = row["pid"]
+        identity = row["process_identity"]
         autostart = bool(row["autostart"])
         stopped_at = row["last_stopped_at"]
 
-        scope = self._systemd_scope()
-        using_systemd = False
-        if self._should_use_systemd(scope):
+        if backend is None:
+            scope = self._systemd_scope()
+            using_systemd = self._should_use_systemd(scope)
+        else:
+            scope, using_systemd = backend
+        if using_systemd:
             try:
-                live = self._systemd.get_state(app_id, scope)
-                using_systemd = True
+                live = self._systemd.get_state(app_id, scope) if live_states is None else live_states.get(app_id)
+                if live is None:
+                    raise OSError("No live unit snapshot")
                 running = live.running
                 pid = live.pid
-                autostart = live.enabled
-                self._sync_runtime_row(
-                    app_id,
-                    running=running,
-                    pid=pid,
-                    autostart=autostart,
-                    last_stopped_at=int(time.time()) if not running else None,
-                )
+                identity = None  # Unit state is authoritative; this is not a Popen PID.
+                if not self._pipeline_autostart:
+                    autostart = live.enabled
+                if (running, pid, autostart, identity) != (
+                        bool(row["running"]), row["pid"], bool(row["autostart"]), row["process_identity"]):
+                    if row["running"] and not running:
+                        stopped_at = int(time.time())
+                    self._sync_runtime_row(app_id, running=running, pid=pid, autostart=autostart,
+                                           last_stopped_at=stopped_at)
             except (subprocess.SubprocessError, OSError):
-                using_systemd = False
+                # A failed systemd query is not evidence that its unit has stopped.
+                pass
 
-        if (not using_systemd) and running and (not pid or not self._is_pid_alive(int(pid))):
+        if not using_systemd and running and (not identity or identity != _process_identity(pid)):
             owned = self._owned_processes.get(app_id)
             table = processes() if owned is not None else {}
             descendants_alive = owned is not None and any(
@@ -193,9 +241,10 @@ class RuntimeService:
             )
             if not descendants_alive:
                 stopped_at = int(time.time())
-                self._mark_stopped_if_pid_matches(app_id, pid, stopped_at)
+                self._mark_stopped_if_pid_matches(app_id, pid, identity, stopped_at)
                 running = False
                 pid = None
+                identity = None
 
         return AppRuntimeState(
             app_id=app_id,
@@ -204,6 +253,7 @@ class RuntimeService:
             pid=pid,
             last_started_at=row["last_started_at"],
             last_stopped_at=stopped_at,
+            process_identity=identity,
         )
 
     def get_detail(self, app_id: str) -> Dict[str, Any]:
@@ -265,7 +315,7 @@ class RuntimeService:
             rows = conn.execute(
                 """
                 SELECT i.app_id, i.version, i.install_path, i.status, i.installed_at,
-                       r.running, r.autostart, r.pid,
+                       r.running, r.autostart, r.pid, r.process_identity,
                        r.last_started_at, r.last_stopped_at
                 FROM app_installation i
                 LEFT JOIN app_runtime r ON r.app_id = i.app_id
@@ -274,6 +324,14 @@ class RuntimeService:
             ).fetchall()
 
         # Group by app_id, return one entry per app with version list
+        scope = self._systemd_scope()
+        backend = (scope, self._should_use_systemd(scope))
+        live_states = None
+        if backend[1]:
+            try:
+                live_states = self._systemd.get_states({r["app_id"] for r in rows}, scope)
+            except (subprocess.SubprocessError, OSError):
+                live_states = {}
         seen: Dict[str, dict] = {}
         for row in rows:
             aid = row["app_id"]
@@ -287,7 +345,7 @@ class RuntimeService:
                     name = manifest.name
                 except Exception:
                     pass
-                runtime_state = self.get_runtime_state(aid)
+                runtime_state = self._state_from_row(aid, row, backend, live_states)
                 install_path = self._versioning.active_install_path(aid)
                 built_in_ui_entry = self._resolve_app_ui_entry_path(install_path, manifest)
                 panelhub_mountable = bool(
@@ -319,6 +377,21 @@ class RuntimeService:
     # ------------------------------------------------------------------ #
 
     def start(self, app_id: str) -> Dict[str, Any]:
+        with self._app_lock(app_id):
+            return self._start(app_id)
+
+    def _start(self, app_id: str) -> Dict[str, Any]:
+        scope = self._systemd_scope()
+        using_systemd = self._should_use_systemd(scope)
+        runtime_state = self.get_runtime_state(app_id, backend=(scope, using_systemd))
+        if not using_systemd:
+            owned = self._owned_processes.get(app_id)
+            if runtime_state.running or (owned is not None and owned[0].poll() is None):
+                return {"ok": True, "app_id": app_id, "running": True}
+            if owned is not None:
+                # The root exited before its watcher finished. Retire its guardian entry.
+                self.stop(app_id)
+
         active_version = self._versioning.active_version(app_id)
         if active_version is None:
             raise AppNotInstalledError(f"{app_id} has no active version")
@@ -329,8 +402,6 @@ class RuntimeService:
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} has no active version")
-
-        runtime_state = self.get_runtime_state(app_id)
 
         command = self._build_exec_command(manifest, install_path)
         command = self._decorate_command_for_realtime_logs(command)
@@ -344,8 +415,7 @@ class RuntimeService:
         log_path = self._app_log_path(app_id)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        scope = self._systemd_scope()
-        if self._should_use_systemd(scope):
+        if using_systemd:
             try:
                 self._write_systemd_unit(
                     app_id=app_id,
@@ -356,7 +426,7 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.daemon_reload(scope)
+                self._systemd.reload_changed_units(scope)
                 self._systemd.start(app_id, scope)
                 live = self._systemd.get_state(app_id, scope)
             except (OSError, subprocess.SubprocessError, ValueError) as exc:
@@ -376,6 +446,7 @@ class RuntimeService:
                 raise AppRuntimeError("Runtime is shutting down")
             self._ensure_guardian()
             try:
+                log_path.with_suffix(".exit").unlink(missing_ok=True)
                 with log_path.open("wb") as log_file:
                     proc = subprocess.Popen(
                         command,
@@ -388,28 +459,44 @@ class RuntimeService:
             except OSError as exc:
                 raise AppRuntimeError(f"启动 {app_id} 失败，无法写入日志: {exc}") from exc
 
-            table = processes()
-            if proc.pid in table:
-                stamp = table[proc.pid][2]
-                self._owned_processes[app_id] = (proc, stamp, {proc.pid: stamp})
+            try:
+                identity = _process_identity(proc.pid)
+                if identity is None:
+                    if proc.poll() is None:
+                        raise AppRuntimeError("Cannot identify the launched application process")
+                    self._record_exit(app_id, proc.returncode)
+                    self._sync_runtime_row(
+                        app_id, running=False, pid=None, autostart=runtime_state.autostart,
+                        last_started_at=now, last_stopped_at=int(time.time()),
+                    )
+                    return {"ok": True, "app_id": app_id, "running": False}
+            except (OSError, ValueError, AppRuntimeError) as exc:
+                proc.kill()
+                proc.wait(timeout=2)
+                raise AppRuntimeError("Cannot identify the launched application process") from exc
+
+            stamp = identity.split(":", 1)[1]
+            owned = (proc, stamp, {proc.pid: stamp})
+            self._owned_processes[app_id] = owned
+            try:
+                self._guardian_message("add", proc.pid, stamp)
+                self._sync_runtime_row(
+                    app_id, running=True, pid=proc.pid, process_identity=identity,
+                    autostart=runtime_state.autostart, last_started_at=now,
+                )
+            except Exception as exc:
+                terminate(owned[2], proc.pid, stamp)
+                proc.wait(timeout=2)
+                self._owned_processes.pop(app_id, None)
                 try:
-                    self._guardian_message("add", proc.pid, stamp)
-                except (OSError, ValueError) as exc:
-                    terminate(self._owned_processes[app_id][2], proc.pid, stamp)
-                    proc.wait(timeout=2)
-                    self._owned_processes.pop(app_id, None)
-                    raise AppRuntimeError("Application guardian registration failed") from exc
-            self._sync_runtime_row(
-                app_id,
-                running=True,
-                pid=proc.pid,
-                autostart=runtime_state.autostart,
-                last_started_at=now,
-            )
+                    self._guardian_message("remove", proc.pid, stamp)
+                except (OSError, ValueError):
+                    pass
+                raise AppRuntimeError("Application process registration failed") from exc
 
             watcher = threading.Thread(
                 target=self._watch_process_exit,
-                args=(app_id, proc),
+                args=(app_id, owned, identity),
                 daemon=True,
             )
             watcher.start()
@@ -417,6 +504,10 @@ class RuntimeService:
         return {"ok": True, "app_id": app_id, "running": True}
 
     def stop(self, app_id: str) -> Dict[str, Any]:
+        with self._app_lock(app_id):
+            return self._stop(app_id)
+
+    def _stop(self, app_id: str) -> Dict[str, Any]:
         now = int(time.time())
         runtime_state = self.get_runtime_state(app_id)
 
@@ -438,7 +529,6 @@ class RuntimeService:
         if runtime_state.pid or app_id in self._owned_processes:
             try:
                 owned = self._owned_processes.get(app_id)
-                table = processes()
                 if owned is not None:
                     proc, stamp, tree = owned
                     terminate(tree, proc.pid, stamp)
@@ -447,15 +537,16 @@ class RuntimeService:
                         if self._owned_processes.get(app_id) is owned:
                             self._guardian_message("remove", proc.pid, stamp)
                             self._owned_processes.pop(app_id, None)
-                elif runtime_state.pid in table:
-                    # Explicit stop may also adopt an app left by an older runtime.
-                    stamp = table[runtime_state.pid][2]
+                elif runtime_state.process_identity and runtime_state.process_identity == _process_identity(runtime_state.pid):
+                    # Pass the launch-time stamp, not a new stamp taken from a possibly reused PID.
+                    stamp = runtime_state.process_identity.split(":", 1)[1]
                     terminate({runtime_state.pid: stamp}, runtime_state.pid, stamp)
             except ProcessLookupError:
                 pass
             except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
                 raise AppRuntimeError("Application cleanup failed: " + str(exc)) from exc
 
+        self._app_log_path(app_id).with_suffix(".exit").unlink(missing_ok=True)
         self._sync_runtime_row(
             app_id,
             running=False,
@@ -468,6 +559,10 @@ class RuntimeService:
 
     def restart(self, app_id: str) -> Dict[str, Any]:
         """Stop then start an app."""
+        with self._app_lock(app_id):
+            return self._restart(app_id)
+
+    def _restart(self, app_id: str) -> Dict[str, Any]:
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
             if not self._versioning.list_versions(app_id):
@@ -503,7 +598,7 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.daemon_reload(scope)
+                self._systemd.reload_changed_units(scope)
                 self._systemd.restart(app_id, scope)
                 live = self._systemd.get_state(app_id, scope)
             except (subprocess.SubprocessError, OSError):
@@ -531,13 +626,40 @@ class RuntimeService:
     #  Autostart
     # ------------------------------------------------------------------ #
 
+    def configure_pipeline_autostart(self, takeover: bool) -> None:
+        """Reconcile boot ownership without starting/stopping apps or losing preferences."""
+        with self._autostart_lock:
+            self._pipeline_autostart = takeover
+            scope = self._systemd_scope()
+            if not self._should_use_systemd(scope):
+                if self._runtime_mode() == 'systemd':
+                    raise AppRuntimeError('Cannot reconcile boot ownership: systemd is unavailable')
+                return
+            if not takeover:
+                if self._reconcile_systemd_units(scope):
+                    raise AppRuntimeError('Could not restore individual systemd autostart settings')
+                return
+            # Disable already-installed units at SAVE time, before the next boot.
+            # An app which has never had a unit cannot be enabled independently.
+            try:
+                for app_id in self.list_installed_app_ids():
+                    if self._systemd.unit_file_path(app_id, scope).exists():
+                        self._systemd.set_enabled(app_id, scope, False, defer_reload=True)
+                self._systemd.daemon_reload(scope)
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise AppRuntimeError('Could not disable individual systemd autostart units') from exc
+
     def set_autostart(self, app_id: str, enabled: bool) -> Dict[str, Any]:
+        with self._autostart_lock:
+            return self._set_autostart(app_id, enabled)
+
+    def _set_autostart(self, app_id: str, enabled: bool) -> Dict[str, Any]:
         install_path = self._versioning.active_install_path(app_id)
         if install_path is None:
             raise AppNotInstalledError(f"{app_id} is not installed")
 
         scope = self._systemd_scope()
-        if self._should_use_systemd(scope):
+        if not self._pipeline_autostart and self._should_use_systemd(scope):
             manifest = self._get_manifest(app_id)
             command = self._build_exec_command(manifest, install_path)
             command = self._decorate_command_for_realtime_logs(command)
@@ -565,7 +687,7 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.daemon_reload(scope)
+                self._systemd.reload_changed_units(scope)
                 self._systemd.set_enabled(app_id, scope, enabled)
             except (subprocess.SubprocessError, OSError, ValueError):
                 pass
@@ -862,6 +984,9 @@ class RuntimeService:
                 if purge:
                     self._config.delete_app_config(app_id)
 
+        if version is None or not remaining:
+            PipelineStore(CONFIG_DIR / "startup_pipeline.yaml").detach_app(app_id)
+
         scope = self._systemd_scope()
         if self._should_use_systemd(scope):
             try:
@@ -972,7 +1097,7 @@ class RuntimeService:
         }
 
     def stop_all_apps(self) -> Dict[str, Any]:
-        app_ids = self._list_installed_app_ids()
+        app_ids = self.list_installed_app_ids()
         stopped: List[str] = []
         skipped: List[str] = []
         failed: List[Dict[str, str]] = []
@@ -1004,7 +1129,7 @@ class RuntimeService:
             ).fetchall()
         return [str(row["app_id"]) for row in rows]
 
-    def _list_installed_app_ids(self) -> List[str]:
+    def list_installed_app_ids(self) -> List[str]:
         with db_conn() as conn:
             rows = conn.execute(
                 "SELECT DISTINCT app_id FROM app_installation ORDER BY app_id"
@@ -1019,22 +1144,24 @@ class RuntimeService:
                 "SELECT app_id, autostart FROM app_runtime ORDER BY app_id"
             ).fetchall()
 
+        common_env = None
         for row in rows:
             app_id = str(row["app_id"])
-            enabled = bool(row["autostart"])
-            install_path = self._versioning.active_install_path(app_id)
-            if install_path is None:
-                continue
+            enabled = bool(row["autostart"]) and not self._pipeline_autostart
             try:
+                install_path = self._versioning.active_install_path(app_id)
+                if install_path is None:
+                    continue
                 manifest = self._get_manifest(app_id)
                 command = self._build_exec_command(manifest, install_path)
                 command = self._decorate_command_for_realtime_logs(command)
-                runtime_env = self._build_runtime_env()
                 active_version = self._versioning.active_version(app_id)
                 if active_version is None:
                     continue
+                if common_env is None:
+                    common_env = self._build_runtime_env()
                 runtime_env = {
-                    **runtime_env,
+                    **common_env,
                     **self._build_config_env(
                         app_id,
                         active_version,
@@ -1053,8 +1180,9 @@ class RuntimeService:
                     runtime_env=runtime_env,
                     log_path=log_path,
                 )
-                self._systemd.set_enabled(app_id, scope, enabled)
-            except (AppNotInstalledError, OSError, subprocess.SubprocessError, ValueError) as exc:
+                self._systemd.set_enabled(app_id, scope, enabled, defer_reload=True)
+            except Exception as exc:
+                # Reconciliation is best-effort: one broken app must not block other units.
                 errors.append("{}: {}".format(app_id, exc))
                 continue
 
@@ -1136,21 +1264,6 @@ class RuntimeService:
         install_path: Optional[Path] = None,
     ) -> Dict[str, str]:
         self._ensure_version_config_ready(app_id, app_version, manifest)
-        cfg = self._config.get_app_config(app_id, app_version)
-        default_data = self._config.get_app_default_config(
-            app_id,
-            app_version,
-            fallback=manifest.default_config,
-        )
-        data = dict(cfg.data) if cfg.version > 0 else default_data
-        try:
-            validate_config_data(
-                data,
-                manifest.config_schema,
-                context=f"runtime config {app_id}@{app_version}",
-            )
-        except InvalidConfigError as exc:
-            raise AppRuntimeError(str(exc)) from exc
 
         config_path = self._config.app_config_path(app_id, app_version)
         install_path = install_path or self._versioning.version_dir(app_id, app_version)
@@ -1159,17 +1272,14 @@ class RuntimeService:
             app_version,
         )
         helpers_entry_path = (SHELL_HELPERS_DIR / "aivuda_app_helpers.sh").resolve()
-        avahi_hostname = str(self._config.get_os_setting("avahi_hostname", "") or "").strip().lower()
-        env: Dict[str, str] = {
+        return {
             "AIVUDA_APP_ID": app_id,
             "AIVUDA_APP_VERSION": app_version,
             "AIVUDA_APP_INSTALL_PATH": str(install_path.resolve()),
             "AIVUDA_APP_RUNTIME_DATA_PATH": str(runtime_data_path.resolve()),
             "AIVUDA_APP_CONFIG_PATH": str(config_path.resolve()),
             "AIVUDA_APP_HELPERS_ENTRY_PATH": str(helpers_entry_path),
-            "AIVUDA_OS_AVAHI_HOSTNAME": avahi_hostname,
         }
-        return env
 
     def _ensure_version_config_ready(
         self,
@@ -1178,28 +1288,28 @@ class RuntimeService:
         manifest: AppManifest,
     ) -> None:
         cfg = self._config.get_app_config(app_id, app_version)
-        if cfg.version == 0:
-            self._config.init_app_config(app_id, app_version, manifest.default_config)
-            cfg = self._config.get_app_config(app_id, app_version)
-
-        default_data = self._config.get_app_default_config(
-            app_id,
-            app_version,
-            fallback=manifest.default_config,
-        )
-        data = dict(cfg.data) if cfg.version > 0 else default_data
+        saved = cfg.data if cfg.version > 0 else None
+        data = saved if saved is not None else manifest.default_config
         try:
             validate_config_data(
                 data,
                 manifest.config_schema,
+                previous_data=saved,
                 context=f"switch config {app_id}@{app_version}",
             )
         except InvalidConfigError as exc:
             raise AppRuntimeError(str(exc)) from exc
+        if cfg.version == 0:
+            self._config.init_app_config(app_id, app_version, manifest.default_config)
 
     def _build_runtime_env(self) -> Dict[str, str]:
         from aivudaos.core.config.runtime_environment import DEFAULT_RUNTIME_ENVIRONMENT, validate_runtime_environment
 
+        settings = self._config.get_os_config().data
+        overrides = settings.get("runtime_environment", DEFAULT_RUNTIME_ENVIRONMENT)
+        if has_ros2() and isinstance(overrides, dict):
+            domain = effective_domain(self._config.get_sys_config().data, overrides)
+            overrides = {**overrides, "ROS_DOMAIN_ID": str(domain)}
         return {
             "PYTHONUNBUFFERED": "1",
             "ROSCONSOLE_STDOUT_LINE_BUFFERED": "1",
@@ -1207,17 +1317,37 @@ class RuntimeService:
             "CLICOLOR_FORCE": "1",
             "FORCE_COLOR": "1",
             "PY_COLORS": "1",
-            **validate_runtime_environment(
-                self._config.get_os_setting("runtime_environment", DEFAULT_RUNTIME_ENVIRONMENT)
-            ),
+            **validate_runtime_environment(overrides),
+            "AIVUDA_OS_AVAHI_HOSTNAME": str(settings.get("avahi_hostname") or "").strip().lower(),
         }
+
+    def readiness_state_reader(self, app_id):
+        """Pin the selected backend for one probe and read systemd liveness directly."""
+        scope = self._systemd_scope()
+        if self._should_use_systemd(scope):
+            return lambda app: self._systemd.get_state(app, scope)
+        return lambda app: self.get_runtime_state(app, backend=(scope, False))
+
+    def readiness_context(self, app_id: str) -> Tuple[dict, dict, dict, dict]:
+        """Launch environment and active config inputs for a readiness command."""
+        version = self._versioning.active_version(app_id)
+        if not version:
+            raise AppNotInstalledError(f"{app_id} has no active version")
+        manifest = self._get_manifest(app_id, version)
+        env = {**os.environ, **self._build_runtime_env(),
+               **self._build_config_env(app_id, version, manifest)}
+        if not has_ros2():  # A command or an app-specific PATH may still use ROS.
+            env["ROS_DOMAIN_ID"] = str(effective_domain(self._config.get_sys_config().data, env))
+        config = self._config.get_app_config(app_id, version)
+        return env, config.data, manifest.default_config, manifest.config_schema
 
     def refresh_runtime_environment(self) -> List[str]:
         """Refresh persisted units; running processes receive changes on restart."""
-        scope = self._systemd_scope()
-        if self._should_use_systemd(scope):
-            return self._reconcile_systemd_units(scope)
-        return []
+        with self._autostart_lock:
+            scope = self._systemd_scope()
+            if self._should_use_systemd(scope):
+                return self._reconcile_systemd_units(scope)
+            return []
 
     @staticmethod
     def _decorate_command_for_realtime_logs(command: List[str]) -> List[str]:
@@ -1327,52 +1457,51 @@ class RuntimeService:
             return None
         return resolved
 
-    @staticmethod
-    def _is_pid_alive(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return True
-        else:
-            return True
+    def _record_exit(self, app_id, code):
+        atomic_write_text(self._app_log_path(app_id).with_suffix(".exit"), f"exited {code} popen\n")
 
-    def _watch_process_exit(self, app_id: str, proc: subprocess.Popen[Any]) -> None:
+    def exit_result(self, app_id):
         try:
-            owned = self._owned_processes.get(app_id)
+            fields = self._app_log_path(app_id).with_suffix(".exit").read_text().split()
+        except FileNotFoundError:
+            return None
+        if len(fields) != 3:
+            return None
+        return 0 if fields[0:2] == ["exited", "0"] and fields[2] in ("success", "popen") else " ".join(fields)
+
+    def _watch_process_exit(self, app_id: str, owned: tuple, identity: str) -> None:
+        proc, stamp, tree = owned
+        try:
             while proc.poll() is None:
-                if owned is not None:
-                    remember(owned[2], proc.pid, owned[1])
+                with self._snapshot_lock:
+                    when, table = self._process_snapshot
+                    if time.monotonic() - when >= .09:
+                        table = processes()
+                        self._process_snapshot = (time.monotonic(), table)
+                remember(tree, proc.pid, stamp, table)
                 time.sleep(0.1)
-            if owned is not None:
-                terminate(owned[2], proc.pid, owned[1])
+            with self._app_lock(app_id):
+                if self._owned_processes.get(app_id) is not owned:
+                    return  # A stop or restart has already retired this launch.
+                terminate(tree, proc.pid, stamp)
                 with self._process_lock:
-                    # A restart may already own a newer process for this app.
-                    if self._owned_processes.get(app_id) is owned:
-                        self._guardian_message("remove", proc.pid, owned[1])
-                        self._owned_processes.pop(app_id, None)
+                    self._guardian_message("remove", proc.pid, stamp)
+                    self._owned_processes.pop(app_id, None)
+                self._record_exit(app_id, proc.returncode)
+                self._mark_stopped_if_pid_matches(app_id, proc.pid, identity, int(time.time()))
         except Exception:
             # Keep the tracked PID/state until cleanup can be retried.
             return
 
-        stopped_at = int(time.time())
-        self._mark_stopped_if_pid_matches(app_id, proc.pid, stopped_at)
-
     def _mark_stopped_if_pid_matches(
-        self, app_id: str, pid: Optional[int], stopped_at: int
+        self, app_id: str, pid: Optional[int], identity: Optional[str], stopped_at: int
     ) -> None:
-        if pid is None:
-            return
-
         with db_conn() as conn:
             conn.execute(
                 "UPDATE app_runtime "
-                "SET running=0, pid=NULL, last_stopped_at=? "
-                "WHERE app_id=? AND pid=?",
-                (stopped_at, app_id, pid),
+                "SET running=0, pid=NULL, process_identity=NULL, last_stopped_at=? "
+                "WHERE app_id=? AND pid IS ? AND process_identity IS ?",
+                (stopped_at, app_id, pid, identity),
             )
             conn.commit()
 
@@ -1383,16 +1512,19 @@ class RuntimeService:
         running: bool,
         pid: Optional[int],
         autostart: bool,
+        process_identity: Optional[str] = None,
         last_started_at: Optional[int] = None,
         last_stopped_at: Optional[int] = None,
     ) -> None:
         with db_conn() as conn:
             conn.execute(
                 "INSERT INTO app_runtime "
-                "(app_id, running, autostart, pid, last_started_at, last_stopped_at) "
-                "VALUES (?, ?, ?, ?, ?, ?) "
+                "(app_id, running, autostart, pid, process_identity, last_started_at, last_stopped_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(app_id) DO UPDATE SET "
-                "running=excluded.running, autostart=excluded.autostart, pid=excluded.pid, "
+                "running=excluded.running, pid=excluded.pid, "
+                "autostart=CASE WHEN ? THEN app_runtime.autostart ELSE excluded.autostart END, "
+                "process_identity=excluded.process_identity, "
                 "last_started_at=COALESCE(excluded.last_started_at, app_runtime.last_started_at), "
                 "last_stopped_at=COALESCE(excluded.last_stopped_at, app_runtime.last_stopped_at)",
                 (
@@ -1400,14 +1532,16 @@ class RuntimeService:
                     1 if running else 0,
                     1 if autostart else 0,
                     pid,
+                    process_identity,
                     last_started_at,
                     last_stopped_at,
+                    self._pipeline_autostart,
                 ),
             )
             conn.commit()
 
     def read_logs(
-        self, app_id: str, offset: int = 0, limit: int = 65536
+        self, app_id: str, offset: int = 0, limit: int = 65536, from_end: bool = False
     ) -> Dict[str, Any]:
         if not self._versioning.list_versions(app_id):
             raise AppNotInstalledError(f"{app_id} is not installed")
@@ -1433,20 +1567,20 @@ class RuntimeService:
             raise AppRuntimeError(f"读取日志大小失败: {exc}") from exc
 
         reset = safe_offset > file_size
-        read_offset = 0 if reset else safe_offset
-        tail_aligned = False
-
-        if read_offset + safe_limit < file_size:
-            read_offset = max(0, file_size - safe_limit)
+        read_offset = file_size if from_end else (0 if reset else safe_offset)
+        tail_aligned = read_offset + safe_limit < file_size
+        if tail_aligned:
+            read_offset = file_size - safe_limit
             reset = True
-            tail_aligned = True
 
-        try:
-            with log_path.open("rb") as f:
-                f.seek(read_offset)
-                raw = f.read(safe_limit)
-        except OSError as exc:
-            raise AppRuntimeError(f"读取日志失败: {exc}") from exc
+        raw = b""
+        if not from_end:
+            try:
+                with log_path.open("rb") as f:
+                    f.seek(read_offset)
+                    raw = f.read(safe_limit)
+            except OSError as exc:
+                raise AppRuntimeError(f"读取日志失败: {exc}") from exc
 
         next_offset = read_offset + len(raw)
         eof = next_offset >= file_size

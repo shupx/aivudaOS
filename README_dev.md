@@ -12,9 +12,23 @@ aivudaOS：部署于机器人机载电脑上的轻量操作系统，用于从 ai
 
 配置参数中心的文本/数字输入支持浏览器历史下拉选择，成功提交后按站点和参数缓存最近 20 个不同值。历史存储与输入交互逻辑分别位于 `services/core/parameterValueHistory.js`、`composables/useParameterValueInput.js`，视图共用 `ParameterValueInput.vue`；只读与密码/密钥类字段不缓存。验证：`node --test tests/test_parameter_value_history.mjs`，以及在 UI 目录执行 `npm run build`。源码构建不会自动更新已经部署的本机 AppImage 或远程设备 UI。
 
+## App 启动流水线
+
+应用列表与启动流水线编辑器读取同一份 `${AIVUDAOS_WS_ROOT}/config/startup_pipeline.yaml`。列表调用 `GET /pipeline?view=list` 获取默认方案及当前操作，用 CSS 虚线框和 `AppCard` 展示分组。只有进入编辑器才加载 Vue Flow。未配置分组时沿用原列表的批量操作，开机接管默认关闭。
+
+`core/apps/pipeline_config.py` 负责版本锁、组与 App 的联合依赖校验和分组预览。`pipeline.py` 支持整条方案和单组启动、停止、重启。重启在同一个 operation 内持有 App 预留锁，单组重启预检组外依赖后逆序停止，成功后按依赖启动并执行 `pipeline_probes.py` 的就绪检测。HTTP 与 MCP 共用运行时和操作管理器，沿用单 worker 部署。
+
+组的 `depends_on` 保存组间箭头，App 的同名字段保存节点前置条件。旧方案在读取时还原原有组间连线。运行时按实际完成事件释放后继，独立组和分支共享 8 个执行槽。就绪探活支持本次启动的日志、一次性任务退出码和 ROS 首帧。`pipeline_ros.py` 按运行环境复用 `pipeline_ros_worker.py` 中的 ROS 参与者。worker 空闲时等待 ROS 事件，新的探活请求和输入关闭通过 guard condition 唤醒它。首帧探活按 App overlay 路径复用进程，并依据在线发布者选择锁存或传感器 QoS。元数据探活共享基础 ROS 环境。生命周期探活仅在查询状态时加载服务类型。日志探活保留 4 KiB 跨块缓存，纯文本匹配只使用标准库。显式停止会清除一次性任务的退出回执。列表状态查询合并 systemctl 调用，只在状态变化时同步数据库。
+
+画布随「启动流水线」标签懒加载。组框位置与依赖独立，组和 App 连线支持删除与反向重连。`pipelineDependencies.js` 按依赖及就绪节点的排序生成串行次序，校验器和 `pipelineGraph.js` 画布共用这些前驱关系。卡片保持固定尺寸，布局和连线按 500 ms 防抖保存。ROS 2 模板给新增阶段添加前序组连线，保留已有依赖。单组连带启动会包括上游串行前序，列表同步显示其进度。画布工具栏支持重启，失败日志显示于画布上方，一次性节点保留完成态。
+
+开发态 ACEswarm 直接提供本仓库的前端构建产物。修改分组配置字段后，需要重启提供该页面 API 的内嵌后端，并在桌面端使用同一个 API 校验保存和读回。
+
+行为、接口及 ROS 2 探活示例见[应用管理](docs/app-management.md#启动流水线)。验证：在仓库根目录运行 `pytest tests/test_startup_pipeline.py`（测试环境需要 `pytest` 和 `httpx`）及 `node --test tests/test_startup_pipeline_ui.mjs tests/startup_pipeline_list_cases.mjs`，在 UI 目录运行 `npm ci`、`npm run build`。探活测试使用临时工作区、回环服务和模拟 ROS CLI，不启动真实机器人。
+
 ## Python 兼容性约束
 
-Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。
+默认流水线无分组时，Apps 页面顶部 Restart 使用 `POST /api/apps/bulk/restart-running`，按请求时的 `running` 状态批量重启，不受 `autostart` 影响。原 `restart-autostart` API 保留。验证：`python3 -m unittest discover -s tests -p 'test_bulk_restart.py'`，并在 UI 目录执行 `npm run build`。
 
 - 后端 Python 代码必须兼容 `Python 3.8`。
 - 类型标注不要使用 `dict[str, Any]`、`list[str]`、`set[str]`、`tuple[int, int]` 这类 3.9+ 内建泛型写法。
@@ -137,6 +151,7 @@ Caddy 托管前端静态文件并反代 `/aivuda_os/api`，其中 HTTP 仅监听
 另外，App 内置 UI（`/{app_id}/ui/`）也由 Caddy 直接托管：
 
 - 后端会根据各 app active 版本的 `manifest.ui_index_path` 自动生成 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/caddy/{app_id}.ui.caddy`
+- 网关在重装前后禁止缓存未注册的应用 UI 和 API 地址。独立部署启动时会迁移默认的旧 Caddy 首页回退配置，保留已有应用导入和 HTTPS 站点。
 - 在安装、卸载、切换版本时会自动重写顶层 Caddyfile 的 import 区块并 reload Caddy
 - 如 manifest 额外声明 `ui_mount_type: qiankun`，AivudaOS 会将其视为可被 PanelHub 自动发现的 qiankun 子应用入口
 
@@ -252,8 +267,8 @@ MCP 在 FastAPI 主进程中提供 `/aivuda_os/mcp`，随 AivudaOS 服务一起�
 入口。ACEswarm 使用 `http://127.0.0.1:28790/aivuda_os/mcp`（端口可配置）。
 无需 `aivudaos-mcp` 命令、独立 MCP 端口或额外代理；旧客户端地址需要更新。
 
-根据业务 API 路由生成 46 个 HTTP 工具及 1 个交互 WebSocket 工具，保留原有
-5 个工具名。MCP 和静态 UI 不参与工具生成。内部传输通过 ASGI 调用同一应用
+根据业务 API 路由生成 HTTP 和交互 WebSocket 工具，工具数量和参数以 `tools/list`
+为准，保留原有工具名。MCP 和静态 UI 不参与工具生成。内部传输通过 ASGI 调用同一应用
 的 API，保留认证、参数校验、middleware、异步任务、文件、SSE 和 WebSocket。
 同步 MCP 调度在工作线程中执行，API 请求在服务事件循环中运行，不回连 Caddy。
 
@@ -301,9 +316,14 @@ agent 无 token 时先使用默认 `admin / admin123` 自动登录，主进程�
 - 需要输入时，前端通过 WebSocket 连接 `interactive_ws_path?token=...` 并发送文本输入；后端会自动追加换行写入脚本 stdin。
 - 当前交互链路基于 PTY，支持 `sudo` 密码、`y/n` 等命令行提示输入。
 
+## 机载视觉应用联调
+
+相机、AprilTag、C20D 与 Zenoh Bridge 的参数、话题和只读验收步骤见[机载联调说明](docs/drone-camera-gimbal.md)。
+
 ## 在线应用商店接入
 
 - UI 左侧菜单新增“在线应用商店”，位置在“应用菜单”下方。
+- 来源设备通过已登录的管理页面创建一小时有效的只读共享地址。该地址提供同样的 store API，目录来自安装数据库，下载时按版本目录生成 tar。
 - 商店默认地址为 `http://127.0.0.1:28791`；自定义地址由前端页面输入并保存在当前浏览器本地存储（localStorage，key: `aivuda_ui_appstore_base_url`）。
 - 前端按“商店地址 + /aivuda_app_store/store/...”拼接调用 store API（列表、详情、下载链接、下载文件）。
 - 下载流程：先下载应用包到用户浏览器本机；安装流程：再将该包按本地上传接口 `POST /aivuda_os/api/apps/upload` 传给 AivudaOS 安装。
@@ -330,6 +350,12 @@ Regression checks: `python -m unittest discover -s tests`, plus ACEswarm's
 workspace and verifies normal/system quit, SIGTERM and SIGKILL leave no fixture
 or service processes. The fixture includes a detached child ignoring SIGTERM.
 
+## ROS 2 Domain
+
+系统设置的只读摘要和配置中心的专用编辑区使用同一套字段发现规则（前后端一致：`rosDomains.js` 与 `ros_domain.is_ros_domain_field`）。所有 ROS 2 Domain 类参数均排除在磁吸（MagnetService）之外，确保每个算法可独立配置自己的通信域（或通过 `-1` 继承全局默认 `sys.ros2_default_domain_id`）。应用参数可通过配置路径、schema 说明或 `x-ros-domain` 标记发现，详见应用管理文档。
+
+ROS 2 主机通过 `ROS_VERSION=2`、PATH 上的 `ros2` 或 `/opt/ros/*/bin/ros2` 识别。系统参数 `sys.ros2_default_domain_id` 存放在 `config/sys.yaml`，可通过现有系统参数 API 读写并随系统参数导入、导出。升级时先保留合法的全局值（旧字符串如 `"7"` 转为整数），再依次尝试 `runtime_environment.ROS_DOMAIN_ID`、服务进程的 `ROS_DOMAIN_ID`；跳过空值和越界值，都无效才使用 0。后续启动环境使用系统参数，应用入口可覆盖该值。更新会刷新 systemd 单元，现有进程继续使用启动时的环境。
+
 ## App 额外环境变量
 
 系统设置页面最下方提供变量名/值表格，支持增加、删除、修改并统一保存。配置保存在 `os.yaml` 的 `runtime_environment` 字符串映射中；新建配置及旧配置缺少该字段时默认加入 `ROS_LOCALHOST_ONLY: "1"`。显式保存 `{}` 可删除所有额外变量，重启不会重新填充。
@@ -339,12 +365,12 @@ or service processes. The fixture includes a detached child ignoring SIGTERM.
 ```yaml
 runtime_environment:
   ROS_LOCALHOST_ONLY: "1"
-  ROS_DOMAIN_ID: "10"
+  PYTHONFAULTHANDLER: "1"
 ```
 
 所有 app 的启动、重启、自启动和 systemd unit 重建均读取这份配置。额外变量覆盖继承环境和默认日志变量，内部 `AIVUDA_*` 路径变量保留。变量名必须匹配 `[A-Za-z_][A-Za-z0-9_]*`，不允许 `AIVUDA_*`；值必须为不含 NUL/换行的字符串，空字符串有效。systemd 会转义引号、反斜杠和百分号，保持变量的字面值。
 
-保存后自动刷新 app systemd unit 并 daemon-reload；不会自动重启运行中的 app，它们在下一次启动/重启时获得新值。API 返回 `runtime_environment_refresh_errors`，若部分 unit 刷新失败，UI 会说明配置已保存并显示失败原因。Popen 删除额外变量后恢复继承 AivudaOS 进程环境；该功能不修改 AivudaOS 自身或 app 安装/卸载脚本的环境。
+保存后在工作线程刷新 app systemd unit，每轮共用一份环境配置，最后统一执行一次 daemon-reload；不会自动重启运行中的 app，它们在下一次启动/重启时获得新值。API 返回 `runtime_environment_refresh_errors`，若部分 unit 刷新失败，UI 会说明配置已保存并显示失败原因。Popen 删除额外变量后恢复继承 AivudaOS 进程环境；该功能不修改 AivudaOS 自身或 app 安装/卸载脚本的环境。
 
 验证：`../.venv/bin/python -m unittest discover -s tests -v`；UI 在 `aivudaos/resources/ui` 执行 `npm run build`。
 
@@ -355,6 +381,8 @@ active 版本参数为来源；覆盖安装时，以被覆盖版本参数为来�
 `ConfigService.migrate_app_config` 调用 `core/config/app_migration.py`：递归合并对象，
 按来源合法值、目标已有合法值、目标默认值的顺序选择；数组整体选择，不进行猜测类型转换。
 仅明确禁止的额外字段会被省略，允许的动态键继续保留。来源配置不被重写。
+
+目标 schema 可用根节点的 `x-ros-domain-migration.section` 指定接收旧域号的配置节。安装和版本切换在合并默认值前解析原先生效的域号，具体优先级见 [App 管理](docs/app-management.md)。
 
 迁移失败的字段返回 `config_migration_warnings`（path/source/reason/action），操作仍成功。
 缺少无可用值的必填字段时返回 `config_valid=false`，跳过磁吸重算和自动启动；手动启动仍执行
@@ -374,3 +402,19 @@ npm run build
 ```
 
 详见 [App 管理](docs/app-management.md)。
+
+### 验证核心生命周期
+
+`tests/test_app_lifecycle_gateway.py` 使用临时工作区、独立的 Caddy 管理 socket 和真实 Popen 子进程，验证从 HTTP 上传、仅应用参数导入、安装失败回滚、重复启动、读日志、停止到切换和卸载的完整路径。它分别让升级和同版本覆盖的 Caddy 重载失败，再检查旧路由、旧参数和旧程序仍可用。若未使用 ACEswarm 默认的开发 Caddy，可指定已有二进制：
+
+```bash
+AIVUDAOS_TEST_CADDY=/absolute/path/to/caddy python3 -m unittest discover -s tests
+node --test tests/test_*.mjs
+npm --prefix aivudaos/resources/ui run build
+# 需已安装 Playwright 及其 Chromium；使用系统 Chrome 时可设 PLAYWRIGHT_CHANNEL=chrome
+node --test tests/browser/*.mjs
+```
+
+未提供 Caddy 时，缺少该二进制的开发环境会跳过真实网关集成测试；其余后端测试仍可运行。
+
+配置中心的目标机 IPv4 动态选择器及包内 schema 约定见 [应用管理](docs/app-management.md#设备网卡和源地址选项)。

@@ -3,9 +3,42 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 from aivudaos.core.apps.config_validation import validate_config_data
+from aivudaos.core.apps.device_network import NetworkSnapshot
 from aivudaos.core.errors import InvalidConfigError
 
 _MISSING = object()
+
+
+def _migrate_ros_domain(data: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve the previous package's domain before merging defaults or dropping retired keys."""
+    rule = schema.get("x-ros-domain-migration")
+    if not isinstance(rule, dict):
+        return data
+    section = rule.get("section")
+    if not isinstance(section, str) or section == "ros":
+        return data
+    settings = data.get(section, {})
+    ros = data.get("ros", {})
+    if not isinstance(settings, dict) or not isinstance(ros, dict):
+        return data
+    current = settings.get("ros_domain_id", _MISSING)
+    legacy = ros.get("domain_id", _MISSING)
+    if legacy is _MISSING and current is _MISSING:
+        return data
+    value = current
+    if current is _MISSING or (current == -1 and rule.get("legacy_when_inheriting") is True):
+        value = legacy if legacy is not _MISSING else current
+    # Some older launchers accepted integral YAML floats as JSON Schema integers.
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    result = {**data, section: {**settings, "ros_domain_id": value}}
+    if legacy is not _MISSING:
+        remaining = {k: v for k, v in ros.items() if k != "domain_id"}
+        if remaining or "ros" in schema.get("properties", {}):
+            result["ros"] = remaining
+        else:
+            del result["ros"]
+    return result
 
 
 def migrate_app_parameters(
@@ -13,6 +46,7 @@ def migrate_app_parameters(
     schema: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], List[Dict[str, str]], bool]:
     warnings: List[Dict[str, str]] = []
+    network = NetworkSnapshot()
 
     def warn(path: str, origin: str, reason: str, action: str = "fallback") -> Dict[str, str]:
         item = {"path": path, "source": origin, "reason": reason, "action": action}
@@ -22,6 +56,7 @@ def migrate_app_parameters(
 
     def visit(candidates: List[Tuple[str, Any]], node: Dict[str, Any], path: str) -> Any:
         rejected: List[Dict[str, str]] = []
+        saved = next((v for name, v in candidates if name == "target"), None)
 
         def resolve(action: str) -> None:
             for item in rejected:
@@ -66,7 +101,7 @@ def migrate_app_parameters(
                 resolve("used_" + origin)
                 return result
             try:
-                validate_config_data(value, node)
+                validate_config_data(value, node, previous_data=saved, network=network)
             except InvalidConfigError as exc:
                 rejected.append(warn(path, origin, str(exc)))
                 continue
@@ -75,7 +110,10 @@ def migrate_app_parameters(
         resolve("skipped")
         return _MISSING
 
-    data = visit([("source", source), ("target", target), ("default", defaults)], schema or {}, "$")
+    schema = schema or {}
+    source = _migrate_ros_domain(source, schema)
+    target = _migrate_ros_domain(target, schema)
+    data = visit([("source", source), ("target", target), ("default", defaults)], schema, "$")
     if data is _MISSING:
         data = {}
     def collect_missing(value: Any, node: Dict[str, Any], path: str) -> None:
@@ -96,7 +134,7 @@ def migrate_app_parameters(
     collect_missing(data, schema or {}, "$")
     valid = True
     try:
-        validate_config_data(data, schema)
+        validate_config_data(data, schema, previous_data=target, network=network)
     except InvalidConfigError as exc:
         valid = False
         warn("$", "result", str(exc), "requires_configuration")

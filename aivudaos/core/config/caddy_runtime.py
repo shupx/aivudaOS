@@ -16,6 +16,32 @@ class CaddyRuntimeService:
         r"(?m)^(?P<indent>\s*)https://(?:\{\$AVAHI_HOSTNAME\}|__AVAHI_HOSTNAME__|[a-z0-9][a-z0-9-]{0,62})\.local(?P<port>:\d+)?\s*\{"
     )
 
+    # Match the original standalone gateway layout. Keep app imports, backend
+    # settings and other sites verbatim when upgrading a persisted Caddyfile.
+    _legacy_app_fallback = (
+        "    # END AIVUDA APP IMPORTS\n\n"
+        "    handle {\n      encode zstd gzip\n      root * ./ui/dist\n"
+        "      try_files {path} /index.html\n      file_server\n    }\n  }\n}"
+    )
+
+    def _upgrade_app_cache_policy(self, text: str) -> str:
+        start = "(aivudaos_common_route) {\n"
+        prefix, marker, rest = text.partition(start)
+        common, end, sites = rest.partition("\n}")
+        if not marker or not end or "@appEndpoint" in common or self._legacy_app_fallback not in common + end:
+            return text
+        # Preserve the existing proxy, imports and sites. Replace only the
+        # recognized stock fallback with its counterpart in the shipped template.
+        template = self._caddy_template_path.read_text(encoding="utf-8")
+        stock_common = template.partition(start)[2].partition("\n}")[0]
+        policy, _, _ = stock_common.partition("  @api path ")
+        imports_end = "    # END AIVUDA APP IMPORTS\n"
+        _, _, fallback = stock_common.partition(imports_end)
+        if "@appEndpoint" not in policy or not fallback:
+            return text
+        updated = (common + end).replace(self._legacy_app_fallback, imports_end + fallback + "\n}", 1)
+        return prefix + marker + policy + updated + sites
+
     def __init__(
         self,
         *,
@@ -41,6 +67,7 @@ class CaddyRuntimeService:
             r"(?m)^(\s*@api\s+path\s+/aivuda_os/api\*)[ \t]*$",
             r"\1 /aivuda_os/mcp", text,
         )
+        routed = self._upgrade_app_cache_policy(routed)
         
         def _replace(match: re.Match[str]) -> str:
             indent = match.group("indent") or ""

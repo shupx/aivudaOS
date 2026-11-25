@@ -4,7 +4,7 @@
 
 AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以 `.tar.gz`、`.tgz`、`.tar`、`.tar.xz`、`.txz` 或 `.zip` 压缩包上传，包内必须包含 `manifest.yaml` 描述文件。系统支持多版本共存、版本切换、进程生命周期管理和自启动。
 
-当前 UI 还支持“在线应用商店”入口：从 aivudaAppStore 的 `store` API 查看应用与版本，先下载安装包到浏览器本机，再一键上传到 AivudaOS 安装。
+当前 UI 还支持“在线应用商店”入口：从 aivudaAppStore 或另一台 aivudaOS 的共享地址查看应用与版本，先下载安装包到浏览器本机，再一键上传到 AivudaOS 安装。
 
 当前 UI 新增“配置参数”中心入口（Dashboard 侧边栏），统一管理所有已安装 app 的 **active 版本** 配置。各 app 详情页仅保留跳转到统一参数中心，不再提供分散编辑入口。
 
@@ -12,7 +12,97 @@ AivudaOS 通过 **本地上传安装包** 的方式管理应用。每个 App 以
 
 App 的 `start / stop / restart` 与批量 `restart-running / restart-autostart / start-autostart / stop-all` 现在会先返回 queued operation，由后台线程并行执行；同一 app 仍然保留单操作冲突保护。
 
-Apps 页面顶部 Restart 图标调用 `POST /api/apps/bulk/restart-running`，重启请求时所有正在运行的 app，不受自启动开关影响，也不会启动已停止的 app。原 `restart-autostart` API 保留原有行为。
+默认流水线没有配置分组时，列表顶部的三个操作分别重启当前运行的 App、启动设为自启的 App、停止所有 App。配置了分组后，这三个位置控制默认流水线，作用范围限于方案里启用的组和节点，切回平铺显示也遵循此规则。
+
+## 启动流水线
+
+应用列表读取 `default_profile`。默认方案含非空分组时，列表按阶段显示分组框，未分组应用放在底部。组标题显示执行模式和运行数。使用标题右侧按钮启动、重启或停止单组，使用列表工具栏操作整条流程。执行中可取消。搜索仍可跳转到卡片，切换平铺或紧凑布局后也可使用。
+
+在 Apps 顶部切换到「启动流水线」，新建分组并展开未分组托盘。点击 App 可加入首组，也可以拖入目标分组。托盘和画布的 App 卡片均为 200 × 76。应用列表的标准卡片宽 300 px，紧凑模式宽 240 px，窄屏按可用空间收缩。
+
+在两组之间，从上游组框右侧的圆点拖到下游组框左侧的圆点。选中连线后按 Delete 或 Backspace 可断开。可以保留多个独立分组、分支和汇合。移动组框只改变位置。App 之间也可用同样的方式创建就绪依赖，包括从画布右侧连向左侧。串行组内的顺序箭头随组内次序和 App 依赖自动生成。
+
+双击组名可重命名。「自动整理」重新排列卡片。拖动结束或修改连线后，编辑器等待 500 ms 自动保存。设置中可切换方案、选择失败策略和开机接管，或应用 ROS 2 分组模板。模板默认串接中间件、硬件、感知、规划、遥测五个阶段。补齐阶段时保留已有组的连线，跳过会形成环路的默认连线。可随时断开组间箭头，设置中的排序控制列表显示次序。
+
+每组的 `depends_on` 保存前置组 ID，每个 App 的 `depends_on` 保存前置 App ID。新建组的前置组为空。读取整份未声明组依赖的旧方案时，系统按旧的 `order` 将启用组串接，首次保存时写入这些显式连线。停用或空的中间组在调度时传递其上游约束。最后一个版本卸载后，系统清理各方案的节点、布局和引用。
+
+并行组中的节点在自身前置条件满足后即可提交，全方案最多同时执行 8 个任务。串行组按拓扑次序逐个执行。组间依赖要求上游组启用的成员就绪。只需等待某个 App 时可仅连接 App。单组启动默认检查外部前置条件。画布的「连带启动上游依赖」按钮和列表的「连带启动上游」选项可补启缺少的前置 App，也会依次启动上游串行组内排在该前置 App 之前的成员。列表同步显示这些组的启动进度。单组重启会先检查上游，预检失败时保留整组运行状态。
+
+`abort` 在观察到失败后停止提交后续节点。`skip_dependents` 跳过失败项的后继并继续运行独立分支。`continue` 尝试启动后继并将受影响的节点标为降级。停止按实际依赖逆序执行，停止失败会阻止提交剩余任务。取消会中断探活和后续调度，已运行的进程继续运行。画布工具栏可以启动、重启或停止当前方案。状态区在画布上方显示日志并标红失败状态。一次性节点成功退出后保持绿色「已完成」直到下次操作。
+
+旧版后端拒绝分组的 `depends_on` 字段时，编辑器保留草稿并提示更新当前网关。若使用 ACEswarm，本机页面和无人机页面各有独立后端，分别部署和验证。
+
+### 配置和开机行为
+
+`${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/startup_pipeline.yaml` 首次保存时生成。不存在时返回版本 `0` 和空的 `default` profile。以下片段可用于有 `driver`、`localizer` 两个已安装 App 的设备（API 接收对应的 JSON）：
+
+```yaml
+version: 0
+takeover_autostart: false
+default_profile: robot
+profiles:
+  - name: robot
+    on_failure: skip_dependents
+    groups:
+      - id: hardware
+        depends_on: []
+        name: Hardware & Drivers
+        order: 0
+        mode: parallel
+        enabled: true
+        items:
+          - app_id: driver
+            readiness: {type: ros2_topic, topic: /scan, require_message: true, timeout_sec: 30}
+      - id: localization
+        depends_on: []
+        name: Localization
+        order: 1
+        items:
+          - app_id: localizer
+            depends_on: [driver]
+            readiness: {type: ros2_lifecycle, node_name: /localizer, lifecycle_state: active}
+```
+
+可选的 `profile.layout` 保存显示位置。例如 `{"group:hardware":{"x":20,"y":30},"app:driver":{"x":24,"y":64}}`。分组使用画布坐标，App 使用相对于分组左上角的坐标。每项须有有限数值 `x`、`y`，可选宽高 `w`、`h` 须为正的有限数值。省略布局时按执行顺序自动排布。启停计划始终由 `groups`、`items` 与 `depends_on` 决定。
+
+接管默认关闭：Popen 继续重放原有 `autostart`，systemd 继续管理独立 unit。**只有保存接管开关才改变开机行为**：在 systemd 模式下，保存时立即禁用已安装 App 的独立 unit 自启，不停止已运行进程；网关启动时再校正并运行默认 profile。接管期间保留单 App 自启偏好，关闭接管并保存后恢复，不自动启动此前未运行的 App。接管开启但计划无启用节点时不会启动任何 App。
+
+### 就绪探活
+
+| `type` | 放行条件 |
+|---|---|
+| `started`（默认） | 启动后确认进程仍在运行 |
+| `delay` | 存活满 `delay_sec`（默认 1 秒） |
+| `tcp` | 本机 `host:port` 可连接，host 限 `localhost` 或回环 IP，默认 `127.0.0.1` |
+| `http` | GET `url` 收到 HTTP 2xx；不跟随重定向 |
+| `log_contains` / `log_regex` | 本次启动的 `current.log` 中出现指定的 `pattern`。两种后端在启动新进程时清空日志，增量匹配保留上一块末尾 4 KiB。文本匹配直接搜索字节，正则匹配优先使用支持单次匹配超时的 `regex`，缺少时使用标准库 `re` |
+| `exited_zero` | 运行后端记录到退出码 0，可用于一次性脚本。非零退出或信号终止会报告失败。显式停止会清除退出回执，下次检查需要新的成功退出 |
+| `ros2_node` | 发现完整名称与 `node_name` 相同的节点 |
+| `ros2_topic` | 发现 `topic`。勾选 `require_publisher` 检查发布者数量。勾选 `require_message` 后，必须在探活期间实际收到一条消息 |
+| `ros2_lifecycle` | 节点的 GetState 服务返回目标 `lifecycle_state`，默认 `active` |
+| `command` | 应用安装目录中的 shell 命令 `command` 成功退出 |
+
+`timeout_sec` 默认 30 秒，`interval_sec` 默认 1 秒。流水线按运行域及中间件环境复用短生命周期的 rclpy 子进程，结束后回收。ROS 探活使用 App 的有效域与运行环境。若网关 PATH 中缺少 ros2，但可在 `/opt/ros` 中唯一确定发行版，探针会加载该发行版的 setup.bash。首帧探活在系统 ROS 环境就绪后，从 `AIVUDA_APP_INSTALL_PATH` 依次加载存在的 `install/local_setup.bash`、`install/setup.bash` 和一级子目录中的 `*/install/local_setup.bash`（按路径排序）。自定义消息（如 `livox_ros_driver2/msg/CustomMsg`）需要对应的 Python 类型支持。缺少时可使用 `log_contains`，或在只需确认发布者在线时使用 `require_publisher`。仅首帧探活按 overlay 组合区分子进程。
+
+首帧探活等待在线发布者出现。任一发布者同时提供 reliable 和 transient-local 时，探针以相同策略订阅并保留最近一帧，因此可以收到 `/tf_static`、`/map` 已发布的锁存数据。其他发布者使用传感器 QoS。同一话题存在多个在线消息类型时会报告错误。生命周期探活按需加载 `lifecycle_msgs`，首次发出状态请求时最多等待 0.1 秒以接收即时响应。命令探活以网关账号运行，仅填写可以重试的探测命令。
+
+### HTTP 与事件
+
+以下路径相对 `/aivuda_os/api/apps`，均需 `token` 查询参数：
+
+| 方法与路径 | 用途 |
+|---|---|
+| `GET /pipeline` | 返回 `config`、`installed_apps`、默认 profile 的 `unassigned_apps`、`validation`（含各 profile 的分组批次预览）和 `active_operation` |
+| `POST /pipeline/validate` | 请求体为完整草稿；只返回 `{valid, errors, preview}`，不改变文件或运行状态 |
+| `PUT /pipeline` | 请求体为完整配置，携带最近读取的 `version`。成功后原子替换并返回新版本；旧版本返回 409，无效配置返回 422 |
+| `POST /pipeline/run` | 空请求体运行默认 profile；`{"profile":"robot","group_id":"hardware"}` 只运行指定组；添加 `"with_deps": true` 可启动未运行的前置项 |
+| `POST /pipeline/stop` | 逆序停止整条方案，也可传 `group_id` 仅停止一组。若组外下游节点仍在运行，事件流会给出英文提示 |
+| `POST /pipeline/restart` | 请求体同 `run`。在同一操作及同一套 App 锁内先逆序停止，停止全部成功后按依赖启动并执行就绪探活 |
+| `GET /pipeline?view=list` | 应用列表轻量读取 `config` 和 `active_operation`，实时安装清单由已有列表接口提供 |
+
+启动、停止和重启均返回 202 和 `operation_id`。`GET /operations/{operation_id}/events` 可从头回放 `pipeline_stage`、`pipeline_node`、`log` 及终态事件；节点状态与实际进程状态独立。在应用列表与流水线编辑器间切换时，页面继续订阅同一个操作，两个标签共用进度和日志。`POST /operations/{operation_id}/cancel` 请求取消。运行中的流水线会占用所涉及 App 的 operation 名额，冲突返回 409。同一网关只允许一条流水线操作同时执行，操作记录与 SSE 回放仅保存在该网关进程内。
+
+MCP 提供 `get_startup_pipeline`、`run_startup_pipeline`、`restart_startup_pipeline` 和 `stop_startup_pipeline`。内置 HTTP MCP 的流水线接口要求调用方显式提供 session token，见 [MCP 认证说明](mcp.md#认证与请求隔离)。
 
 ### 参数值输入历史
 
@@ -96,6 +186,7 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 - 该路径不再由 FastAPI `FileResponse` 提供，而是由 Caddy 静态托管
 - 系统会在 `${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/config/caddy/` 自动生成 `{app_id}.ui.caddy`
 - 安装、卸载、切换版本时会自动更新顶层 Caddyfile import 区块并 reload Caddy
+- 网关为应用的 `/<app>/ui/*` 和 `/<app>/api/*` 默认返回 `Cache-Control: no-store`。应用路由未注册时，这些地址返回 404；工作台的深层链接仍可打开首页。旧网关留下的浏览器缓存可通过清除对应站点的页面缓存移除。
 - 设置 `ui_mount_type: qiankun` 后，该入口会继续作为普通 built-in UI 可访问，同时会在 PanelHub 自动发现列表中被标记为可挂载
 
 ### 可选生命周期脚本
@@ -116,7 +207,7 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 - 同时通过操作事件流实时回传到前端
 - `pre_install` 支持 PTY 交互模式（可接收 sudo 密码、`y/n` 等输入）
 
-覆盖安装（同版本 `overwrite=true`）时，会先重建该版本目录，再执行 pre_install。
+覆盖安装（同版本 `overwrite=true`）时，安装器暂存旧目录，在最终版本路径执行 `pre_install`，成功发布后才丢弃备份。安装中途报错或取消会撤销本次安装对版本目录、安装记录、活动链接和受管配置的修改；若已尝试更新 Caddy，则按恢复后的活动版本重新生成路由并尝试重载。这不是断电恢复机制，安装脚本自行修改的操作系统文件或外部服务也不在回滚范围内。覆盖运行中的版本前建议先停止应用；安装操作结束前不要同时切换或卸载这个应用。
 
 
 ## 文件系统布局
@@ -125,6 +216,10 @@ config_schema_path: ./config/config_schema.yaml     # schema 文件（必填，�
 配置说明：
 
 - `config/os.yaml`：系统运行参数（如 `runtime_process_manager`、`runtime_systemd_scope`、`avahi_hostname`），不参与磁吸。
+- ROS 2 主机在系统设置中只读汇总全局默认值和应用实际声明的 Domain 参数。点击「前往配置参数修改」可在配置中心的「ROS 2 通信域参数」中保存全局值或应用字段。每个算法的 Domain 参数独立管理，不参与磁吸同步。应用下次启动时使用新的配置。
+- 新安装包建议在各自算法命名空间下声明 `ros_domain_id` 或 `domain_id`（例如 `camera.ros_domain_id`、`apriltag.ros_domain_id`、`policy.ros_domain_id`、`fastlio.ros_domain_id`、`zenoh.ros_domain_id`），默认 `-1` 表示继承全局 `sys.ros2_default_domain_id`，`0~232` 为独立覆盖。自定义字段可在 JSON Schema 中添加 `"x-ros-domain": true`，或在标题、说明中指明 `ROS_DOMAIN_ID`。页面读取激活版本的 schema、默认配置和当前配置，显示原字段路径。未声明 Domain 的应用不会生成占位行。
+- 对没有 ROS/DDS 语义的字符串字段，仅凭 `domain_id` 后缀不会把 UUID 等文本改成数字编辑器。数组内声明 Domain 时，磁吸不会复制整个数组；编辑某个元素的 Domain 不应覆盖其他元素。声明为字符串（含可空字符串）的 Domain 仍以 JSON 字符串保存。
+- 升级时，全局 Domain 按 `sys.ros2_default_domain_id`、`os.yaml` 的 `runtime_environment.ROS_DOMAIN_ID`、服务环境变量的顺序取第一个合法值。有效旧数字字符串会转成整数；没有合法来源时使用 `0`。
 - `config/sys.yaml`：公用业务参数（支持增删改），参与磁吸；默认包含 `role.id=1`。active app 的 schema 中若声明 `sys.*` 参数（如 `sys.robot_type`、`sys.aaa.bbb`），磁吸重算会在缺失时自动补齐到 System Parameters，并保留对应 schema 以便 UI 展示类型/范围/描述。这些自动补齐的 system parameters 不会因为 app 卸载、删除或切换 active 版本而自动删除。
 
 ```
@@ -237,6 +332,10 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 - 批量操作会为每个 app 创建独立 operation 并并行执行
 - 操作状态通过 `GET /api/apps/operations/{operation_id}` 和 `GET /api/apps/operations/{operation_id}/events` 查询
 
+### 日志读取
+
+`GET /api/apps/{app_id}/logs?from_end=true` 只返回当前文件末尾的位置（`next_offset`），`chunk` 为空，不读取或截断日志内容。需要从此刻开始跟随输出时，在下次请求中把该值作为 `offset`。若获取末尾位置失败，继续使用上一次成功读取的偏移，以免漏掉断线期间的输出。
+
 ### popen 回退模式
 
 - **启动**：根据 `manifest.run.entrypoint` 构建命令，`subprocess.Popen` 启动（`start_new_session=True`）
@@ -312,12 +411,13 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 4. 点击“下载到本机”后，前端调用 `.../download-url` 与 `.../download`，将安装包下载到浏览器本机。
 5. 点击“安装到 AivudaOS”后，前端把该下载文件通过 `POST /aivuda_os/api/apps/upload` 上传给本机 AivudaOS，安装流程与手动上传一致。
 
-当前在线商店页已改为单按钮“下载并安装到 AivudaOS”流程：
+### 从另一台 aivudaOS 安装应用
 
-1. 先触发浏览器原生下载，保存到用户指定的本机位置（由浏览器下载设置决定）。
-2. 随后询问是否立即安装。
-3. 若确认，打开与“手动上传新应用安装包”完全复用的上传安装弹窗。
-4. 用户在弹窗中选择刚下载的本机文件并提交安装，后端仍走 `POST /aivuda_os/api/apps/upload` 同一流程。
+1. 从浏览器用局域网地址打开来源设备（例如 `http://192.168.20.21`），登录后进入「在线应用商店」，点击「共享本机已安装应用」并复制共享地址。
+2. 登录目标设备（例如 `http://192.168.20.20`），在同一页面的商店地址栏粘贴完整共享地址，点击「提交」。浏览器必须能访问两台设备。通过 HTTPS 打开目标页面时，来源设备也应使用浏览器信任的 HTTPS 地址。
+3. 打开应用，选定版本，点击「下载并安装到 AivudaOS」。大小不超过 200 MiB 时，浏览器直接把包上传到目标设备；更大的包先下载到本机，再由用户选择文件上传。
+
+共享地址由来源设备上已登录的用户生成，持有者可在一小时内读取全部已安装应用及其版本，重新生成即使旧地址失效。无需部署独立商店或重新上传已有版本。下载包是所选安装目录的 tar 快照，含应用文件、包内默认配置及安装时生成的文件。安装目录中的本机文件也会随包传输。单独存储的系统配置、运行数据和日志在安装目录之外。打包保留目录内有效的相对符号链接，跳过绝对链接、指向目录外的链接和特殊文件。目标设备仍需满足应用的架构与依赖要求，安装时会照常执行安装钩子。
 
 ### 实时操作事件（SSE）
 
@@ -385,6 +485,8 @@ ${AIVUDAOS_WS_ROOT:-$HOME/aivudaOS_ws}/
 新增字段使用目标已有值或默认值；动态键只在目标 schema 明确禁止额外字段时省略。
 类型、枚举、范围、字符串及数组约束不兼容时不猜测转换，逐字段回退，并保留其他合法字段。
 
+新包若将旧域号迁至 `<section>.ros_domain_id`，可在 schema 根节点声明 `x-ros-domain-migration: {section: camera}`。升级时先按旧配置解析生效值，再移除 `ros.domain_id` 并合并默认值。新旧值同时存在时保留新值（含 -1）。QRLand 的旧启动器在新值为 -1 时优先采用已有旧值，因此其迁移声明额外设置 `legacy_when_inheriting: true`。
+
 安装和切换返回：
 
 ```json
@@ -450,7 +552,7 @@ result and failures. Missing app versions are installed through InstallerService
 existing versions are not overwritten. System/app parameters are merged and
 validated through the existing config routes, then autostart is applied.
 `human_header.avahi_hostname`, `payload.system_parameters.avahi_hostname` and
-exported `running` state are ignored. No direct database import occurs.
+exported `running` state are ignored. `payload.system_parameters` is optional: omit it for an app-only import. If a systemd unit cannot be refreshed, the saved system setting is retained, other apps are processed, and `result.runtime_environment_refresh_errors` identifies the affected units. No direct database import occurs.
 
 ## Popen stop and gateway exit
 
@@ -460,7 +562,7 @@ systemd-managed services or adopt another runtime's apps for shutdown. An
 explicit app stop waits for cleanup, including observed descendants in other
 sessions, before marking the app stopped. Processes get SIGTERM with a five
 second grace period and then SIGKILL if necessary. Identity checks use Linux
-PID start times. If cleanup fails, stop reports failure instead of recording a
+PID start times. Repeated starts in the same gateway reuse the running instance without truncating its log. For explicit stop after a gateway restart, the recorded PID, Linux boot ID and process start time must still match. Legacy PID-only rows cannot prove ownership: stop Popen apps before upgrading; if an old process survived an abnormal shutdown, verify it manually before starting another instance. Systemd-managed apps continue to use unit state. If cleanup fails, stop reports failure instead of recording a
 successful stop. A detached guardian also cleans owned Popen apps when the
 backend dies without running shutdown hooks. Autostart preferences are retained.
 
@@ -485,3 +587,11 @@ Online Store 导航图标右上角显示可更新的已安装 App 数量（超�
 版本比较按数字段及 SemVer 预发布规则进行，忽略构建元数据；未知格式或缺失版本不会触发更新提醒。当前商店索引没有设备兼容性字段，提示依据已发布版本，不额外推断设备兼容性。业务逻辑位于 `useStoreUpdates.js` 和 `services/core/storeUpdates.js`，中英文词条位于 `i18n/locales/`。
 
 验证：在 aivudaOS 目录运行 `node --test tests/test_store_updates_ui.mjs`，在 UI 目录运行 `npm run build`。
+
+### 设备网卡和源地址选项
+
+应用可在顶层配置组的 schema 声明 `x-device-ipv4: {interface: host_interface, address: host_ip, destination: ip}`，值为同组字段名。接口和源地址字段均使用字符串，`auto` 表示按当前目标的直连 IPv4 路由选择。除了以太网，具有 IPv4 地址的非回环接口（如 `wg0`）也可选择；自动模式仍要求链路已启用、内核路由无网关且源地址属于该接口。同一请求复用网卡快照，网络探测不占用网关事件循环。
+
+从应用参数或磁吸区切换接口或目的地址时，只将实际受影响应用的可编辑源地址恢复为 `auto`。源地址本身已绑定磁吸时，由该绑定决定其值。只打开页面或重算未变化的绑定不会清除手动源地址。
+
+若安装钩子为旧客户端生成静态 enum，在相应字段声明 `x-device-choice: interface` 或 `address` 可同时接受后来添加的接口或地址。已保存的选择即使暂时离线，也不因缺席当前网卡列表而阻止修改其他字段或通过启动前的配置校验。新选择仍需满足校验；实际使用网络时，应用须重新核对网卡、链路和地址。

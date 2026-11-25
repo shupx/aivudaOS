@@ -17,11 +17,10 @@ class APIClient(BaseAPIClient):
 
 def api_schema():
     from fastapi import FastAPI
-    from aivudaos.gateway.routes import apps, auth, config
+    from aivudaos.gateway.routes import include_business_routes
 
     app = FastAPI()
-    for router in (auth.router, config.router, apps.router):
-        app.include_router(router)
+    include_business_routes(app)
     return app
 
 
@@ -40,10 +39,19 @@ class EmbeddedAPIClient(APIClient):
     def __init__(self, transport=None, token=None, automatic_state=None):
         super().__init__(base_url="http://aivudaos.internal/aivuda_os", token=token, opener=transport)
         self.transport = transport
+        self._explicit_token = bool(token)
         self._automatic = not self.token
         self._automatic_state = automatic_state if automatic_state is not None else {
             "token": "", "managed": False, "lock": threading.Lock(),
         }
+
+    def request(self, path, method='GET', **kwargs):
+        # Profiles can contain persistent shell commands. Do not authenticate an
+        # anonymous HTTP MCP caller with the gateway's automatic account here.
+        if (path == '/api/apps/pipeline' or path.startswith('/api/apps/pipeline/')) and not (
+                self._explicit_token or (kwargs.get('query') or {}).get('token')):
+            raise APIHTTPError(401, 'A session token is required for startup pipeline tools')
+        return super().request(path, method, **kwargs)
 
     def ensure_token(self, expired_token=None):
         if not self._automatic:

@@ -16,8 +16,8 @@ from aivudaos.gateway.deps import (
     get_runtime_service, get_versioning_service,
 )
 from aivudaos.gateway.routes.apps import put_app_config
-from aivudaos.gateway.routes.config import put_config
-from aivudaos.gateway.schemas import AppConfigUpdateRequest, ConfigUpdateRequest
+from aivudaos.gateway.routes.config import save_system_parameters
+from aivudaos.gateway.schemas import AppConfigUpdateRequest
 
 APP_ID = re.compile(r"^[a-zA-Z0-9_.-]+$")
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][a-zA-Z0-9_.-]+)?$")
@@ -108,7 +108,7 @@ def _merge(existing: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]
 def apply_import(payload: Dict[str, Any], store_url: str, token: str, progress) -> Dict[str, Any]:
     versioning = get_versioning_service()
     config = get_config_service()
-    result = {"installed": [], "configured": [], "autostart": []}
+    result = {"installed": [], "configured": [], "autostart": [], "runtime_environment_refresh_errors": []}
     for app in payload["apps"]:
         app_id, version = app["app_id"], app["version"]
         if version not in versioning.list_versions(app_id):
@@ -135,12 +135,14 @@ def apply_import(payload: Dict[str, Any], store_url: str, token: str, progress) 
         elif versioning.active_version(app_id) != version:
             progress("activate", app_id)
             get_runtime_service().switch_version(app_id, version, restart=False)
-    if payload["system_parameters"] is not None:
+    system = payload.get("system_parameters")
+    if system is not None:
         progress("system", None)
         current = config.get_sys_config()
-        data = _merge(current.data, payload["system_parameters"])
+        data = _merge(current.data, system)
         if data != current.data:
-            asyncio.run(put_config(ConfigUpdateRequest(version=current.version, data=data), token))
+            response = save_system_parameters(data, current.version, token)
+            result["runtime_environment_refresh_errors"] = response["runtime_environment_refresh_errors"]
         result["system_configured"] = True
 
     for app in payload["apps"]:

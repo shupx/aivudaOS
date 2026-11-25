@@ -6,3 +6,4 @@ bcrypt>=4.0
 python-multipart>=0.0.9
 jsonschema>=4.18,<4.24
 websocket-client>=1.6,<1.9
+regex>=2023.10.3

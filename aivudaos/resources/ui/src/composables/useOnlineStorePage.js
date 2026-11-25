@@ -6,8 +6,11 @@ import {
 } from '../services/core/config'
 import {
   buildStoreCaddyLocalCaDownloadUrl,
+  createDeviceStoreAddress,
+  isDeviceStoreAddress,
   normalizeStoreBaseUrl,
 } from '../services/core/store'
+import { copyText } from '../services/core/clipboard'
 import { useStoreUpdates } from './useStoreUpdates'
 import { useStoreDisplayFormat } from './useStoreDisplayFormat'
 
@@ -23,6 +26,10 @@ export function useOnlineStorePage() {
   const error = ref('')
   const addressError = ref('')
   const storeAddress = ref('')
+  const shareAddress = ref('')
+  const shareError = ref('')
+  const creatingShare = ref(false)
+  const shareCopied = ref(false)
   const searchText = ref('')
   const { storeItems: items, updateCount, refreshStoreIndex, refreshInstalledApps } = useStoreUpdates()
   const updatesOnly = ref(false)
@@ -40,7 +47,7 @@ export function useOnlineStorePage() {
       ? buildStoreCaddyLocalCaDownloadUrl(normalizedStoreAddress.value)
       : ''
   ))
-  const showAddressManualCheckHint = computed(() => canOpenStoreAddress.value)
+  const showAddressManualCheckHint = computed(() => canOpenStoreAddress.value && !isDeviceStoreAddress(normalizedStoreAddress.value))
   const displayItems = computed(() => (
     items.value
       .map((item) => ({
@@ -77,13 +84,35 @@ export function useOnlineStorePage() {
       if (!/^https?:\/\//.test(cleanUrl)) {
         throw new Error(t('store.invalidAddress'))
       }
-      const saved = await saveAppStoreBaseUrl(cleanUrl)
-      storeAddress.value = saved
-      await Promise.all([refreshStoreIndex(saved), refreshInstalledApps()])
+      await Promise.all([refreshStoreIndex(cleanUrl), refreshInstalledApps()])
+      storeAddress.value = await saveAppStoreBaseUrl(cleanUrl)
     } catch (err) {
       addressError.value = String(err?.message || err || t('store.saveAddressFailed'))
     } finally {
       savingAddress.value = false
+    }
+  }
+
+  async function createShare() {
+    if (creatingShare.value) return
+    creatingShare.value = true
+    shareCopied.value = false
+    shareError.value = ''
+    try {
+      shareAddress.value = await createDeviceStoreAddress()
+    } catch (err) {
+      shareError.value = String(err?.message || t('store.shareFailed'))
+    } finally {
+      creatingShare.value = false
+    }
+  }
+
+  async function copyShare() {
+    try {
+      await copyText(shareAddress.value)
+      shareCopied.value = true
+    } catch {
+      shareError.value = t('store.copyManually')
     }
   }
 
@@ -118,6 +147,12 @@ export function useOnlineStorePage() {
   return {
     loading,
     savingAddress,
+    shareAddress,
+    shareError,
+    creatingShare,
+    shareCopied,
+    createShare,
+    copyShare,
     error,
     addressError,
     storeAddress,

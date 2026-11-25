@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vue-flow/core": "^1.48.2",
     "lucide-vue-next": "^1.0.0",
     "naive-ui": "^2.44.1",
     "vfonts": "^0.0.3",
